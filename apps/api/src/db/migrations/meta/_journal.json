@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787513702584,
+      "tag": "0000_perpetual_the_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787513714180,
+      "tag": "0001_timescale_setup",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788373400000,
+      "tag": "0002_realtime_aggregation",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788375769382,
+      "tag": "0003_add_tariff_kind_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788375822923,
+      "tag": "0004_drop_old_tariff_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788377972333,
+      "tag": "0005_add_parties_and_interval_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788378099663,
+      "tag": "0006_drop_interval_readings",
+      "breakpoints": true
+    }
+  ]
+}

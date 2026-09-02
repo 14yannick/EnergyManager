@@ -1,0 +1,13 @@
+-- Hand-written migration, same reasoning as 0001 (see CONTRIBUTING.md).
+--
+-- TimescaleDB defaulted continuous aggregates to real-time aggregation
+-- (materialized_only = false) prior to 2.13, but flipped the default to
+-- materialized_only = true from 2.13 onward. On the pinned image
+-- (timescale/timescaledb:2.17.2-pg16), daily_energy_agg therefore came up
+-- with materialized_only = true despite 0001's comment assuming real-time
+-- aggregation — so newly imported data (which the refresh policy hasn't
+-- caught up to yet) doesn't show up in daily_energy_agg, and by extension
+-- the savings dashboard, until the hourly refresh job happens to cover it.
+-- Force real-time aggregation on explicitly rather than relying on version
+-- defaults.
+ALTER MATERIALIZED VIEW daily_energy_agg SET (timescaledb.materialized_only = false);

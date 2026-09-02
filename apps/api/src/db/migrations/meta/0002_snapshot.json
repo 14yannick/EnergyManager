@@ -1,0 +1,396 @@
+{
+  "id": "6404f80f-1275-4a33-8bbf-90a40bba4897",
+  "prevId": "8e87a823-6054-4f01-a0a5-381c5f08ec01",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.sites": {
+      "name": "sites",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Europe/Zurich'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tariff_periods": {
+      "name": "tariff_periods",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "site_id": {
+          "name": "site_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purchase_rate_chf_per_kwh": {
+          "name": "purchase_rate_chf_per_kwh",
+          "type": "numeric(10, 5)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sell_rate_chf_per_kwh": {
+          "name": "sell_rate_chf_per_kwh",
+          "type": "numeric(10, 5)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tariff_periods_site_id_sites_id_fk": {
+          "name": "tariff_periods_site_id_sites_id_fk",
+          "tableFrom": "tariff_periods",
+          "columnsFrom": [
+            "site_id"
+          ],
+          "tableTo": "sites",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "end_after_start": {
+          "name": "end_after_start",
+          "value": "\"tariff_periods\".\"end_date\" >= \"tariff_periods\".\"start_date\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.cost_items": {
+      "name": "cost_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "site_id": {
+          "name": "site_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "cost_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_chf": {
+          "name": "amount_chf",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "incurred_on": {
+          "name": "incurred_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "cost_items_site_id_sites_id_fk": {
+          "name": "cost_items_site_id_sites_id_fk",
+          "tableFrom": "cost_items",
+          "columnsFrom": [
+            "site_id"
+          ],
+          "tableTo": "sites",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.interval_readings": {
+      "name": "interval_readings",
+      "schema": "",
+      "columns": {
+        "site_id": {
+          "name": "site_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ts": {
+          "name": "ts",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "produced_kwh": {
+          "name": "produced_kwh",
+          "type": "numeric(9, 4)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "battery_charge_kwh": {
+          "name": "battery_charge_kwh",
+          "type": "numeric(9, 4)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "battery_discharge_kwh": {
+          "name": "battery_discharge_kwh",
+          "type": "numeric(9, 4)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "exported_kwh": {
+          "name": "exported_kwh",
+          "type": "numeric(9, 4)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "imported_kwh": {
+          "name": "imported_kwh",
+          "type": "numeric(9, 4)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'csv_import'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "interval_readings_site_id_sites_id_fk": {
+          "name": "interval_readings_site_id_sites_id_fk",
+          "tableFrom": "interval_readings",
+          "columnsFrom": [
+            "site_id"
+          ],
+          "tableTo": "sites",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "interval_readings_site_id_ts_pk": {
+          "name": "interval_readings_site_id_ts_pk",
+          "columns": [
+            "site_id",
+            "ts"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.cost_category": {
+      "name": "cost_category",
+      "schema": "public",
+      "values": [
+        "battery",
+        "solar"
+      ]
+    }
+  },
+  "schemas": {},
+  "views": {
+    "public.daily_energy_agg": {
+      "name": "daily_energy_agg",
+      "schema": "public",
+      "columns": {
+        "site_id": {
+          "name": "site_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "produced_kwh": {
+          "name": "produced_kwh",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "battery_charge_kwh": {
+          "name": "battery_charge_kwh",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "battery_discharge_kwh": {
+          "name": "battery_discharge_kwh",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exported_kwh": {
+          "name": "exported_kwh",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "imported_kwh": {
+          "name": "imported_kwh",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "materialized": false,
+      "isExisting": true
+    }
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
