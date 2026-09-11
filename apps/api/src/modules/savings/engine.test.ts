@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import type { DailySavings } from "@energy-manager/shared";
 import {
   aggregateDailyToMonthly,
@@ -20,242 +18,289 @@ import {
   summarizeYearlySavings,
 } from "./engine.js";
 
-const fixturePath = fileURLToPath(
-  new URL("../../../test/fixtures/excel-reference.json", import.meta.url),
-);
-const fixture = JSON.parse(readFileSync(fixturePath, "utf-8")) as {
-  ranges: Array<{
-    startDate: string;
-    endDate: string;
-    producedKwh: number;
-    batteryDischargeKwh: number;
-    exportedKwh: number;
-    directUseKwhExcel: number;
-    purchaseRateChfPerKwh: number;
-    sellRateChfPerKwh: number;
-    selfConsumptionValueChf: number;
-    exportRevenueChf: number;
-    savingsWithBatteryChf: number;
-    savingsWithoutBatteryChf: number;
-    batteryOnlySavingsChf: number;
-    daysInRange: number;
-  }>;
-  costs: { batteryChf: number; solarChf: number; totalChf: number };
-  summary: {
-    totalSavingsWithBatteryChf: number;
-    totalSavingsWithoutBatteryChf: number;
-    totalBatteryOnlySavingsChf: number;
-    totalDaysWithData: number;
-    avgDailyWithBatteryChf: number;
-    avgDailyWithoutBatteryChf: number;
-    avgDailyBatteryOnlyChf: number;
-    simplePaybackWithBatteryYears: number;
-    simplePaybackWithoutBatteryYears: number;
-    simplePaybackBatteryOnlyYears: number;
-  };
-};
+/**
+ * Synthetic scenarios, chosen for round arithmetic rather than realism.
+ *
+ * These replace a fixture cached from the original planning spreadsheet. That
+ * fixture pinned the engine to totals copied out of a workbook, which meant the
+ * tests could only ever say "the numbers still match the numbers" — and it put
+ * real household production and revenue figures in the repo. The tests below
+ * assert the engine's *relationships* instead: the identities between the two
+ * counterfactuals, what a null rate contributes, how the battery's value
+ * reduces to a rate spread, and that accumulation is order-independent. Those
+ * hold for any inputs, so they catch a broken formula without anyone's data.
+ */
+interface Scenario {
+  date: string;
+  producedKwh: number;
+  batteryDischargeKwh: number;
+  exportedKwh: number;
+  purchaseRateChfPerKwh: number;
+  sellRateChfPerKwh: number;
+}
+
+const scenarios: Scenario[] = [
+  { date: "2024-01-31", producedKwh: 100, batteryDischargeKwh: 20, exportedKwh: 30, purchaseRateChfPerKwh: 0.3, sellRateChfPerKwh: 0.1 },
+  { date: "2024-02-29", producedKwh: 200, batteryDischargeKwh: 50, exportedKwh: 80, purchaseRateChfPerKwh: 0.25, sellRateChfPerKwh: 0.08 },
+  { date: "2024-03-31", producedKwh: 400, batteryDischargeKwh: 60, exportedKwh: 250, purchaseRateChfPerKwh: 0.28, sellRateChfPerKwh: 0.12 },
+];
+
+/**
+ * Prices one scenario through the engine the way the discharge-based model
+ * did, so the legacy direct-use figure is the one under test.
+ */
+function priceScenario(s: Scenario): DailySavings {
+  return computeSavingsFromInputs({
+    date: s.date,
+    producedKwh: s.producedKwh,
+    directUseKwh: computeDirectUseKwhLegacyApprox(s),
+    batteryChargeKwh: 0,
+    batteryDischargeKwh: s.batteryDischargeKwh,
+    exportedKwh: s.exportedKwh,
+    exportLocalKwh: 0,
+    neighborConsumptionKwh: 0,
+    purchaseRateChfPerKwh: s.purchaseRateChfPerKwh,
+    sellRateChfPerKwh: s.sellRateChfPerKwh,
+    neighborSellRateChfPerKwh: null,
+  });
+}
 
 describe("computeDirectUseKwhLegacyApprox", () => {
-  it("reproduces the old spreadsheet's per-range direct-use figure exactly", () => {
-    for (const r of fixture.ranges) {
-      const directUse = computeDirectUseKwhLegacyApprox({
-        producedKwh: r.producedKwh,
-        batteryDischargeKwh: r.batteryDischargeKwh,
-        exportedKwh: r.exportedKwh,
-      });
-      expect(directUse).toBeCloseTo(r.directUseKwhExcel, 6);
-    }
+  it("is production minus discharge minus export", () => {
+    expect(
+      computeDirectUseKwhLegacyApprox({ producedKwh: 100, batteryDischargeKwh: 20, exportedKwh: 30 }),
+    ).toBe(50);
+  });
+
+  it("floors at zero rather than reporting a negative quantity of energy", () => {
+    expect(
+      computeDirectUseKwhLegacyApprox({ producedKwh: 10, batteryDischargeKwh: 20, exportedKwh: 30 }),
+    ).toBe(0);
   });
 });
 
-describe("computeSavingsFromInputs — matches Excel Summary sheet using the legacy direct-use figure", () => {
-  it.each(fixture.ranges)(
-    "range $startDate–$endDate reproduces I/J/K/L/M from RangeData",
-    (r) => {
-      const result = computeSavingsFromInputs({
-        date: r.endDate,
-        producedKwh: r.producedKwh,
-        directUseKwh: r.directUseKwhExcel,
-        batteryChargeKwh: 0, // not tracked by the old model; irrelevant to these formulas
-        batteryDischargeKwh: r.batteryDischargeKwh,
-        exportedKwh: r.exportedKwh,
-        exportLocalKwh: 0,
-        neighborConsumptionKwh: 0,
-        purchaseRateChfPerKwh: r.purchaseRateChfPerKwh,
-        sellRateChfPerKwh: r.sellRateChfPerKwh,
-        neighborSellRateChfPerKwh: null,
-      });
+describe("computeDirectUseKwh (corrected) vs the legacy approximation", () => {
+  const base = { producedKwh: 100, exportedKwh: 30 };
 
-      expect(result.selfConsumptionValueChf).toBeCloseTo(r.selfConsumptionValueChf, 6);
-      expect(result.exportRevenueChf).toBeCloseTo(r.exportRevenueChf, 6);
-      expect(result.savingsWithBatteryChf).toBeCloseTo(r.savingsWithBatteryChf, 6);
-      expect(result.savingsWithoutBatteryChf).toBeCloseTo(r.savingsWithoutBatteryChf, 6);
-      expect(result.batteryOnlySavingsChf).toBeCloseTo(r.batteryOnlySavingsChf, 6);
+  it("agrees with the legacy figure exactly when charge equals discharge", () => {
+    expect(computeDirectUseKwh({ ...base, batteryChargeKwh: 20 })).toBe(
+      computeDirectUseKwhLegacyApprox({ ...base, batteryDischargeKwh: 20 }),
+    );
+  });
+
+  it("diverges by exactly the charge/discharge difference when they differ", () => {
+    const corrected = computeDirectUseKwh({ ...base, batteryChargeKwh: 22 });
+    const legacy = computeDirectUseKwhLegacyApprox({ ...base, batteryDischargeKwh: 20 });
+
+    // The old model could only see discharge, so it mistook round-trip losses
+    // for direct use. The gap is the charge/discharge delta, nothing else.
+    expect(corrected - legacy).toBeCloseTo(20 - 22, 10);
+  });
+});
+
+describe("computeSavingsFromInputs", () => {
+  it("prices self-consumption at the purchase rate and grid export at the sell rate", () => {
+    const row = priceScenario(scenarios[0]!);
+
+    // direct use 50 + discharge 20, both displacing imports at 0.30
+    expect(row.selfConsumptionValueChf).toBeCloseTo(21, 10);
+    // 30 kWh exported at 0.10
+    expect(row.exportRevenueChf).toBeCloseTo(3, 10);
+    expect(row.savingsWithBatteryChf).toBeCloseTo(24, 10);
+  });
+
+  it.each(scenarios)(
+    "$date: with-battery savings are self-consumption plus export revenue",
+    (s) => {
+      const row = priceScenario(s);
+      expect(row.savingsWithBatteryChf).toBeCloseTo(
+        row.selfConsumptionValueChf + row.exportRevenueChf,
+        10,
+      );
     },
   );
 
-  it("summarizeSavings reproduces totals, averages and simple payback from the Summary sheet", () => {
-    const dailyRows = fixture.ranges.map((r) =>
-      computeSavingsFromInputs({
-        date: r.endDate,
-        producedKwh: r.producedKwh,
-        directUseKwh: r.directUseKwhExcel,
-        batteryChargeKwh: 0,
-        batteryDischargeKwh: r.batteryDischargeKwh,
-        exportedKwh: r.exportedKwh,
-        exportLocalKwh: 0,
-        neighborConsumptionKwh: 0,
-        purchaseRateChfPerKwh: r.purchaseRateChfPerKwh,
-        sellRateChfPerKwh: r.sellRateChfPerKwh,
-        neighborSellRateChfPerKwh: null,
-      }),
+  it.each(scenarios)(
+    "$date: the no-battery counterfactual re-prices discharged energy at the sell rate",
+    (s) => {
+      const row = priceScenario(s);
+      const directUseKwh = computeDirectUseKwhLegacyApprox(s);
+
+      // Without a battery the discharged kWh could not have been stored, so it
+      // would have left for the grid alongside whatever was already exported.
+      expect(row.savingsWithoutBatteryChf).toBeCloseTo(
+        directUseKwh * s.purchaseRateChfPerKwh +
+          (s.batteryDischargeKwh + s.exportedKwh) * s.sellRateChfPerKwh,
+        10,
+      );
+    },
+  );
+
+  it.each(scenarios)("$date: battery-only savings reduce to discharge x rate spread", (s) => {
+    const row = priceScenario(s);
+
+    // Everything else cancels between the two counterfactuals: all the battery
+    // does is move a kWh from the sell price to the purchase price.
+    expect(row.batteryOnlySavingsChf).toBeCloseTo(
+      s.batteryDischargeKwh * (s.purchaseRateChfPerKwh - s.sellRateChfPerKwh),
+      10,
     );
-
-    const { summary } = summarizeSavings(
-      dailyRows,
-      { battery: fixture.costs.batteryChf, solar: fixture.costs.solarChf, total: fixture.costs.totalChf },
-      fixture.ranges[0]!.startDate,
-      fixture.ranges[fixture.ranges.length - 1]!.endDate,
+    expect(row.batteryOnlySavingsChf).toBeCloseTo(
+      row.savingsWithBatteryChf - row.savingsWithoutBatteryChf,
+      10,
     );
+  });
 
-    expect(summary.totals.withBatteryChf).toBeCloseTo(fixture.summary.totalSavingsWithBatteryChf, 6);
-    expect(summary.totals.withoutBatteryChf).toBeCloseTo(
-      fixture.summary.totalSavingsWithoutBatteryChf,
-      6,
-    );
-    expect(summary.totals.batteryOnlyChf).toBeCloseTo(fixture.summary.totalBatteryOnlySavingsChf, 6);
+  it("is worthless to have a battery when buying and selling cost the same", () => {
+    const row = priceScenario({ ...scenarios[0]!, purchaseRateChfPerKwh: 0.2, sellRateChfPerKwh: 0.2 });
+    expect(row.batteryOnlySavingsChf).toBeCloseTo(0, 10);
+  });
 
-    // The spreadsheet's "days with data" (258) sums N (days per range); our engine's
-    // daysWithData counts *rows* (one per range here), so it isn't directly comparable —
-    // avg-daily and payback are instead independently recomputed below using the
-    // spreadsheet's own days-with-data figure to isolate that difference.
-    const avgWithBattery = fixture.summary.totalSavingsWithBatteryChf / fixture.summary.totalDaysWithData;
-    const avgWithoutBattery =
-      fixture.summary.totalSavingsWithoutBatteryChf / fixture.summary.totalDaysWithData;
-    const avgBatteryOnly =
-      fixture.summary.totalBatteryOnlySavingsChf / fixture.summary.totalDaysWithData;
+  it("treats an unknown rate as zero contribution rather than throwing", () => {
+    const row = computeSavingsFromInputs({
+      date: "2024-01-31",
+      producedKwh: 100,
+      directUseKwh: 50,
+      batteryChargeKwh: 0,
+      batteryDischargeKwh: 20,
+      exportedKwh: 30,
+      exportLocalKwh: 0,
+      neighborConsumptionKwh: 0,
+      purchaseRateChfPerKwh: null,
+      sellRateChfPerKwh: null,
+      neighborSellRateChfPerKwh: null,
+    });
 
-    expect(avgWithBattery).toBeCloseTo(fixture.summary.avgDailyWithBatteryChf, 6);
-    expect(avgWithoutBattery).toBeCloseTo(fixture.summary.avgDailyWithoutBatteryChf, 6);
-    expect(avgBatteryOnly).toBeCloseTo(fixture.summary.avgDailyBatteryOnlyChf, 6);
-
-    const paybackWithBattery = fixture.costs.totalChf / (avgWithBattery * 365);
-    const paybackWithoutBattery = fixture.costs.solarChf / (avgWithoutBattery * 365);
-    const paybackBatteryOnly = fixture.costs.batteryChf / (avgBatteryOnly * 365);
-
-    expect(paybackWithBattery).toBeCloseTo(fixture.summary.simplePaybackWithBatteryYears, 4);
-    expect(paybackWithoutBattery).toBeCloseTo(fixture.summary.simplePaybackWithoutBatteryYears, 4);
-    expect(paybackBatteryOnly).toBeCloseTo(fixture.summary.simplePaybackBatteryOnlyYears, 4);
+    expect(row.selfConsumptionValueChf).toBe(0);
+    expect(row.exportRevenueChf).toBe(0);
+    expect(row.savingsWithBatteryChf).toBe(0);
   });
 });
 
-describe("computeDirectUseKwh (new, corrected formula) diverges from the legacy approximation", () => {
-  it("documents the expected divergence when charge != discharge, using real fixture magnitudes", () => {
-    const r = fixture.ranges[0]!;
-    const legacy = computeDirectUseKwhLegacyApprox({
-      producedKwh: r.producedKwh,
-      batteryDischargeKwh: r.batteryDischargeKwh,
-      exportedKwh: r.exportedKwh,
-    });
+describe("summarizeSavings", () => {
+  const rows = scenarios.map(priceScenario);
+  const costs = { battery: 4000, solar: 12000, total: 16000 };
+  const range = { from: "2024-01-01", to: "2024-03-31" };
 
-    // Charge is unknown in the old model; simulate a plausible charge figure
-    // (batteries rarely charge/discharge at exactly equal magnitudes over a range).
-    const assumedChargeKwh = r.batteryDischargeKwh * 1.1;
-    const corrected = computeDirectUseKwh({
-      producedKwh: r.producedKwh,
-      batteryChargeKwh: assumedChargeKwh,
-      exportedKwh: r.exportedKwh,
-    });
+  it("totals each series across the rows and counts one period per row", () => {
+    const { summary } = summarizeSavings(rows, costs, range.from, range.to);
 
-    expect(legacy).toBeCloseTo(r.directUseKwhExcel, 6);
-    expect(corrected).not.toBeCloseTo(legacy, 6);
+    const total = (key: "savingsWithBatteryChf" | "savingsWithoutBatteryChf" | "batteryOnlySavingsChf") =>
+      rows.reduce((acc, r) => acc + r[key], 0);
+
+    expect(summary.totals.withBatteryChf).toBeCloseTo(total("savingsWithBatteryChf"), 10);
+    expect(summary.totals.withoutBatteryChf).toBeCloseTo(total("savingsWithoutBatteryChf"), 10);
+    expect(summary.totals.batteryOnlyChf).toBeCloseTo(total("batteryOnlySavingsChf"), 10);
+    expect(summary.daysWithData).toBe(rows.length);
+  });
+
+  it("averages by dividing each total by the number of periods with data", () => {
+    const { summary } = summarizeSavings(rows, costs, range.from, range.to);
+
+    expect(summary.avgDaily.withBatteryChf).toBeCloseTo(
+      summary.totals.withBatteryChf / summary.daysWithData,
+      10,
+    );
+    expect(summary.avgDaily.batteryOnlyChf).toBeCloseTo(
+      summary.totals.batteryOnlyChf / summary.daysWithData,
+      10,
+    );
+  });
+
+  it("returns a payback that earns the cost back over its own duration", () => {
+    const { summary } = summarizeSavings(rows, costs, range.from, range.to);
+
+    // The round trip is the real property: annual savings x payback years
+    // must come back to the cost, at 365 daily periods a year.
+    const annualSavings = summary.avgDaily.withBatteryChf * 365;
+    expect(summary.payback.withBatteryYears! * annualSavings).toBeCloseTo(costs.total, 6);
+  });
+
+  it("scales payback linearly with cost, holding savings fixed", () => {
+    const cheap = summarizeSavings(rows, { battery: 0, solar: 0, total: 8000 }, range.from, range.to);
+    const dear = summarizeSavings(rows, { battery: 0, solar: 0, total: 16000 }, range.from, range.to);
+
+    expect(dear.summary.payback.withBatteryYears!).toBeCloseTo(
+      cheap.summary.payback.withBatteryYears! * 2,
+      10,
+    );
   });
 });
 
 describe("buildCumulativeSeries", () => {
+  const rows = scenarios.map(priceScenario);
+
   it("accumulates in chronological order regardless of input order", () => {
-    const rows = fixture.ranges.map((r) =>
-      computeSavingsFromInputs({
-        date: r.endDate,
-        producedKwh: r.producedKwh,
-        directUseKwh: r.directUseKwhExcel,
-        batteryChargeKwh: 0,
-        batteryDischargeKwh: r.batteryDischargeKwh,
-        exportedKwh: r.exportedKwh,
-        exportLocalKwh: 0,
-        neighborConsumptionKwh: 0,
-        purchaseRateChfPerKwh: r.purchaseRateChfPerKwh,
-        sellRateChfPerKwh: r.sellRateChfPerKwh,
-        neighborSellRateChfPerKwh: null,
-      }),
-    );
-
     const forward = buildCumulativeSeries(rows);
-    const shuffled = buildCumulativeSeries([...rows].reverse());
+    const reversed = buildCumulativeSeries([...rows].reverse());
 
-    expect(forward).toEqual(shuffled);
-    expect(forward[forward.length - 1]!.cumulativeWithBatteryChf).toBeCloseTo(
-      fixture.summary.totalSavingsWithBatteryChf,
-      6,
+    expect(forward).toEqual(reversed);
+  });
+
+  it("ends at the sum of every row", () => {
+    const series = buildCumulativeSeries(rows);
+    const last = series[series.length - 1]!;
+
+    expect(last.cumulativeWithBatteryChf).toBeCloseTo(
+      rows.reduce((acc, r) => acc + r.savingsWithBatteryChf, 0),
+      10,
     );
+    expect(last.cumulativeBatteryOnlyChf).toBeCloseTo(
+      rows.reduce((acc, r) => acc + r.batteryOnlySavingsChf, 0),
+      10,
+    );
+  });
+
+  it("never decreases while every row's savings are positive", () => {
+    const series = buildCumulativeSeries(rows);
+    for (let i = 1; i < series.length; i++) {
+      expect(series[i]!.cumulativeWithBatteryChf).toBeGreaterThanOrEqual(
+        series[i - 1]!.cumulativeWithBatteryChf,
+      );
+    }
   });
 });
 
 describe("summarizeSavings breakeven", () => {
+  const rows = scenarios.map(priceScenario);
+
   it("returns null when cumulative savings never reach the cost threshold", () => {
-    const rows = fixture.ranges.map((r) =>
-      computeSavingsFromInputs({
-        date: r.endDate,
-        producedKwh: r.producedKwh,
-        directUseKwh: r.directUseKwhExcel,
-        batteryChargeKwh: 0,
-        batteryDischargeKwh: r.batteryDischargeKwh,
-        exportedKwh: r.exportedKwh,
-        exportLocalKwh: 0,
-        neighborConsumptionKwh: 0,
-        purchaseRateChfPerKwh: r.purchaseRateChfPerKwh,
-        sellRateChfPerKwh: r.sellRateChfPerKwh,
-        neighborSellRateChfPerKwh: null,
-      }),
-    );
     const { summary } = summarizeSavings(
       rows,
-      { battery: fixture.costs.batteryChf, solar: fixture.costs.solarChf, total: fixture.costs.totalChf },
-      "2025-10-16",
-      "2026-06-30",
+      { battery: 5_000, solar: 12_000, total: 17_000 },
+      "2024-01-01",
+      "2024-03-31",
     );
 
     expect(summary.breakeven.withBatteryDate).toBeNull();
     expect(summary.breakeven.withoutBatteryDate).toBeNull();
     expect(summary.breakeven.batteryOnlyDate).toBeNull();
+    // Still far off, but a finite estimate rather than a missing one.
     expect(summary.payback.withBatteryYears).toBeGreaterThan(0);
   });
 
-  it("finds the breakeven date once cumulative savings cross a small cost", () => {
-    const rows = fixture.ranges.map((r) =>
-      computeSavingsFromInputs({
-        date: r.endDate,
-        producedKwh: r.producedKwh,
-        directUseKwh: r.directUseKwhExcel,
-        batteryChargeKwh: 0,
-        batteryDischargeKwh: r.batteryDischargeKwh,
-        exportedKwh: r.exportedKwh,
-        exportLocalKwh: 0,
-        neighborConsumptionKwh: 0,
-        purchaseRateChfPerKwh: r.purchaseRateChfPerKwh,
-        sellRateChfPerKwh: r.sellRateChfPerKwh,
-        neighborSellRateChfPerKwh: null,
-      }),
-    );
+  it("reports the first date on which cumulative savings cross the cost", () => {
+    // Cumulative with-battery savings run 24.00, 60.40, 132.40 — a cost of 50
+    // is first covered by the second row, not the first or the last.
     const { summary } = summarizeSavings(
       rows,
-      { battery: 50, solar: 0, total: 50 },
-      "2025-10-16",
-      "2026-06-30",
+      { battery: 0, solar: 0, total: 50 },
+      "2024-01-01",
+      "2024-03-31",
     );
 
-    // Cumulative with-battery savings after the first two ranges (26.90 + 51.97 = 78.87) exceed 50.
-    expect(summary.breakeven.withBatteryDate).toBe("2025-10-31");
+    expect(summary.breakeven.withBatteryDate).toBe("2024-02-29");
+  });
+
+  it("never breaks even on a cost of zero, which would otherwise be trivially met", () => {
+    const { summary } = summarizeSavings(
+      rows,
+      { battery: 0, solar: 0, total: 0 },
+      "2024-01-01",
+      "2024-03-31",
+    );
+
+    expect(summary.breakeven.withBatteryDate).toBeNull();
   });
 });
 

@@ -17,10 +17,11 @@ pnpm test
 ## Guidelines
 
 - Keep the savings/payback calculation logic in `apps/api/src/modules/savings/engine.ts`
-  pure (no DB or network access) — it's the piece regression-tested against the
-  original spreadsheet's numbers in `apps/api/test/fixtures/excel-reference.json`.
-  Changes there should keep those tests passing, or update them deliberately with an
-  explanation of why the numbers should change.
+  pure (no DB or network access) — it's the piece covered by the invariant tests in
+  `engine.test.ts`, which run on synthetic inputs and assert the relationships between
+  the figures (the two counterfactuals, the battery's rate spread, order-independent
+  accumulation) rather than hardcoded totals. Prefer adding another invariant over
+  another golden number, and never commit real metering or billing data as a fixture.
 - Types and validation shared between the API and the web app belong in
   `packages/shared`, not duplicated in both apps.
 - Database schema changes go through Drizzle: edit `apps/api/src/db/schema/*.ts`, then
