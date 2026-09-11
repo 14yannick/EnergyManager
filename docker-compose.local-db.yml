@@ -1,0 +1,38 @@
+# Optional: run a throwaway TimescaleDB alongside the app, for a machine that
+# doesn't already have one. Pinned to pg17 to match the server — a pg16 image
+# cannot read a pg17 data directory, so do not "downgrade" this to reuse a volume.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local-db.yml up -d
+#
+# DATABASE_URL must then point at the service, not the host:
+#   DATABASE_URL=postgres://energymanager:changeme@timescaledb:5432/energymanager
+services:
+  timescaledb:
+    image: timescale/timescaledb:2.29.2-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-energymanager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-energymanager}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-energymanager} -d ${POSTGRES_DB:-energymanager}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+  api:
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  timescale_data:

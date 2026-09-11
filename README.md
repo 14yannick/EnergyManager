@@ -21,13 +21,65 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
 ```bash
 git clone <this-repo>
 cd EnergyManager
-cp .env.example .env   # edit POSTGRES_PASSWORD at minimum
+cp .env.example .env   # DATABASE_URL at minimum
 docker compose up -d
 ```
 
 The app is then available at `http://localhost:8080` (configurable via `WEB_PORT`
 in `.env`). The `migrate` service runs database migrations once on startup before
 the API comes up.
+
+`docker-compose.yml` deliberately ships **no database**: it points at whatever
+`DATABASE_URL` names. Starting a bundled database next to an existing one is the
+easiest way to end up with a healthy-looking app writing into an empty schema
+while the real data sits elsewhere. If you genuinely need a throwaway database,
+add the override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local-db.yml up -d
+```
+
+## Deploying to a home server (Unraid)
+
+Running on a server rather than a laptop is not cosmetic here: BKW publishes a
+rolling ~25 hour window of feed-in prices with **no history endpoint**, so every
+interval missed while the app is down is lost permanently.
+
+1. **Copy the repo to the server** and build there — Unraid is x86_64, so images
+   built on an Apple Silicon Mac won't run unless you pass
+   `--platform linux/amd64`. Building on the server sidesteps that entirely.
+
+   ```bash
+   rsync -av --exclude node_modules --exclude .git ./ root@10.0.0.10:/mnt/user/appdata/energymanager/
+   ```
+
+2. **Install Docker Compose Manager** from Community Applications, or run
+   `docker compose` over SSH.
+
+3. **Write `.env` on the server.** Two values need to differ from a laptop setup:
+
+   - `DATABASE_URL` must use an **IP**, not a hostname. Containers reach the
+     existing TimescaleDB through the host's published port
+     (`10.0.0.10:65432`).
+   - `HA_URL` must use the Home Assistant VM's **IP** (`http://10.0.0.11:8123`),
+     not `homeassistant.local`. Containers resolve through normal DNS, which
+     returns NXDOMAIN for mDNS `.local` names — and an unreachable `HA_URL`
+     disables the integration *silently*, so the app will look perfectly healthy
+     while syncing nothing.
+
+4. **Pick a free `WEB_PORT`.** Unraid's own UI owns 80, and 8080 collides with
+   many community apps.
+
+5. **Bring it up**, then confirm the variables actually landed:
+
+   ```bash
+   docker compose up -d --build
+   docker compose exec api env | grep -E 'HA_URL|BKW_SYNC'
+   docker compose logs -f api
+   ```
+
+The `migrate` service is safe to leave enabled — Drizzle tracks which migrations
+have been applied, so against an already-current database it is a no-op.
 
 ## Architecture
 
@@ -76,15 +128,18 @@ Requires Node 20+ and [pnpm](https://pnpm.io).
 
 ```bash
 pnpm install
+cp .env.example .env   # point DATABASE_URL at your database
 
-# start just the database
-docker compose up -d timescaledb
-cp .env.example .env   # DATABASE_URL should point at localhost:5432
+# Optional — only if you don't already have a PostgreSQL/TimescaleDB to use:
+docker compose -f docker-compose.yml -f docker-compose.local-db.yml up -d timescaledb
 
 pnpm db:migrate
 pnpm dev:api    # http://localhost:3000
 pnpm dev:web    # http://localhost:5173, proxies /api to the api dev server
 ```
+
+Note that the dev scripts do **not** auto-load `.env` — export the variables
+into your shell, or run them through something like `dotenvx`.
 
 Useful scripts (run from the repo root):
 
