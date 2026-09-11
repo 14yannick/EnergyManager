@@ -48,6 +48,26 @@ export interface DynamicTariffRate {
   updatedAt: string;
 }
 
+/**
+ * An additive per-kWh component layered on top of the resolved `kind` rate
+ * for the same instant — e.g. a "Herkunftsnachweis" (origin certificate) or
+ * "Mindestvergütungsprämie" (minimum feed-in premium) on top of the feed-in
+ * rate. Unlike `TariffPeriod`, multiple surcharges of the same kind may
+ * overlap the same period — they all get summed onto the base rate rather
+ * than one being picked.
+ */
+export interface TariffSurcharge {
+  id: string;
+  siteId: string;
+  kind: TariffKind;
+  startTs: string; // ISO datetime, half-open [startTs, endTs)
+  endTs: string;
+  rateChfPerKwh: number;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CostItem {
   id: string;
   siteId: string;
@@ -76,7 +96,11 @@ export type ReadingImportMode = "delta" | "cumulative";
 export interface Party {
   id: string;
   siteId: string;
+  /** Participant number as used on paperwork, e.g. "592971". */
+  reference: string | null;
   name: string;
+  /** Contact addresses; a household can have several. */
+  emails: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -93,7 +117,9 @@ export type IntervalMetricKind =
   | "import_grid"
   | "battery_charge"
   | "battery_discharge"
-  | "consumption";
+  | "consumption" // per-party (a neighbour); `partyId` required
+  | "consumption_own" // the household's own total load ("Verbrauch"); site-level
+  | "consumption_grid"; // per-party: what that participant drew from the grid rather than local PV
 
 export interface IntervalMetric {
   siteId: string;
@@ -102,6 +128,101 @@ export interface IntervalMetric {
   partyId: string | null;
   valueKwh: number;
   source: string;
+}
+
+/**
+ * Which Home Assistant statistic feeds which metric kind. Entity ids encode
+ * the user's own device names, so the mapping is configuration rather than
+ * something the code can assume.
+ */
+export interface HaEntityMapping {
+  id: string;
+  siteId: string;
+  metricKind: IntervalMetricKind;
+  statisticId: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One selectable statistic as Home Assistant reports it, for the mapping UI. */
+export interface HaStatisticOption {
+  statisticId: string;
+  name: string | null;
+  unit: string | null;
+  /** Home Assistant's own classification, e.g. "energy" — used to offer only energy statistics. */
+  unitClass: string | null;
+  hasSum: boolean;
+}
+
+export interface HaSyncResult {
+  from: string;
+  to: string;
+  granularity: "quarter_hour" | "hour";
+  metrics: Array<{ metricKind: IntervalMetricKind; statisticId: string; rows: number }>;
+  inserted: number;
+  updated: number;
+  skipped: string[];
+}
+
+export type BillingCategory = "energie" | "netznutzung" | "messung" | "abgaben";
+
+/**
+ * How a grid-invoice position is spread across the pool. `pool_shared` is
+ * billed once to the connection and divided by participants; `per_participant`
+ * is billed once for each of them; `per_kwh` follows their own grid draw, and
+ * `per_kwh_total` everything they consumed including local PV.
+ */
+export type BillingAllocation = "per_kwh" | "per_kwh_total" | "pool_shared" | "per_participant";
+
+export interface GridTariffPosition {
+  id: string;
+  siteId: string;
+  category: BillingCategory;
+  label: string;
+  allocation: BillingAllocation;
+  /** CHF/kWh for `per_kwh`, CHF/year otherwise. */
+  rateChf: number;
+  validFrom: string;
+  validTo: string;
+  countsInDirectBilling: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceLine {
+  category: BillingCategory;
+  label: string;
+  allocation: BillingAllocation;
+  /** kWh for per_kwh lines, days for the annual ones. */
+  quantity: number;
+  quantityUnit: "kWh" | "days";
+  /** What one unit costs after allocation — CHF/kWh, or CHF/day already divided by the pool. */
+  unitRateChf: number;
+  amountChf: number;
+}
+
+/** What the participant would have paid billed directly by the grid provider. */
+export interface DirectBillingComparison {
+  lines: InvoiceLine[];
+  totalChf: number;
+  savingChf: number;
+}
+
+export interface ParticipantInvoice {
+  partyId: string | null;
+  partyReference: string | null;
+  partyName: string;
+  from: string;
+  to: string;
+  days: number;
+  participantCount: number;
+  gridKwh: number;
+  localKwh: number;
+  lines: InvoiceLine[];
+  totalChf: number;
+  comparison: DirectBillingComparison;
 }
 
 export interface ReadingsImportResult {
@@ -118,19 +239,42 @@ export interface DailySavings {
   batteryChargeKwh: number;
   batteryDischargeKwh: number;
   exportedKwh: number;
+  /** Total energy leaving the household (the inverter's export figure); `exportedKwh` is what remains after neighbours take their share. */
+  exportLocalKwh: number;
+  /** Energy consumed by neighbours, summed across parties. */
+  neighborConsumptionKwh: number;
   purchaseRateChfPerKwh: number | null;
   sellRateChfPerKwh: number | null;
+  neighborSellRateChfPerKwh: number | null;
   selfConsumptionValueChf: number;
   exportRevenueChf: number;
   savingsWithBatteryChf: number;
   savingsWithoutBatteryChf: number;
   batteryOnlySavingsChf: number;
-  /** Value of battery-discharged kWh priced at the purchase rate (avoided import). */
-  batteryAvoidedImportChf: number;
-  /** Same discharged kWh priced at the feed-in rate (what exporting it instead would have earned). */
-  batteryIfExportedInsteadChf: number;
-  /** avoidedImport - ifExportedInstead: the real marginal value of self-consuming via battery vs. exporting. */
-  batteryUpliftChf: number;
+  /** Cost of charging, priced as the feed-in value that energy could have earned as an export instead. */
+  batteryChargingCostChf: number;
+  /** Portion of discharge that covered load (avoided an import), vs. pushed straight back out to the grid. */
+  batteryDischargeConsumedKwh: number;
+  batteryDischargeExportedKwh: number;
+  /** batteryDischargeConsumedKwh priced at the purchase rate. */
+  batteryDischargeConsumedValueChf: number;
+  /** batteryDischargeExportedKwh priced at the feed-in rate. */
+  batteryDischargeExportedValueChf: number;
+  /** consumedValue + exportedValue - chargingCost: the battery's actual net economic contribution this interval. */
+  batteryRevenueChf: number;
+  /** exportRevenueChf minus whatever's attributed to the battery (batteryDischargeExportedValueChf) — the production-only slice of grid export revenue. */
+  directExportRevenueChf: number;
+  /** directUseKwh priced at the purchase rate: PV consumed as produced, worth the import it avoided. */
+  directConsumptionRevenueChf: number;
+  /** neighborConsumptionKwh priced at the neighbour-sale rate. */
+  neighborSellRevenueChf: number;
+  /**
+   * Export revenue in the counterfactual where no battery exists: the PV that
+   * charged it would have been exported, and the export that came out of it
+   * never happens. Direct consumption and neighbour sales are unaffected, so
+   * those fields serve both scenarios.
+   */
+  noBatteryDirectExportRevenueChf: number;
 }
 
 export interface SavingsSummary {
@@ -140,14 +284,14 @@ export interface SavingsSummary {
     withBatteryChf: number;
     withoutBatteryChf: number;
     batteryOnlyChf: number;
-    batteryUpliftChf: number;
+    batteryRevenueChf: number;
   };
   daysWithData: number;
   avgDaily: {
     withBatteryChf: number;
     withoutBatteryChf: number;
     batteryOnlyChf: number;
-    batteryUpliftChf: number;
+    batteryRevenueChf: number;
   };
   costs: CostItemsSummary;
   payback: {

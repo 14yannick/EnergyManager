@@ -3,6 +3,8 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { TariffPeriodsPage } from "./pages/TariffPeriodsPage";
 import { CostItemsPage } from "./pages/CostItemsPage";
 import { ReadingsImportPage } from "./pages/ReadingsImportPage";
+import { HomeAssistantPage } from "./pages/HomeAssistantPage";
+import { BillingPage } from "./pages/BillingPage";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 rounded-md text-sm font-medium ${
@@ -28,6 +30,12 @@ export function App() {
             <NavLink to="/readings" className={navLinkClass}>
               Import readings
             </NavLink>
+            <NavLink to="/home-assistant" className={navLinkClass}>
+              Home Assistant
+            </NavLink>
+            <NavLink to="/billing" className={navLinkClass}>
+              Facturation
+            </NavLink>
           </nav>
         </div>
       </header>
@@ -38,6 +46,8 @@ export function App() {
           <Route path="/tariff-periods" element={<TariffPeriodsPage />} />
           <Route path="/cost-items" element={<CostItemsPage />} />
           <Route path="/readings" element={<ReadingsImportPage />} />
+          <Route path="/home-assistant" element={<HomeAssistantPage />} />
+          <Route path="/billing" element={<BillingPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

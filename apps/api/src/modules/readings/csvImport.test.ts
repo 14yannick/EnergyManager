@@ -125,3 +125,26 @@ describe("parseMetricsCsv — cumulative mode", () => {
     expect(neighbourB.valueKwh).toBeCloseTo(1, 9);
   });
 });
+
+describe("per-party metric kinds", () => {
+  it("accepts a party on consumption_grid, which is per-participant like consumption", () => {
+    const csv = [
+      "timestamp,metric_kind,party,value_kwh",
+      "2026-01-01T00:00:00Z,consumption_grid,Neighbour A,3.5",
+      "2026-01-01T00:00:00Z,consumption,Neighbour A,1.5",
+    ].join("\n");
+    const { rows, errors } = parseMetricsCsv(csv, "delta");
+    expect(errors).toEqual([]);
+    expect(rows.map((r) => [r.metricKind, r.party, r.valueKwh])).toEqual([
+      ["consumption_grid", "Neighbour A", 3.5],
+      ["consumption", "Neighbour A", 1.5],
+    ]);
+  });
+
+  it("still requires a party on consumption_grid", () => {
+    const csv = ["timestamp,metric_kind,party,value_kwh", "2026-01-01T00:00:00Z,consumption_grid,,3.5"].join("\n");
+    const { rows, errors } = parseMetricsCsv(csv, "delta");
+    expect(rows).toHaveLength(0);
+    expect(errors[0]!.message).toMatch(/party is required/);
+  });
+});

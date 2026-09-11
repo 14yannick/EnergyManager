@@ -3,7 +3,17 @@ import type {
   CostItemInput,
   CostItemsSummary,
   CumulativeSavingsPoint,
+  DailySavings,
   DynamicTariffRate,
+  GridTariffPosition,
+  GridTariffPositionInput,
+  ParticipantInvoice,
+  HaEntityMapping,
+  HaEntityMappingInput,
+  HaStatisticOption,
+  HaSyncRequest,
+  HaSyncResult,
+  IntervalMetricKind,
   Party,
   PartyInput,
   ReadingsImportResult,
@@ -13,6 +23,8 @@ import type {
   TariffKind,
   TariffPeriod,
   TariffPeriodInput,
+  TariffSurcharge,
+  TariffSurchargeInput,
 } from "@energy-manager/shared";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -46,6 +58,20 @@ export const api = {
       }),
     remove: (id: string) => request<void>(`/tariff-periods/${id}`, { method: "DELETE" }),
   },
+  tariffSurcharges: {
+    list: (siteId: string) => request<TariffSurcharge[]>(`/sites/${siteId}/tariff-surcharges`),
+    create: (siteId: string, input: TariffSurchargeInput) =>
+      request<TariffSurcharge>(`/sites/${siteId}/tariff-surcharges`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: (id: string, input: TariffSurchargeInput) =>
+      request<TariffSurcharge>(`/tariff-surcharges/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    remove: (id: string) => request<void>(`/tariff-surcharges/${id}`, { method: "DELETE" }),
+  },
   costItems: {
     list: (siteId: string) => request<CostItem[]>(`/sites/${siteId}/cost-items`),
     summary: (siteId: string) => request<CostItemsSummary>(`/sites/${siteId}/cost-items/summary`),
@@ -70,8 +96,21 @@ export const api = {
       if (!res.ok) throw new Error(`Import failed: ${res.status}`);
       return res.json() as Promise<ReadingsImportResult>;
     },
+    range: (siteId: string) =>
+      request<{ from: string | null; to: string | null }>(`/sites/${siteId}/readings/range`),
+    // A plain URL rather than a fetch: the browser's own download handling
+    // gets the filename from Content-Disposition, with no blob juggling.
+    exportUrl: (siteId: string, from: string, to: string, kinds: IntervalMetricKind[]) => {
+      const params = new URLSearchParams({ from, to });
+      if (kinds.length > 0) params.set("kinds", kinds.join(","));
+      return `/api/sites/${siteId}/readings/export.xlsx?${params.toString()}`;
+    },
   },
   savings: {
+    daily: (siteId: string, from: string, to: string, granularity?: SavingsQuery["granularity"]) =>
+      request<DailySavings[]>(
+        `/sites/${siteId}/savings/daily?from=${from}&to=${to}${granularity ? `&granularity=${granularity}` : ""}`,
+      ),
     summary: (siteId: string, from: string, to: string, granularity?: SavingsQuery["granularity"]) =>
       request<SavingsSummary>(
         `/sites/${siteId}/savings/summary?from=${from}&to=${to}${granularity ? `&granularity=${granularity}` : ""}`,
@@ -92,10 +131,56 @@ export const api = {
         `/sites/${siteId}/dynamic-tariffs?from=${from}&to=${to}${kind ? `&kind=${kind}` : ""}`,
       ),
   },
+  homeAssistant: {
+    status: () =>
+      request<{ configured: boolean; url: string | null; syncEnabled: boolean; syncIntervalMinutes: number }>(
+        "/home-assistant/status",
+      ),
+    statistics: () => request<HaStatisticOption[]>("/home-assistant/statistics"),
+    mappings: (siteId: string) => request<HaEntityMapping[]>(`/sites/${siteId}/home-assistant/entities`),
+    setMapping: (siteId: string, input: HaEntityMappingInput) =>
+      request<HaEntityMapping>(`/sites/${siteId}/home-assistant/entities`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    removeMapping: (id: string) =>
+      request<void>(`/home-assistant/entities/${id}`, { method: "DELETE" }),
+    sync: (siteId: string, body: HaSyncRequest) =>
+      request<HaSyncResult>(`/sites/${siteId}/home-assistant/sync`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  },
+  billing: {
+    positions: (siteId: string) => request<GridTariffPosition[]>(`/sites/${siteId}/billing/positions`),
+    createPosition: (siteId: string, input: GridTariffPositionInput) =>
+      request<GridTariffPosition>(`/sites/${siteId}/billing/positions`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    updatePosition: (id: string, input: GridTariffPositionInput) =>
+      request<GridTariffPosition>(`/billing/positions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    removePosition: (id: string) => request<void>(`/billing/positions/${id}`, { method: "DELETE" }),
+    invoices: (siteId: string, from: string, to: string) =>
+      request<{
+        from: string;
+        to: string;
+        days: number;
+        participantCount: number;
+        localRateChf: number | null;
+        invoices: ParticipantInvoice[];
+        warnings: string[];
+      }>(`/sites/${siteId}/billing/invoices?from=${from}&to=${to}`),
+  },
   parties: {
     list: (siteId: string) => request<Party[]>(`/sites/${siteId}/parties`),
     create: (siteId: string, input: PartyInput) =>
       request<Party>(`/sites/${siteId}/parties`, { method: "POST", body: JSON.stringify(input) }),
+    update: (id: string, input: PartyInput) =>
+      request<Party>(`/parties/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
     remove: (id: string) => request<void>(`/parties/${id}`, { method: "DELETE" }),
   },
 };

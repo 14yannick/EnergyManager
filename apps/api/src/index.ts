@@ -1,6 +1,9 @@
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
 import { syncDynamicTariffs } from "./modules/dynamicTariffs/service.js";
+import { syncHomeAssistant } from "./modules/homeAssistant/service.js";
+import { db } from "./db/client.js";
+import { sites } from "./db/schema/index.js";
 
 const app = await buildApp();
 
@@ -19,4 +22,32 @@ if (env.BKW_SYNC_ENABLED) {
   };
   runSync();
   setInterval(runSync, env.BKW_SYNC_INTERVAL_MINUTES * 60 * 1000);
+}
+
+// Home Assistant only keeps 5-minute statistics for ~10 days, so the ongoing
+// pull is what turns them into durable quarter-hour history before they age
+// out. The lookback re-reads recent windows so late or revised statistics are
+// corrected rather than missed.
+if (env.HA_SYNC_ENABLED && env.HA_URL && env.HA_TOKEN) {
+  const runHaSync = () => {
+    void (async () => {
+      try {
+        const allSites = await db.select({ id: sites.id }).from(sites);
+        for (const site of allSites) {
+          const result = await syncHomeAssistant(site.id, {
+            granularity: "quarter_hour",
+            lookbackHours: env.HA_SYNC_LOOKBACK_HOURS,
+          });
+          app.log.info(
+            { siteId: site.id, inserted: result.inserted, updated: result.updated, skipped: result.skipped },
+            "home assistant sync completed",
+          );
+        }
+      } catch (err) {
+        app.log.error(err, "home assistant sync failed");
+      }
+    })();
+  };
+  runHaSync();
+  setInterval(runHaSync, env.HA_SYNC_INTERVAL_MINUTES * 60 * 1000);
 }

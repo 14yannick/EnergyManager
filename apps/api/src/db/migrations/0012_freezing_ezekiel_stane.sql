@@ -1,0 +1,1 @@
+ALTER TABLE "parties" ADD COLUMN "emails" text[] DEFAULT '{}'::text[] NOT NULL;

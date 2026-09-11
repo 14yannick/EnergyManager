@@ -20,11 +20,20 @@ export interface DailyEnergyAggregate {
 /**
  * Energy-balance-correct direct-use formula, usable now that we store
  * `batteryChargeKwh` per interval: produced = directUse + batteryCharge + exported.
+ *
+ * Deliberately *not* clamped at zero. Production, charging and export come
+ * from different meters, so energy produced near an interval boundary can be
+ * exported in the neighbouring bucket — at sub-daily resolution that makes
+ * individual intervals come out slightly negative. Clamping would discard
+ * that negative noise while keeping the positive noise, biasing the total
+ * upward: on real hourly data for one month it inflated direct use by 130 of
+ * 311 kWh. The skew cancels once intervals are summed, so the caller's
+ * aggregate is the meaningful figure and a single interval is not.
  */
 export function computeDirectUseKwh(
   day: Pick<DailyEnergyAggregate, "producedKwh" | "batteryChargeKwh" | "exportedKwh">,
 ): number {
-  return Math.max(day.producedKwh - day.batteryChargeKwh - day.exportedKwh, 0);
+  return day.producedKwh - day.batteryChargeKwh - day.exportedKwh;
 }
 
 /**
@@ -47,29 +56,84 @@ export interface SavingsInputs {
   batteryChargeKwh: number;
   batteryDischargeKwh: number;
   exportedKwh: number;
+  /**
+   * Total energy leaving the household (the inverter's own export figure).
+   * `exportedKwh` is what's left of it once neighbours take their share, so
+   * this is reported for visibility but never priced directly — pricing the
+   * same kWh here and as grid export would double-count it.
+   */
+  exportLocalKwh: number;
+  /** Energy consumed by neighbours (summed across parties) — this is what's sold at the neighbour rate. */
+  neighborConsumptionKwh: number;
   purchaseRateChfPerKwh: number | null;
+  sellRateChfPerKwh: number | null;
+  neighborSellRateChfPerKwh: number | null;
+}
+
+export interface BatteryRevenueInputs {
+  producedKwh: number;
+  batteryChargeKwh: number;
+  batteryDischargeKwh: number;
+  exportedKwh: number;
+  purchaseRateChfPerKwh: number | null;
+  /** Feed-in rate — expected to already include any surcharges (see `makeRateResolver` in savings/service.ts). */
   sellRateChfPerKwh: number | null;
 }
 
+export interface BatteryRevenue {
+  dischargeConsumedKwh: number;
+  dischargeExportedKwh: number;
+  chargingCostChf: number;
+  dischargeConsumedValueChf: number;
+  dischargeExportedValueChf: number;
+  batteryRevenueChf: number;
+}
+
 /**
- * The value of battery-discharged energy under two counterfactuals: what
- * import it avoided (priced at the purchase rate) vs. what it would have
- * earned had it been exported instead (priced at the feed-in rate) at that
- * same moment. Only meaningful as a *marginal* KPI once feed-in pricing can
- * vary interval to interval — with a flat feed-in rate the two counterfactuals
- * in `computeSavingsFromInputs` already capture this implicitly, but dynamic
- * pricing means the spread itself varies, so it's worth surfacing directly.
+ * The battery's own economics, priced from what actually happened rather
+ * than a counterfactual: charging costs whatever that energy could have
+ * earned as an export instead of being stored (priced at the feed-in rate);
+ * discharging earns the purchase rate for the portion that covered load
+ * (avoided import) or the feed-in rate for the portion pushed back out to
+ * the grid (a deliberate discharge-to-grid / arbitrage interval).
+ *
+ * Net metering only reports total export, not its source, so a discharged
+ * kWh can't be traced through the meter directly. Energy balance bounds it:
+ * production splits into direct use, charging, and export, so PV alone can
+ * never have exported more than `produced - charged`. Anything exported
+ * beyond that had to come out of the battery. Consumption takes priority
+ * (a self-consumption battery discharges to cover load), so the battery is
+ * credited with export only for that unexplained remainder, capped by the
+ * discharge itself.
+ *
+ * Deliberately *not* "export > 0 while discharging": that reads as a
+ * discharge-to-grid signal only at interval resolution. Aggregated to a day,
+ * a summer site exports at noon and discharges at night, so it would flag
+ * every day and price the whole battery at the feed-in rate.
  */
-export function computeBatteryUplift(
-  batteryDischargeKwh: number,
-  purchaseRateChfPerKwh: number | null,
-  sellRateChfPerKwh: number | null,
-): { avoidedImportChf: number; ifExportedInsteadChf: number; upliftChf: number } {
-  const avoidedImportChf =
-    purchaseRateChfPerKwh != null ? batteryDischargeKwh * purchaseRateChfPerKwh : 0;
-  const ifExportedInsteadChf =
-    sellRateChfPerKwh != null ? batteryDischargeKwh * sellRateChfPerKwh : 0;
-  return { avoidedImportChf, ifExportedInsteadChf, upliftChf: avoidedImportChf - ifExportedInsteadChf };
+export function computeBatteryRevenue(inputs: BatteryRevenueInputs): BatteryRevenue {
+  const { producedKwh, batteryChargeKwh, batteryDischargeKwh, exportedKwh, purchaseRateChfPerKwh, sellRateChfPerKwh } =
+    inputs;
+
+  const pvAvailableToExportKwh = Math.max(producedKwh - batteryChargeKwh, 0);
+  const unexplainedExportKwh = Math.max(exportedKwh - pvAvailableToExportKwh, 0);
+  const dischargeExportedKwh = Math.min(unexplainedExportKwh, batteryDischargeKwh);
+  const dischargeConsumedKwh = batteryDischargeKwh - dischargeExportedKwh;
+
+  const chargingCostChf = sellRateChfPerKwh != null ? batteryChargeKwh * sellRateChfPerKwh : 0;
+  const dischargeConsumedValueChf =
+    purchaseRateChfPerKwh != null ? dischargeConsumedKwh * purchaseRateChfPerKwh : 0;
+  const dischargeExportedValueChf =
+    sellRateChfPerKwh != null ? dischargeExportedKwh * sellRateChfPerKwh : 0;
+
+  return {
+    dischargeConsumedKwh,
+    dischargeExportedKwh,
+    chargingCostChf,
+    dischargeConsumedValueChf,
+    dischargeExportedValueChf,
+    batteryRevenueChf: dischargeConsumedValueChf + dischargeExportedValueChf - chargingCostChf,
+  };
 }
 
 /**
@@ -80,8 +144,8 @@ export function computeBatteryUplift(
  * 15-minute interval under dynamic pricing; the arithmetic doesn't care which.
  */
 export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
-  const { purchaseRateChfPerKwh: purchaseRate, sellRateChfPerKwh: sellRate } = inputs;
-  const { directUseKwh, batteryDischargeKwh, exportedKwh } = inputs;
+  const { purchaseRateChfPerKwh: purchaseRate, sellRateChfPerKwh: sellRate, neighborSellRateChfPerKwh: neighborSellRate } = inputs;
+  const { directUseKwh, batteryChargeKwh, batteryDischargeKwh, exportedKwh, neighborConsumptionKwh } = inputs;
 
   const selfConsumptionValueChf =
     purchaseRate != null ? (batteryDischargeKwh + directUseKwh) * purchaseRate : 0;
@@ -95,7 +159,41 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
     (sellRate != null ? (batteryDischargeKwh + exportedKwh) * sellRate : 0);
 
   const batteryOnlySavingsChf = savingsWithBatteryChf - savingsWithoutBatteryChf;
-  const uplift = computeBatteryUplift(batteryDischargeKwh, purchaseRate, sellRate);
+  const revenue = computeBatteryRevenue({
+    producedKwh: inputs.producedKwh,
+    batteryChargeKwh,
+    batteryDischargeKwh,
+    exportedKwh,
+    purchaseRateChfPerKwh: purchaseRate,
+    sellRateChfPerKwh: sellRate,
+  });
+
+  // Revenue breakdown for the "Umsatz" chart: exportRevenueChf already prices
+  // *all* grid export (production- and battery-sourced combined) at the
+  // feed-in rate, so the production-only slice is whatever's left once the
+  // battery's share (already counted inside batteryRevenueChf) is removed —
+  // dischargeExportedKwh <= exportedKwh always, so this can't go negative.
+  const directExportRevenueChf = exportRevenueChf - revenue.dischargeExportedValueChf;
+  // PV consumed the moment it was produced: worth the import it avoided.
+  // Disjoint from batteryRevenueChf's consumed leg, which covers the kWh that
+  // went through the battery first — together they make up
+  // selfConsumptionValueChf, which keeps pricing both as one figure.
+  const directConsumptionRevenueChf = purchaseRate != null ? directUseKwh * purchaseRate : 0;
+  // Priced off what neighbours actually consumed, not off export_local: the
+  // latter is everything leaving the household, of which the grid share is
+  // already priced as export revenue.
+  const neighborSellRevenueChf = neighborSellRate != null ? neighborConsumptionKwh * neighborSellRate : 0;
+
+  // Counterfactual export revenue if the battery weren't there at all. The PV
+  // that went into it would have gone to the grid instead (+ charged), and the
+  // export that actually came *out* of it never happens (- dischargeExported).
+  // Direct consumption is untouched: PV used as it was produced never involved
+  // the battery, so removing the battery doesn't change it.
+  const noBatteryExportedKwh = Math.max(
+    exportedKwh - revenue.dischargeExportedKwh + batteryChargeKwh,
+    0,
+  );
+  const noBatteryDirectExportRevenueChf = sellRate != null ? noBatteryExportedKwh * sellRate : 0;
 
   return {
     ...inputs,
@@ -104,9 +202,16 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
     savingsWithBatteryChf,
     savingsWithoutBatteryChf,
     batteryOnlySavingsChf,
-    batteryAvoidedImportChf: uplift.avoidedImportChf,
-    batteryIfExportedInsteadChf: uplift.ifExportedInsteadChf,
-    batteryUpliftChf: uplift.upliftChf,
+    batteryChargingCostChf: revenue.chargingCostChf,
+    batteryDischargeConsumedKwh: revenue.dischargeConsumedKwh,
+    batteryDischargeExportedKwh: revenue.dischargeExportedKwh,
+    batteryDischargeConsumedValueChf: revenue.dischargeConsumedValueChf,
+    batteryDischargeExportedValueChf: revenue.dischargeExportedValueChf,
+    batteryRevenueChf: revenue.batteryRevenueChf,
+    directExportRevenueChf,
+    directConsumptionRevenueChf,
+    neighborSellRevenueChf,
+    noBatteryDirectExportRevenueChf,
   };
 }
 
@@ -116,22 +221,31 @@ const SUMMABLE_FIELDS = [
   "batteryChargeKwh",
   "batteryDischargeKwh",
   "exportedKwh",
+  "exportLocalKwh",
+  "neighborConsumptionKwh",
   "selfConsumptionValueChf",
   "exportRevenueChf",
   "savingsWithBatteryChf",
   "savingsWithoutBatteryChf",
   "batteryOnlySavingsChf",
-  "batteryAvoidedImportChf",
-  "batteryIfExportedInsteadChf",
-  "batteryUpliftChf",
+  "batteryChargingCostChf",
+  "batteryDischargeConsumedKwh",
+  "batteryDischargeExportedKwh",
+  "batteryDischargeConsumedValueChf",
+  "batteryDischargeExportedValueChf",
+  "batteryRevenueChf",
+  "directExportRevenueChf",
+  "directConsumptionRevenueChf",
+  "neighborSellRevenueChf",
+  "noBatteryDirectExportRevenueChf",
 ] as const satisfies readonly (keyof DailySavings)[];
 
 /**
  * Groups rows sharing the same `periodKey(row.date)` and sums their summable
  * fields, replacing `date` with the period key. `purchaseRateChfPerKwh`/
- * `sellRateChfPerKwh` are nulled once a period mixes more than one row —
- * there's no single rate that describes a period built from several
- * differently-priced rows.
+ * `sellRateChfPerKwh`/`neighborSellRateChfPerKwh` are nulled once a period
+ * mixes more than one row — there's no single rate that describes a period
+ * built from several differently-priced rows.
  */
 function aggregateByPeriod(rows: DailySavings[], periodKey: (date: string) => string): DailySavings[] {
   const byPeriod = new Map<string, DailySavings>();
@@ -146,9 +260,23 @@ function aggregateByPeriod(rows: DailySavings[], periodKey: (date: string) => st
     for (const field of SUMMABLE_FIELDS) existing[field] += row[field];
     existing.purchaseRateChfPerKwh = null;
     existing.sellRateChfPerKwh = null;
+    existing.neighborSellRateChfPerKwh = null;
   }
 
-  return [...byPeriod.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return [...byPeriod.values()].map(clampDirectUse).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Direct use is `produced - charged - exported`, which goes negative over a
+ * whole period only when the battery was charged from the grid: more went into
+ * it than the panels made. The honest reading of that is "no PV reached the
+ * load directly", not a negative quantity of energy — so the floor belongs
+ * here, on a summed period, rather than on a single interval where it would
+ * instead be discarding meter-timing noise (see `computeDirectUseKwh`).
+ */
+function clampDirectUse(row: DailySavings): DailySavings {
+  if (row.directUseKwh >= 0) return row;
+  return { ...row, directUseKwh: 0, directConsumptionRevenueChf: 0 };
 }
 
 /**
@@ -169,6 +297,37 @@ export function aggregateIntervalsToDaily(rows: DailySavings[]): DailySavings[] 
 export function aggregateDailyToMonthly(dailyRows: DailySavings[]): DailySavings[] {
   return aggregateByPeriod(dailyRows, (date) => date.slice(0, 7)); // "YYYY-MM-DD" -> "YYYY-MM"
 }
+
+/**
+ * Rolls daily rows up to calendar quarters, keyed "YYYY-Qn" — which also sorts
+ * correctly as a string, both within a year and across one.
+ */
+export function aggregateDailyToQuarterly(dailyRows: DailySavings[]): DailySavings[] {
+  return aggregateByPeriod(dailyRows, (date) => {
+    const month = Number(date.slice(5, 7));
+    return `${date.slice(0, 4)}-Q${Math.floor((month - 1) / 3) + 1}`;
+  });
+}
+
+/**
+ * Rolls daily rows up to calendar years. Works off daily rows rather than
+ * monthly ones so a year is never a sum of sums — the direct-use floor is
+ * applied per day (see `clampDirectUse`), and re-aggregating already-floored
+ * monthly rows would give the same answer only by coincidence.
+ */
+export function aggregateDailyToYearly(dailyRows: DailySavings[]): DailySavings[] {
+  return aggregateByPeriod(dailyRows, (date) => date.slice(0, 4)); // "YYYY-MM-DD" -> "YYYY"
+}
+
+/**
+ * Collapses the whole range into a single row. The period key is a constant
+ * rather than a date, since "overall" is one period however long the range is.
+ */
+export function aggregateDailyToOverall(dailyRows: DailySavings[]): DailySavings[] {
+  return aggregateByPeriod(dailyRows, () => OVERALL_PERIOD_KEY);
+}
+
+export const OVERALL_PERIOD_KEY = "overall";
 
 export function buildCumulativeSeries(dailyRows: DailySavings[]): CumulativeSavingsPoint[] {
   const sorted = [...dailyRows].sort((a, b) => a.date.localeCompare(b.date));
@@ -219,10 +378,10 @@ function summarizePeriodSavings(
       acc.withBatteryChf += r.savingsWithBatteryChf;
       acc.withoutBatteryChf += r.savingsWithoutBatteryChf;
       acc.batteryOnlyChf += r.batteryOnlySavingsChf;
-      acc.batteryUpliftChf += r.batteryUpliftChf;
+      acc.batteryRevenueChf += r.batteryRevenueChf;
       return acc;
     },
-    { withBatteryChf: 0, withoutBatteryChf: 0, batteryOnlyChf: 0, batteryUpliftChf: 0 },
+    { withBatteryChf: 0, withoutBatteryChf: 0, batteryOnlyChf: 0, batteryRevenueChf: 0 },
   );
 
   const daysWithData = rows.length; // "periods with data" — days or months, depending on periodsPerYear
@@ -230,7 +389,7 @@ function summarizePeriodSavings(
     withBatteryChf: daysWithData > 0 ? totals.withBatteryChf / daysWithData : 0,
     withoutBatteryChf: daysWithData > 0 ? totals.withoutBatteryChf / daysWithData : 0,
     batteryOnlyChf: daysWithData > 0 ? totals.batteryOnlyChf / daysWithData : 0,
-    batteryUpliftChf: daysWithData > 0 ? totals.batteryUpliftChf / daysWithData : 0,
+    batteryRevenueChf: daysWithData > 0 ? totals.batteryRevenueChf / daysWithData : 0,
   };
 
   // Mirrors the old Summary sheet: "with battery" payback uses total cost,
@@ -278,4 +437,49 @@ export function summarizeMonthlySavings(
   to: string,
 ): { summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] } {
   return summarizePeriodSavings(monthlyRows, costs, from, to, 12);
+}
+
+/**
+ * Same again for `aggregateDailyToYearly` rows. One period per year, so the
+ * average *is* the annual figure and payback is simply cost ÷ that.
+ */
+export function summarizeYearlySavings(
+  yearlyRows: DailySavings[],
+  costs: CostItemsSummary,
+  from: string,
+  to: string,
+): { summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] } {
+  return summarizePeriodSavings(yearlyRows, costs, from, to, 1);
+}
+
+/** Same as `summarizeSavings`, for `aggregateDailyToQuarterly` rows. */
+export function summarizeQuarterlySavings(
+  quarterlyRows: DailySavings[],
+  costs: CostItemsSummary,
+  from: string,
+  to: string,
+): { summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] } {
+  return summarizePeriodSavings(quarterlyRows, costs, from, to, 4);
+}
+
+/** Inclusive day count between two YYYY-MM-DD dates. */
+function inclusiveDays(from: string, to: string): number {
+  const a = new Date(`${from}T00:00:00Z`).getTime();
+  const b = new Date(`${to}T00:00:00Z`).getTime();
+  return Math.max(Math.round((b - a) / 86400000) + 1, 1);
+}
+
+/**
+ * One period covering the whole range, annualised by how long that range
+ * actually is. This is the most faithful payback of the four: the fixed 365
+ * and 12 assume every period is complete, whereas here a range of 287 days is
+ * scaled by 365/287 and a partial month or year can't quietly distort it.
+ */
+export function summarizeOverallSavings(
+  overallRows: DailySavings[],
+  costs: CostItemsSummary,
+  from: string,
+  to: string,
+): { summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] } {
+  return summarizePeriodSavings(overallRows, costs, from, to, 365 / inclusiveDays(from, to));
 }

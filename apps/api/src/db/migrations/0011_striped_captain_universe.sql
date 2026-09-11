@@ -1,0 +1,1 @@
+ALTER TYPE "public"."billing_allocation" ADD VALUE 'per_kwh_total' BEFORE 'pool_shared';

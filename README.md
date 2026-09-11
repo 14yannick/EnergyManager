@@ -38,11 +38,37 @@ the API comes up.
 - **Frontend**: React + Vite, TanStack Query, React Hook Form, Recharts, Tailwind CSS
 - **Deployment**: Docker Compose (`timescaledb`, `migrate`, `api`, `web`)
 
-See [`reference/solar-payback-calculator.xlsx`](reference/solar-payback-calculator.xlsx)
-for the original spreadsheet model this app replaces, and the doc comments in
+See the doc comments in
 [`apps/api/src/modules/savings/engine.ts`](apps/api/src/modules/savings/engine.ts)
-for how the savings formulas were ported (and where the new interval-data model
-intentionally diverges from the old approximation).
+for how the savings formulas work, and where the interval-data model deliberately
+diverges from the cruder approximations the app started out with.
+
+### Currency
+
+Everything stored and displayed by the app is **CHF**: tariff periods, surcharges,
+and the dynamic feed-in rates fetched from BKW (`CHF_kWh`).
+
+The public day-ahead spot sources are **EUR/MWh**, not CHF/kWh — both the BFE open
+data series (`ogd106_preise_strom_boerse.csv`, daily baseload) and the
+[Energy-Charts API](https://api.energy-charts.info/price?bzn=CH&start=2017-01-01&end=2026-09-10)
+(hourly, back to 2017). Anything sourced from them needs a EUR→CHF conversion plus
+a `/1000` unit change before it can be compared against or stored alongside the
+CHF/kWh rates.
+
+BKW does not document which exchange rate it applies — neither the
+[dynamic feed-in product page](https://www.bkw.ch/de/strom-in-der-grundversorgung/eigenen-strom-teilen-und-verkaufen/strom-ins-oeffentliche-stromnetz-einspeisen/dynamische-abnahmeverguetung)
+nor their API spec mentions it. Measured against stored rates, BKW applies **one rate
+per delivery day** to the hourly EPEX price and rounds to 0.001 CHF/kWh: a single
+fitted factor reproduces all 24 hours exactly on every day sampled so far. Those
+fitted factors track the **ECB reference rate of the previous business day** (the
+auction and BKW's ~18:00 publication both happen the day before delivery) roughly
+three times more closely than the same-day rate — consistent, but inferred from only
+four days, so treat it as a working assumption rather than an established fact.
+
+For backfill, use a real daily series rather than a constant — the rate drifts by
+several percent over a multi-year window. The ECB publishes daily EUR/CHF reference
+rates at `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip`; the SNB
+publishes only annual and monthly averages, which are too coarse here.
 
 ## Local development
 

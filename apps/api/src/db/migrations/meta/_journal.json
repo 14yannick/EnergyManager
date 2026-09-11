@@ -50,6 +50,48 @@
       "when": 1788378099663,
       "tag": "0006_drop_interval_readings",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788461470767,
+      "tag": "0007_dry_jocasta",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789038280320,
+      "tag": "0008_sloppy_pride",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789063952704,
+      "tag": "0009_happy_kulan_gath",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789065501702,
+      "tag": "0010_spicy_cable",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789066760399,
+      "tag": "0011_striped_captain_universe",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789067068058,
+      "tag": "0012_freezing_ezekiel_stane",
+      "breakpoints": true
     }
   ]
 }

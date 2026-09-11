@@ -14,6 +14,8 @@ export const intervalMetricKindEnum = pgEnum("interval_metric_kind", [
   "battery_charge",
   "battery_discharge",
   "consumption", // per-party; partyId required for this kind, null for all others
+  "consumption_own", // the household's own total load ("Verbrauch") — site-level, partyId null
+  "consumption_grid", // per-party: what that participant drew from the grid, not from local PV
 ]);
 
 // Converted into a Timescale hypertable (partitioned on `ts`), and given two

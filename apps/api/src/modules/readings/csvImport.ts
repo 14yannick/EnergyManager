@@ -40,6 +40,13 @@ interface RawRow {
  * decreasing cumulative value (meter reset) is reported as an error and
  * skipped rather than inserted as a negative/garbage delta.
  */
+/**
+ * Metric kinds that belong to a single participant rather than the site as a
+ * whole: what a neighbour took from local PV, and what they drew from the
+ * grid. Both need a party; everything else is site-level and must not have one.
+ */
+const PER_PARTY_KINDS = new Set<IntervalMetricKind>(["consumption", "consumption_grid"]);
+
 export function parseMetricsCsv(csvText: string, mode: ReadingImportMode): CsvParseResult {
   const records = parse(csvText, {
     columns: true,
@@ -67,12 +74,16 @@ export function parseMetricsCsv(csvText: string, mode: ReadingImportMode): CsvPa
     const metricKind = kindParsed.data;
 
     const partyRaw = (rec.party ?? "").trim();
-    if (metricKind === "consumption" && partyRaw === "") {
-      errors.push({ row: rowNum, message: 'party is required when metric_kind is "consumption"' });
+    const needsParty = PER_PARTY_KINDS.has(metricKind);
+    if (needsParty && partyRaw === "") {
+      errors.push({ row: rowNum, message: `party is required when metric_kind is "${metricKind}"` });
       return;
     }
-    if (metricKind !== "consumption" && partyRaw !== "") {
-      errors.push({ row: rowNum, message: 'party must be blank unless metric_kind is "consumption"' });
+    if (!needsParty && partyRaw !== "") {
+      errors.push({
+        row: rowNum,
+        message: `party must be blank for metric_kind "${metricKind}"`,
+      });
       return;
     }
 
@@ -91,7 +102,7 @@ export function parseMetricsCsv(csvText: string, mode: ReadingImportMode): CsvPa
       row: rowNum,
       ts: ts.toISOString(),
       metricKind,
-      party: metricKind === "consumption" ? partyRaw : null,
+      party: needsParty ? partyRaw : null,
       value,
     });
   });

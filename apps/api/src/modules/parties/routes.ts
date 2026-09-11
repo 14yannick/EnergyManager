@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { partyInputSchema } from "@energy-manager/shared";
-import { createParty, deleteParty, listParties } from "./service.js";
+import { createParty, deleteParty, listParties, updateParty } from "./service.js";
 import { isUniqueViolation } from "../../lib/pgErrors.js";
 
 export async function partyRoutes(app: FastifyInstance) {
@@ -16,6 +16,23 @@ export async function partyRoutes(app: FastifyInstance) {
     try {
       const created = await createParty(req.params.siteId, parsed.data);
       return reply.status(201).send(created);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        return reply.status(409).send({ error: "duplicate_name", message: "A party with this name already exists." });
+      }
+      throw err;
+    }
+  });
+
+  app.patch<{ Params: { id: string } }>("/api/parties/:id", async (req, reply) => {
+    const parsed = partyInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "invalid_input", issues: parsed.error.issues });
+    }
+    try {
+      const updated = await updateParty(req.params.id, parsed.data);
+      if (!updated) return reply.status(404).send({ error: "not_found" });
+      return updated;
     } catch (err) {
       if (isUniqueViolation(err)) {
         return reply.status(409).send({ error: "duplicate_name", message: "A party with this name already exists." });

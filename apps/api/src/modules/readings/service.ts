@@ -1,6 +1,8 @@
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import type { IntervalMetricKind } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, parties } from "../../db/schema/index.js";
+import { toNumber } from "../../lib/numeric.js";
 import type { ParsedMetricRow } from "./csvImport.js";
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -114,6 +116,71 @@ export async function listReadings(siteId: string, from: string, to: string) {
       ),
     )
     .orderBy(intervalMetrics.ts);
+}
+
+/**
+ * The Europe/Zurich calendar days the site has any reading for, so a UI can
+ * offer an "all data" range without guessing at an arbitrary start.
+ */
+export async function getReadingsRange(
+  siteId: string,
+): Promise<{ from: string; to: string } | null> {
+  const [row] = await db
+    .select({
+      from: sql<string | null>`to_char(min(${intervalMetrics.ts}) AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`,
+      to: sql<string | null>`to_char(max(${intervalMetrics.ts}) AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`,
+    })
+    .from(intervalMetrics)
+    .where(eq(intervalMetrics.siteId, siteId));
+  if (!row?.from || !row.to) return null;
+  return { from: row.from, to: row.to };
+}
+
+export interface ExportedReadingRow {
+  localDate: string;
+  localTime: string;
+  ts: Date;
+  metricKind: IntervalMetricKind;
+  party: string | null;
+  valueKwh: number;
+  source: string;
+}
+
+/**
+ * Rows for the spreadsheet export. `from`/`to` are inclusive Europe/Zurich
+ * calendar days converted to UTC in SQL (same convention as the savings
+ * queries) — a naive UTC bound would drop a day's worth of readings stamped
+ * at local midnight whenever Zurich is ahead of UTC.
+ */
+export async function exportReadings(
+  siteId: string,
+  from: string,
+  to: string,
+  kinds?: IntervalMetricKind[],
+): Promise<ExportedReadingRow[]> {
+  const rows = await db
+    .select({
+      localDate: sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`,
+      localTime: sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'HH24:MI')`,
+      ts: intervalMetrics.ts,
+      metricKind: intervalMetrics.metricKind,
+      party: parties.name,
+      valueKwh: intervalMetrics.valueKwh,
+      source: intervalMetrics.source,
+    })
+    .from(intervalMetrics)
+    .leftJoin(parties, eq(intervalMetrics.partyId, parties.id))
+    .where(
+      and(
+        eq(intervalMetrics.siteId, siteId),
+        sql`${intervalMetrics.ts} >= (${from}::date AT TIME ZONE 'Europe/Zurich')`,
+        sql`${intervalMetrics.ts} < ((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`,
+        kinds && kinds.length > 0 ? inArray(intervalMetrics.metricKind, kinds) : undefined,
+      ),
+    )
+    .orderBy(intervalMetrics.ts, intervalMetrics.metricKind);
+
+  return rows.map((r) => ({ ...r, valueKwh: toNumber(r.valueKwh) }));
 }
 
 export async function deleteReadings(siteId: string, from: string, to: string): Promise<number> {

@@ -1,7 +1,18 @@
 import type { FastifyInstance } from "fastify";
-import { dateRangeQuerySchema, readingImportModeSchema } from "@energy-manager/shared";
+import ExcelJS from "exceljs";
+import {
+  dateRangeQuerySchema,
+  readingImportModeSchema,
+  readingsExportQuerySchema,
+} from "@energy-manager/shared";
 import { parseMetricsCsv } from "./csvImport.js";
-import { deleteReadings, listReadings, upsertReadings } from "./service.js";
+import {
+  deleteReadings,
+  exportReadings,
+  getReadingsRange,
+  listReadings,
+  upsertReadings,
+} from "./service.js";
 
 export async function readingsRoutes(app: FastifyInstance) {
   app.post<{ Params: { siteId: string } }>(
@@ -25,6 +36,10 @@ export async function readingsRoutes(app: FastifyInstance) {
     },
   );
 
+  app.get<{ Params: { siteId: string } }>("/api/sites/:siteId/readings/range", async (req) => {
+    return (await getReadingsRange(req.params.siteId)) ?? { from: null, to: null };
+  });
+
   app.get<{ Params: { siteId: string }; Querystring: { from: string; to: string } }>(
     "/api/sites/:siteId/readings",
     async (req, reply) => {
@@ -33,6 +48,55 @@ export async function readingsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "invalid_query", issues: parsed.error.issues });
       }
       return listReadings(req.params.siteId, parsed.data.from, parsed.data.to);
+    },
+  );
+
+  app.get<{ Params: { siteId: string }; Querystring: Record<string, string> }>(
+    "/api/sites/:siteId/readings/export.xlsx",
+    async (req, reply) => {
+      const parsed = readingsExportQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "invalid_query", issues: parsed.error.issues });
+      }
+      const { from, to, kinds } = parsed.data;
+      const rows = await exportReadings(req.params.siteId, from, to, kinds);
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet("Readings");
+      sheet.columns = [
+        { header: "Date", key: "localDate", width: 12 },
+        { header: "Time", key: "localTime", width: 8 },
+        { header: "Metric", key: "metricKind", width: 20 },
+        { header: "Party", key: "party", width: 16 },
+        { header: "kWh", key: "valueKwh", width: 12, style: { numFmt: "0.0000" } },
+        { header: "Source", key: "source", width: 14 },
+        { header: "Timestamp (UTC)", key: "tsUtc", width: 26 },
+      ];
+      sheet.getRow(1).font = { bold: true };
+      sheet.views = [{ state: "frozen", ySplit: 1 }];
+      for (const r of rows) {
+        sheet.addRow({
+          localDate: r.localDate,
+          localTime: r.localTime,
+          metricKind: r.metricKind,
+          party: r.party ?? "",
+          valueKwh: r.valueKwh,
+          source: r.source,
+          tsUtc: r.ts.toISOString(),
+        });
+      }
+      sheet.autoFilter = { from: "A1", to: "G1" };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      // `from`/`to` are zod-validated YYYY-MM-DD, so they can't break out of
+      // the quoted filename.
+      return reply
+        .header(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        .header("Content-Disposition", `attachment; filename="readings_${from}_${to}.xlsx"`)
+        .send(Buffer.from(buffer));
     },
   );
 

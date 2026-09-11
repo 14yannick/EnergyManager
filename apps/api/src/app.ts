@@ -3,11 +3,14 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { siteRoutes } from "./modules/sites/routes.js";
 import { tariffPeriodRoutes } from "./modules/tariffPeriods/routes.js";
+import { tariffSurchargeRoutes } from "./modules/tariffSurcharges/routes.js";
 import { costItemRoutes } from "./modules/costItems/routes.js";
 import { readingsRoutes } from "./modules/readings/routes.js";
 import { savingsRoutes } from "./modules/savings/routes.js";
 import { dynamicTariffRoutes } from "./modules/dynamicTariffs/routes.js";
 import { partyRoutes } from "./modules/parties/routes.js";
+import { homeAssistantRoutes } from "./modules/homeAssistant/routes.js";
+import { billingRoutes } from "./modules/billing/routes.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -29,11 +32,14 @@ export async function buildApp() {
 
   await app.register(siteRoutes);
   await app.register(tariffPeriodRoutes);
+  await app.register(tariffSurchargeRoutes);
   await app.register(costItemRoutes);
   await app.register(readingsRoutes);
   await app.register(savingsRoutes);
   await app.register(dynamicTariffRoutes);
   await app.register(partyRoutes);
+  await app.register(homeAssistantRoutes);
+  await app.register(billingRoutes);
 
   return app;
 }
