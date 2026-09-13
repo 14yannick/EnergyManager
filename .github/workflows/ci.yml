@@ -22,6 +22,14 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # Must come before lint/typecheck/test: apps import @energy-manager/shared
+      # through its "main"/"types" entries, which point into dist/. dist/ is
+      # gitignored, so a fresh checkout has nothing to resolve against and tsc
+      # fails with TS2307. Locally this passes only if a stale dist is lying
+      # around. The Dockerfiles already build shared first for the same reason.
+      - run: pnpm --filter @energy-manager/shared build
+
       - run: pnpm -r lint
       - run: pnpm -r typecheck
       - run: pnpm --filter @energy-manager/api build
