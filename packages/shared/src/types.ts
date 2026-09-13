@@ -16,13 +16,22 @@ export type CostCategory = "battery" | "solar";
  */
 export type TariffKind = "purchase" | "feed_in" | "neighbor_sell";
 
+/**
+ * How a period is priced. "flat" uses the period's own rate; "dynamic" prices
+ * from the day-ahead feed, treating the period's rate (if any) as a fallback
+ * for intervals the feed never delivered.
+ */
+export type TariffPricingMode = "flat" | "dynamic";
+
 export interface TariffPeriod {
   id: string;
   siteId: string;
   kind: TariffKind;
   startTs: string; // ISO datetime, half-open [startTs, endTs)
   endTs: string;
-  rateChfPerKwh: number;
+  pricingMode: TariffPricingMode;
+  /** Always set for a flat period; optional fallback on a dynamic one. */
+  rateChfPerKwh: number | null;
   label: string | null;
   createdAt: string;
   updatedAt: string;

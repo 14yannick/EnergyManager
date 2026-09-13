@@ -14,7 +14,8 @@ function toDomain(row: Row): TariffPeriod {
     kind: row.kind,
     startTs: row.startTs.toISOString(),
     endTs: row.endTs.toISOString(),
-    rateChfPerKwh: toNumber(row.rateChfPerKwh),
+    pricingMode: row.pricingMode,
+    rateChfPerKwh: row.rateChfPerKwh == null ? null : toNumber(row.rateChfPerKwh),
     label: row.label,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -52,7 +53,8 @@ export async function createTariffPeriod(
       kind: input.kind,
       startTs: localTs(input.startTs),
       endTs: localTs(input.endTs),
-      rateChfPerKwh: input.rateChfPerKwh.toString(),
+      pricingMode: input.pricingMode,
+      rateChfPerKwh: input.rateChfPerKwh == null ? null : input.rateChfPerKwh.toString(),
       label: input.label ?? null,
     })
     .returning();
@@ -69,7 +71,8 @@ export async function updateTariffPeriod(
       kind: input.kind,
       startTs: localTs(input.startTs),
       endTs: localTs(input.endTs),
-      rateChfPerKwh: input.rateChfPerKwh.toString(),
+      pricingMode: input.pricingMode,
+      rateChfPerKwh: input.rateChfPerKwh == null ? null : input.rateChfPerKwh.toString(),
       label: input.label ?? null,
       updatedAt: new Date(),
     })

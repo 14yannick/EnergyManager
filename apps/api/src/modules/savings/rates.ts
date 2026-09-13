@@ -1,10 +1,18 @@
-import type { TariffKind } from "@energy-manager/shared";
+import type { TariffKind, TariffPricingMode } from "@energy-manager/shared";
 import { findRateForInstant } from "@energy-manager/shared";
 
 /**
  * Pure rate resolution — no DB, no network (same split as engine.ts vs
  * service.ts), so the precedence and surcharge rules can be tested directly.
  */
+
+export interface ResolvedPeriod {
+  kind: TariffKind;
+  startTs: string;
+  endTs: string;
+  pricingMode: TariffPricingMode;
+  rateChfPerKwh: number | null;
+}
 
 export interface ResolvedRate {
   kind: TariffKind;
@@ -18,24 +26,31 @@ export type RateResolver = (kind: TariffKind, instantIso: string) => number | nu
 /**
  * Resolves the rate for `kind` at `instantIso`.
  *
- * An exact-timestamp dynamic rate wins over the flat period covering that
- * instant — both BKW's feed and the stored readings are quarter-hour aligned,
- * so exact `start_ts` matching is reliable. This is the whole mechanism behind
- * "flat until a cutover date, dynamic after": no cutover config is needed,
- * because dynamic rows simply don't exist for dates before ingestion started.
+ * The period covering the instant decides *which source* prices it. A "flat"
+ * period uses its own rate; a "dynamic" period takes the exact-timestamp rate
+ * from the day-ahead feed, falling back to the period's own rate only if one
+ * is set. Both the feed and the stored readings are quarter-hour aligned, so
+ * exact `startTs` matching is reliable.
+ *
+ * The mode is read off the period rather than inferred from whether a dynamic
+ * row exists. The earlier design did infer it, on the assumption that dynamic
+ * rows simply would not exist before the contract switched — which stopped
+ * being true as soon as ingestion started running ahead of that date, silently
+ * repricing a quarter that was still on a fixed rate.
  *
  * Surcharges of the same kind covering that instant are then added on top —
  * a Herkunftsnachweis or Mindestvergütungsprämie is money received per
- * exported kWh *in addition to* the feed-in price, whether that price came
- * from the dynamic feed or a flat period. Unlike flat and dynamic rates they
- * are allowed to overlap each other, so every match is summed rather than one
- * being picked.
+ * exported kWh *in addition to* the feed-in price, whichever source it came
+ * from. Unlike periods they are allowed to overlap each other, so every match
+ * is summed rather than one being picked.
  *
- * Returns null when no base rate covers the instant. A surcharge alone is
- * deliberately not a price: it is defined as an addition to one.
+ * Returns null when nothing prices the instant: no period covers it, or a
+ * dynamic period covers it but the feed has no rate and no fallback is set.
+ * A surcharge alone is deliberately not a price: it is defined as an addition
+ * to one.
  */
 export function makeRateResolver(
-  flatPeriods: ResolvedRate[],
+  periods: ResolvedPeriod[],
   dynamicRates: ResolvedRate[],
   surcharges: ResolvedRate[],
 ): RateResolver {
@@ -43,10 +58,14 @@ export function makeRateResolver(
   for (const r of dynamicRates) dynamicByKindAndTs.set(`${r.kind}|${r.startTs}`, r.rateChfPerKwh);
 
   return (kind, instantIso) => {
-    const dynamic = dynamicByKindAndTs.get(`${kind}|${instantIso}`);
+    const period = findRateForInstant(kind, instantIso, periods);
+    if (!period) return null;
+
     const base =
-      dynamic !== undefined ? dynamic : findRateForInstant(kind, instantIso, flatPeriods)?.rateChfPerKwh;
-    if (base === undefined) return null;
+      period.pricingMode === "dynamic"
+        ? (dynamicByKindAndTs.get(`${kind}|${instantIso}`) ?? period.rateChfPerKwh)
+        : period.rateChfPerKwh;
+    if (base == null) return null;
 
     const surchargeSum = surcharges
       .filter((s) => s.kind === kind && instantIso >= s.startTs && instantIso < s.endTs)

@@ -7,6 +7,7 @@ import {
   tariffSurchargeInputSchema,
   type TariffKind,
   type TariffPeriodInput,
+  type TariffPricingMode,
   type TariffSurchargeInput,
 } from "@energy-manager/shared";
 import { api } from "../api/client";
@@ -16,6 +17,11 @@ const KIND_LABELS: Record<TariffKind, string> = {
   purchase: "Purchase",
   feed_in: "Feed-in",
   neighbor_sell: "Neighbour sale",
+};
+
+const PRICING_MODE_LABELS: Record<TariffPricingMode, string> = {
+  flat: "Quarterly (fixed rate)",
+  dynamic: "Day-ahead (spot)",
 };
 
 export function TariffPeriodsPage() {
@@ -29,16 +35,19 @@ export function TariffPeriodsPage() {
     enabled: !!site,
   });
 
-  const { register, handleSubmit, reset, formState } = useForm<TariffPeriodInput>({
+  const { register, handleSubmit, reset, formState, watch } = useForm<TariffPeriodInput>({
     resolver: zodResolver(tariffPeriodInputSchema),
-    defaultValues: { kind: "purchase" },
+    defaultValues: { kind: "purchase", pricingMode: "flat" },
   });
+  // Drives the rate field's labelling — on a day-ahead period the rate is an
+  // optional fallback, not the price.
+  const pricingMode = watch("pricingMode");
 
   const createMutation = useMutation({
     mutationFn: (input: TariffPeriodInput) => api.tariffPeriods.create(site!.id, input),
     onSuccess: () => {
       setFormError(null);
-      reset({ kind: "purchase" });
+      reset({ kind: "purchase", pricingMode: "flat" });
       void queryClient.invalidateQueries({ queryKey: ["tariff-periods", site?.id] });
     },
     onError: (err: Error) => setFormError(err.message),
@@ -57,7 +66,8 @@ export function TariffPeriodsPage() {
         <h1 className="text-xl font-semibold text-slate-900">Tariff periods</h1>
         <p className="text-sm text-slate-500">
           Purchase, feed-in and neighbour-sale rates, each for a date/time range — as short as a
-          quarter-hour or as long as a year. Periods of the same kind must not overlap.
+          quarter-hour or as long as a year. Periods of the same kind must not overlap. Each
+          period also says how it is priced: at its own fixed rate, or from the day-ahead feed.
         </p>
       </div>
 
@@ -80,11 +90,27 @@ export function TariffPeriodsPage() {
         <Field label="End">
           <input type="datetime-local" {...register("endTs")} className="input" />
         </Field>
-        <Field label="Rate (CHF/kWh)">
+        <Field label="Priced by">
+          <select {...register("pricingMode")} className="input">
+            {Object.entries(PRICING_MODE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field
+          label={pricingMode === "dynamic" ? "Fallback rate (optional)" : "Rate (CHF/kWh)"}
+          hint={
+            pricingMode === "dynamic"
+              ? "Used only where the feed has no price. Leave blank to leave those intervals unpriced."
+              : undefined
+          }
+        >
           <input
             type="number"
             step="0.00001"
-            {...register("rateChfPerKwh", { valueAsNumber: true })}
+            {...register("rateChfPerKwh")}
             className="input w-32"
           />
         </Field>
@@ -111,6 +137,7 @@ export function TariffPeriodsPage() {
             <th className="px-3 py-2">Kind</th>
             <th className="px-3 py-2">Start</th>
             <th className="px-3 py-2">End</th>
+            <th className="px-3 py-2">Priced by</th>
             <th className="px-3 py-2">Rate</th>
             <th className="px-3 py-2">Label</th>
             <th className="px-3 py-2" />
@@ -122,7 +149,19 @@ export function TariffPeriodsPage() {
               <td className="px-3 py-2">{KIND_LABELS[p.kind]}</td>
               <td className="px-3 py-2">{formatLocal(p.startTs)}</td>
               <td className="px-3 py-2">{formatLocal(p.endTs)}</td>
-              <td className="px-3 py-2">{p.rateChfPerKwh.toFixed(5)}</td>
+              <td className="px-3 py-2">{PRICING_MODE_LABELS[p.pricingMode]}</td>
+              <td className="px-3 py-2">
+                {p.rateChfPerKwh == null ? (
+                  <span className="text-slate-400">from feed</span>
+                ) : (
+                  <>
+                    {p.rateChfPerKwh.toFixed(5)}
+                    {p.pricingMode === "dynamic" && (
+                      <span className="ml-1 text-xs text-slate-400">fallback</span>
+                    )}
+                  </>
+                )}
+              </td>
               <td className="px-3 py-2">{p.label ?? "—"}</td>
               <td className="px-3 py-2 text-right">
                 <button
@@ -298,6 +337,7 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
             <th className="px-3 py-2">Kind</th>
             <th className="px-3 py-2">Start</th>
             <th className="px-3 py-2">End</th>
+            <th className="px-3 py-2">Priced by</th>
             <th className="px-3 py-2">Rate</th>
             <th className="px-3 py-2">Label</th>
             <th className="px-3 py-2" />
@@ -334,11 +374,20 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
       {label}
       {children}
+      {hint && <span className="max-w-56 font-normal text-slate-400">{hint}</span>}
     </label>
   );
 }

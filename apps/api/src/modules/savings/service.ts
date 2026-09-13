@@ -5,7 +5,7 @@ import type {
   SavingsSummary,
   SavingsQuery,
 } from "@energy-manager/shared";
-import { makeRateResolver, type ResolvedRate } from "./rates.js";
+import { makeRateResolver, type ResolvedPeriod, type ResolvedRate } from "./rates.js";
 import { db } from "../../db/client.js";
 import {
   dynamicTariffRates,
@@ -98,11 +98,12 @@ export async function getDailySavings(
     db.select().from(tariffSurcharges).where(eq(tariffSurcharges.siteId, siteId)),
   ]);
 
-  const flatPeriods: ResolvedRate[] = flatRows.map((r) => ({
+  const periods: ResolvedPeriod[] = flatRows.map((r) => ({
     kind: r.kind,
     startTs: r.startTs.toISOString(),
     endTs: r.endTs.toISOString(),
-    rateChfPerKwh: toNumber(r.rateChfPerKwh),
+    pricingMode: r.pricingMode,
+    rateChfPerKwh: r.rateChfPerKwh == null ? null : toNumber(r.rateChfPerKwh),
   }));
   const dynamicRates: ResolvedRate[] = dynamicRows.map((r) => ({
     kind: r.kind,
@@ -116,7 +117,7 @@ export async function getDailySavings(
     endTs: r.endTs.toISOString(),
     rateChfPerKwh: toNumber(r.rateChfPerKwh),
   }));
-  const resolveRate = makeRateResolver(flatPeriods, dynamicRates, surcharges);
+  const resolveRate = makeRateResolver(periods, dynamicRates, surcharges);
 
   const intervalRows: DailySavings[] = readingRows.map((row) => {
     const instantIso = row.ts.toISOString();

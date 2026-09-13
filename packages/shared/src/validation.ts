@@ -17,18 +17,28 @@ const optionalWhenBlank = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((v) => (v === "" ? undefined : v), schema.optional());
 
 export const tariffKindSchema = z.enum(["purchase", "feed_in", "neighbor_sell"]);
+export const tariffPricingModeSchema = z.enum(["flat", "dynamic"]);
 
 export const tariffPeriodInputSchema = z
   .object({
     kind: tariffKindSchema,
     startTs: localDateTime,
     endTs: localDateTime,
-    rateChfPerKwh: z.number().nonnegative(),
+    pricingMode: tariffPricingModeSchema.optional().default("flat"),
+    // Blank is meaningful on a dynamic period ("no fallback"), so it has to
+    // survive as undefined rather than failing validation — see the
+    // optionalWhenBlank note above.
+    rateChfPerKwh: optionalWhenBlank(z.coerce.number().nonnegative()),
     label: optionalWhenBlank(z.string().trim().min(1).max(200)),
   })
   .refine((v) => v.endTs > v.startTs, {
     message: "endTs must be after startTs",
     path: ["endTs"],
+  })
+  // Mirrors the DB check constraint: a flat period with no rate prices nothing.
+  .refine((v) => v.pricingMode !== "flat" || v.rateChfPerKwh !== undefined, {
+    message: "A flat period needs a rate",
+    path: ["rateChfPerKwh"],
   });
 export type TariffPeriodInput = z.infer<typeof tariffPeriodInputSchema>;
 

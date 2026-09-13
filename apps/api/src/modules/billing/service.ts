@@ -160,11 +160,15 @@ export async function runInvoices(
     warnings.push("No grid tariff positions are valid for this period.");
   }
 
+  // A period's rate is nullable now that a period can be priced from the
+  // day-ahead feed instead. Billing has no use for a dynamic neighbour rate —
+  // neighbour sales are negotiated, not spot-priced — so a null here flows into
+  // the "not priced" warning below rather than being treated as zero.
   const neighbourRates = flatRows.map((r) => ({
     kind: r.kind,
     startTs: r.startTs.toISOString(),
     endTs: r.endTs.toISOString(),
-    rateChfPerKwh: toNumber(r.rateChfPerKwh),
+    rateChfPerKwh: r.rateChfPerKwh == null ? null : toNumber(r.rateChfPerKwh),
   }));
   const localRateChf =
     findRateForInstant("neighbor_sell", periodStart, neighbourRates)?.rateChfPerKwh ?? null;
