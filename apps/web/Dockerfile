@@ -22,5 +22,16 @@ RUN pnpm --filter @energy-manager/web build
 
 FROM nginx:1.27-alpine AS runner
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Where this container forwards /api/ requests. Defaults to a container named
+# `api` on the same user-defined Docker network, which is what the compose
+# files create. Override it to point at any name, IP or port — e.g.
+#   -e API_UPSTREAM=http://EnergyManager-api:3000
+#   -e API_UPSTREAM=http://10.0.0.10:3000
+# so the API container is not forced to be called `api`.
+ENV API_UPSTREAM=http://api:3000
+# Restrict envsubst to this one variable; see nginx.conf.template.
+ENV NGINX_ENVSUBST_FILTER=^API_UPSTREAM$
+
 EXPOSE 80

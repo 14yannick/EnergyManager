@@ -57,3 +57,20 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The web image renders its nginx config from a template at startup.
+      # `nginx -T` runs the image's entrypoint (which does the envsubst) and
+      # dumps the resulting config, so this proves both that the template is
+      # valid nginx and that API_UPSTREAM is substituted while nginx's own
+      # $host / $remote_addr survive.
+      - name: Smoke test the rendered nginx config
+        if: matrix.name == 'web'
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/energymanager-web:sha-${{ github.sha }}"
+          OUT=$(docker run --rm -e API_UPSTREAM=http://smoke-test-api:3000 "$IMAGE" nginx -T)
+          echo "$OUT" | grep -E 'proxy_pass|proxy_set_header Host'
+          echo "$OUT" | grep -q 'proxy_pass http://smoke-test-api:3000/api/;' \
+            || { echo "API_UPSTREAM was not substituted"; exit 1; }
+          echo "$OUT" | grep -q 'proxy_set_header Host \$host;' \
+            || { echo "nginx runtime variable \$host was clobbered by envsubst"; exit 1; }
+          echo "rendered config OK"

@@ -94,6 +94,57 @@ with its full SHA as well as `latest`.
 The `migrate` service is safe to leave enabled: it reuses the api image with a
 different command, and Drizzle skips migrations that have already been applied.
 
+### Without compose, using Unraid's built-in Docker UI
+
+Compose is not required. The published images take all configuration from
+environment variables passed at run time, so no `.env` file is involved.
+
+The web image forwards `/api/` to whatever `API_UPSTREAM` points at, defaulting
+to `http://api:3000`. Override it and the API container can be named anything.
+
+First create a user-defined network — Unraid's default `bridge` gives containers
+no DNS for each other, so without this the web container cannot resolve the API
+and every request returns 502:
+
+```bash
+docker network create energymanager
+```
+
+Apply migrations once. This exits when finished, so it wants running by hand
+rather than as a container Unraid keeps restarting:
+
+```bash
+docker run --rm --network energymanager \
+  -e DATABASE_URL='postgres://energymanager:PASS@10.0.0.10:65432/energymanager' \
+  ghcr.io/14yannick/energymanager-api:latest pnpm db:migrate
+```
+
+Then the two long-running containers:
+
+```bash
+docker run -d --name EnergyManager-api --network energymanager \
+  --restart unless-stopped \
+  -e DATABASE_URL='postgres://energymanager:PASS@10.0.0.10:65432/energymanager' \
+  -e HA_URL='http://10.0.0.11:8123' \
+  -e HA_TOKEN='<long-lived access token>' \
+  ghcr.io/14yannick/energymanager-api:latest
+
+docker run -d --name EnergyManager-web --network energymanager \
+  --restart unless-stopped \
+  -p 8080:80 \
+  -e API_UPSTREAM='http://EnergyManager-api:3000' \
+  ghcr.io/14yannick/energymanager-web:latest
+```
+
+Everything else has a working default: `PORT`, `BKW_SYNC_ENABLED`,
+`BKW_SYNC_INTERVAL_MINUTES`, `HA_SYNC_ENABLED`, `HA_SYNC_INTERVAL_MINUTES` and
+`HA_SYNC_LOOKBACK_HOURS`. Pass them only to change them.
+
+In the **Add Container** form the same thing maps to: *Repository* =
+`ghcr.io/14yannick/energymanager-api:latest`, *Network Type* = `energymanager`,
+and one Variable row per `-e` above. Repeat for the web image, adding a Port
+mapping of host `8080` to container `80`.
+
 ## Architecture
 
 - **Backend**: Node.js + TypeScript, [Fastify](https://fastify.dev), [Drizzle ORM](https://orm.drizzle.team)

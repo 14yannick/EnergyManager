@@ -1,0 +1,23 @@
+# Rendered at container start by the nginx image's entrypoint, which runs
+# envsubst over /etc/nginx/templates/*.template into /etc/nginx/conf.d/.
+#
+# Only ${API_UPSTREAM} is substituted — NGINX_ENVSUBST_FILTER pins it to that
+# one name so nginx's own runtime variables ($host, $remote_addr, $uri) survive
+# untouched. Without that filter envsubst would blank out any of them that
+# happened to match an environment variable.
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/ {
+        proxy_pass ${API_UPSTREAM}/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location / {
+        try_files $uri /index.html;
+    }
+}
