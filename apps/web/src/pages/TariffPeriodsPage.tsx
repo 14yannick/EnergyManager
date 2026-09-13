@@ -9,6 +9,7 @@ import {
   type TariffPeriod,
   type TariffPeriodInput,
   type TariffPricingMode,
+  type TariffSurcharge,
   type TariffSurchargeInput,
 } from "@energy-manager/shared";
 import { api } from "../api/client";
@@ -231,7 +232,7 @@ export function TariffPeriodsPage() {
           ))}
           {periodsQuery.data?.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+              <td colSpan={7} className="px-3 py-6 text-center text-slate-400">
                 No tariff periods yet.
               </td>
             </tr>
@@ -336,10 +337,30 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
     queryFn: () => api.tariffSurcharges.list(siteId),
   });
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const { register, handleSubmit, reset, formState } = useForm<TariffSurchargeInput>({
     resolver: zodResolver(tariffSurchargeInputSchema),
     defaultValues: { kind: "feed_in" },
   });
+
+  function stopEditing() {
+    setEditingId(null);
+    setFormError(null);
+    reset({ kind: "feed_in" });
+  }
+  function startEditing(s: TariffSurcharge) {
+    setEditingId(s.id);
+    setFormError(null);
+    reset({
+      kind: s.kind,
+      // Stored UTC; the input wants Europe/Zurich wall-clock (see toLocalInput).
+      startTs: toLocalInput(s.startTs),
+      endTs: toLocalInput(s.endTs),
+      rateChfPerKwh: s.rateChfPerKwh,
+      label: s.label,
+    });
+  }
 
   const createMutation = useMutation({
     mutationFn: (input: TariffSurchargeInput) => api.tariffSurcharges.create(siteId, input),
@@ -351,9 +372,21 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
     onError: (err: Error) => setFormError(err.message),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (input: TariffSurchargeInput) => api.tariffSurcharges.update(editingId!, input),
+    onSuccess: () => {
+      stopEditing();
+      void queryClient.invalidateQueries({ queryKey: ["tariff-surcharges", siteId] });
+    },
+    onError: (err: Error) => setFormError(err.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.tariffSurcharges.remove(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["tariff-surcharges", siteId] }),
+    onSuccess: () => {
+      stopEditing();
+      void queryClient.invalidateQueries({ queryKey: ["tariff-surcharges", siteId] });
+    },
   });
 
   return (
@@ -367,7 +400,12 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit((input) => createMutation.mutate(input))} className="flex flex-wrap items-end gap-3">
+      <form
+        onSubmit={handleSubmit((input) =>
+          editingId ? updateMutation.mutate(input) : createMutation.mutate(input),
+        )}
+        className="flex flex-wrap items-end gap-3"
+      >
         <Field label="Kind">
           <select {...register("kind")} className="input">
             {Object.entries(KIND_LABELS).map(([value, label]) => (
@@ -396,11 +434,20 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
         </Field>
         <button
           type="submit"
-          disabled={createMutation.isPending}
+          disabled={createMutation.isPending || updateMutation.isPending}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          Add surcharge
+          {editingId ? "Save changes" : "Add surcharge"}
         </button>
+        {editingId && (
+          <button
+            type="button"
+            onClick={stopEditing}
+            className="rounded-md border px-4 py-2 text-sm font-medium text-slate-600"
+          >
+            Cancel
+          </button>
+        )}
       </form>
       {(formError || Object.keys(formState.errors).length > 0) && (
         <p className="text-sm text-red-600">
@@ -414,7 +461,6 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
             <th className="px-3 py-2">Kind</th>
             <th className="px-3 py-2">Start</th>
             <th className="px-3 py-2">End</th>
-            <th className="px-3 py-2">Priced by</th>
             <th className="px-3 py-2">Rate</th>
             <th className="px-3 py-2">Label</th>
             <th className="px-3 py-2" />
@@ -422,13 +468,19 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
         </thead>
         <tbody>
           {surchargesQuery.data?.map((s) => (
-            <tr key={s.id} className="border-t">
+            <tr key={s.id} className={editingId === s.id ? "border-t bg-amber-50" : "border-t"}>
               <td className="px-3 py-2">{KIND_LABELS[s.kind]}</td>
               <td className="px-3 py-2">{formatLocal(s.startTs)}</td>
               <td className="px-3 py-2">{formatLocal(s.endTs)}</td>
               <td className="px-3 py-2">{s.rateChfPerKwh.toFixed(5)}</td>
               <td className="px-3 py-2">{s.label}</td>
               <td className="px-3 py-2 text-right">
+                <button
+                  onClick={() => startEditing(s)}
+                  className="mr-3 text-slate-400 hover:text-slate-900"
+                >
+                  Edit
+                </button>
                 <button
                   onClick={() => deleteMutation.mutate(s.id)}
                   className="text-slate-400 hover:text-red-600"
