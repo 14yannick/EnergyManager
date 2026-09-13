@@ -124,8 +124,16 @@ publishes only annual and monthly averages, which are too coarse here.
 
 ## Local development
 
-Requires Node 26+ and [pnpm](https://pnpm.io) (the pnpm version is pinned by
-the `packageManager` field, so `corepack enable` is enough).
+Requires Node 26+ and [pnpm](https://pnpm.io). The exact pnpm version is pinned
+by the `packageManager` field in `package.json`, so don't install a different one
+globally. Note that Homebrew's `node` ships only npm — corepack is a separate
+formula — so pick whichever suits you:
+
+```bash
+brew install corepack && corepack enable   # honours packageManager automatically
+npm install -g pnpm@9.12.1                 # or pin it yourself
+npx pnpm@9.12.1 <command>                  # or don't install it at all
+```
 
 ```bash
 pnpm install
