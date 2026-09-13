@@ -6,6 +6,7 @@ import {
   tariffPeriodInputSchema,
   tariffSurchargeInputSchema,
   type TariffKind,
+  type TariffPeriod,
   type TariffPeriodInput,
   type TariffPricingMode,
   type TariffSurchargeInput,
@@ -35,10 +36,35 @@ export function TariffPeriodsPage() {
     enabled: !!site,
   });
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const { register, handleSubmit, reset, formState, watch } = useForm<TariffPeriodInput>({
     resolver: zodResolver(tariffPeriodInputSchema),
     defaultValues: { kind: "purchase", pricingMode: "flat" },
   });
+
+  const blankForm = { kind: "purchase", pricingMode: "flat" } as const;
+  function stopEditing() {
+    setEditingId(null);
+    setFormError(null);
+    reset(blankForm);
+  }
+  function startEditing(p: TariffPeriod) {
+    setEditingId(p.id);
+    setFormError(null);
+    reset({
+      kind: p.kind,
+      // Stored as UTC; <input type="datetime-local"> wants wall-clock time in
+      // the site's zone, which is also how the API reads it back.
+      startTs: toLocalInput(p.startTs),
+      endTs: toLocalInput(p.endTs),
+      pricingMode: p.pricingMode,
+      // "" rather than undefined so switching from a period that had a rate to
+      // one that doesn't actually clears the input.
+      rateChfPerKwh: (p.rateChfPerKwh ?? "") as unknown as number,
+      label: p.label ?? "",
+    });
+  }
   // Drives the rate field's labelling — on a day-ahead period the rate is an
   // optional fallback, not the price.
   const pricingMode = watch("pricingMode");
@@ -53,9 +79,22 @@ export function TariffPeriodsPage() {
     onError: (err: Error) => setFormError(err.message),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (input: TariffPeriodInput) => api.tariffPeriods.update(editingId!, input),
+    onSuccess: () => {
+      stopEditing();
+      void queryClient.invalidateQueries({ queryKey: ["tariff-periods", site?.id] });
+    },
+    onError: (err: Error) => setFormError(err.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.tariffPeriods.remove(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["tariff-periods", site?.id] }),
+    onSuccess: () => {
+      // The row being edited may be the one just deleted.
+      stopEditing();
+      void queryClient.invalidateQueries({ queryKey: ["tariff-periods", site?.id] });
+    },
   });
 
   if (!site) return <p className="text-slate-500">Loading…</p>;
@@ -72,7 +111,9 @@ export function TariffPeriodsPage() {
       </div>
 
       <form
-        onSubmit={handleSubmit((input) => createMutation.mutate(input))}
+        onSubmit={handleSubmit((input) =>
+          editingId ? updateMutation.mutate(input) : createMutation.mutate(input),
+        )}
         className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4"
       >
         <Field label="Kind">
@@ -119,11 +160,20 @@ export function TariffPeriodsPage() {
         </Field>
         <button
           type="submit"
-          disabled={createMutation.isPending}
+          disabled={createMutation.isPending || updateMutation.isPending}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          Add period
+          {editingId ? "Save changes" : "Add period"}
         </button>
+        {editingId && (
+          <button
+            type="button"
+            onClick={stopEditing}
+            className="rounded-md border px-4 py-2 text-sm font-medium text-slate-600"
+          >
+            Cancel
+          </button>
+        )}
       </form>
       {(formError || Object.keys(formState.errors).length > 0) && (
         <p className="text-sm text-red-600">
@@ -145,7 +195,7 @@ export function TariffPeriodsPage() {
         </thead>
         <tbody>
           {periodsQuery.data?.map((p) => (
-            <tr key={p.id} className="border-t">
+            <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50" : "border-t"}>
               <td className="px-3 py-2">{KIND_LABELS[p.kind]}</td>
               <td className="px-3 py-2">{formatLocal(p.startTs)}</td>
               <td className="px-3 py-2">{formatLocal(p.endTs)}</td>
@@ -164,6 +214,12 @@ export function TariffPeriodsPage() {
               </td>
               <td className="px-3 py-2">{p.label ?? "—"}</td>
               <td className="px-3 py-2 text-right">
+                <button
+                  onClick={() => startEditing(p)}
+                  className="mr-3 text-slate-400 hover:text-slate-900"
+                >
+                  Edit
+                </button>
                 <button
                   onClick={() => deleteMutation.mutate(p.id)}
                   className="text-slate-400 hover:text-red-600"
@@ -188,6 +244,27 @@ export function TariffPeriodsPage() {
       <TariffSurchargesSection siteId={site.id} />
     </div>
   );
+}
+
+/**
+ * What <input type="datetime-local"> expects: "YYYY-MM-DDTHH:mm" wall-clock in
+ * Europe/Zurich. Built from the formatted parts rather than slicing toISOString(),
+ * which would hand back UTC and shift every edited period by the offset.
+ */
+function toLocalInput(iso: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Zurich",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  // hour can come back as "24" at midnight in some runtimes.
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}`;
 }
 
 function formatLocal(iso: string): string {
