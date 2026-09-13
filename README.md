@@ -124,7 +124,8 @@ publishes only annual and monthly averages, which are too coarse here.
 
 ## Local development
 
-Requires Node 20+ and [pnpm](https://pnpm.io).
+Requires Node 26+ and [pnpm](https://pnpm.io) (the pnpm version is pinned by
+the `packageManager` field, so `corepack enable` is enough).
 
 ```bash
 pnpm install
