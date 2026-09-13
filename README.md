@@ -45,41 +45,54 @@ Running on a server rather than a laptop is not cosmetic here: BKW publishes a
 rolling ~25 hour window of feed-in prices with **no history endpoint**, so every
 interval missed while the app is down is lost permanently.
 
-1. **Copy the repo to the server** and build there — Unraid is x86_64, so images
-   built on an Apple Silicon Mac won't run unless you pass
-   `--platform linux/amd64`. Building on the server sidesteps that entirely.
+Images for `linux/amd64` are built and pushed to GHCR by
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) on every push to
+`main`, so the server pulls rather than builds. It needs no source checkout and
+no toolchain.
 
-   ```bash
-   rsync -av --exclude node_modules --exclude .git ./ root@10.0.0.10:/mnt/user/appdata/energymanager/
-   ```
+> Unraid's **Add Container** form cannot install this app. That form pulls a
+> single pre-built image; it never clones a repo or runs a Dockerfile, and this
+> stack is three services that compose wires together. Use Compose Manager.
 
-2. **Install Docker Compose Manager** from Community Applications, or run
-   `docker compose` over SSH.
+1. **Install Docker Compose Manager** from Community Applications.
 
-3. **Write `.env` on the server.** Two values need to differ from a laptop setup:
+2. **Create a project** with
+   [`docker-compose.ghcr.yml`](docker-compose.ghcr.yml) and a `.env`
+   alongside it. Two values must differ from a laptop setup:
 
-   - `DATABASE_URL` must use an **IP**, not a hostname. Containers reach the
-     existing TimescaleDB through the host's published port
-     (`10.0.0.10:65432`).
-   - `HA_URL` must use the Home Assistant VM's **IP** (`http://10.0.0.11:8123`),
-     not `homeassistant.local`. Containers resolve through normal DNS, which
-     returns NXDOMAIN for mDNS `.local` names — and an unreachable `HA_URL`
-     disables the integration *silently*, so the app will look perfectly healthy
-     while syncing nothing.
+   - `DATABASE_URL` must use an **IP**. Containers reach the existing
+     TimescaleDB through the host's published port, `10.0.0.10:65432`.
+   - `HA_URL` must use the Home Assistant VM's **IP**, e.g.
+     `http://10.0.0.11:8123`, not `homeassistant.local`. Containers resolve
+     through normal DNS, which returns NXDOMAIN for mDNS `.local` names — and an
+     unreachable `HA_URL` disables the integration *silently*, so the app will
+     look perfectly healthy while syncing nothing.
 
-4. **Pick a free `WEB_PORT`.** Unraid's own UI owns 80, and 8080 collides with
+3. **Pick a free `WEB_PORT`.** Unraid's own UI owns 80, and 8080 collides with
    many community apps.
 
-5. **Bring it up**, then confirm the variables actually landed:
+4. **Pull and start**, then confirm the variables actually landed:
 
    ```bash
-   docker compose up -d --build
-   docker compose exec api env | grep -E 'HA_URL|BKW_SYNC'
-   docker compose logs -f api
+   docker compose -f docker-compose.ghcr.yml pull
+   docker compose -f docker-compose.ghcr.yml up -d
+   docker compose -f docker-compose.ghcr.yml exec api env | grep -E 'HA_URL|BKW_SYNC'
+   docker compose -f docker-compose.ghcr.yml logs -f api
    ```
 
-The `migrate` service is safe to leave enabled — Drizzle tracks which migrations
-have been applied, so against an already-current database it is a no-op.
+If the package is private, authenticate the NAS to GHCR first with a personal
+access token that has `read:packages`:
+
+```bash
+echo <token> | docker login ghcr.io -u 14yannick --password-stdin
+```
+
+To deploy a specific build rather than whatever `latest` points at, set
+`IMAGE_TAG` in `.env` to a commit SHA — the publish workflow tags every image
+with its full SHA as well as `latest`.
+
+The `migrate` service is safe to leave enabled: it reuses the api image with a
+different command, and Drizzle skips migrations that have already been applied.
 
 ## Architecture
 

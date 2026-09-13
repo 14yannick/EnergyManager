@@ -1,0 +1,58 @@
+# Deploy from pre-built images instead of building on the server.
+#
+#   docker compose -f docker-compose.ghcr.yml pull
+#   docker compose -f docker-compose.ghcr.yml up -d
+#
+# Images are built for linux/amd64 and pushed to GHCR by
+# .github/workflows/publish.yml on every push to main. Nothing is built here,
+# so the NAS needs no toolchain and no copy of the source.
+#
+# Standalone on purpose: this is not an override of docker-compose.yml. Mixing
+# `build:` and `image:` for the same service makes it ambiguous whether a given
+# command builds or pulls.
+services:
+  # One-shot. Reuses the api image — its final stage carries the whole repo and
+  # pnpm, so the migration entrypoint is just a different command. Safe to run
+  # against an already-current database: Drizzle skips applied migrations.
+  migrate:
+    image: ghcr.io/${GHCR_OWNER:-14yannick}/energymanager-api:${IMAGE_TAG:-latest}
+    command: ["pnpm", "db:migrate"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+    restart: "no"
+
+  api:
+    image: ghcr.io/${GHCR_OWNER:-14yannick}/energymanager-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      PORT: 3000
+      # BKW serves a rolling ~25h window with no history endpoint, so anything
+      # missed while this is down is lost permanently.
+      BKW_SYNC_ENABLED: ${BKW_SYNC_ENABLED:-true}
+      BKW_SYNC_INTERVAL_MINUTES: ${BKW_SYNC_INTERVAL_MINUTES:-30}
+      # An unset HA_URL disables Home Assistant sync *silently*. Use the VM's
+      # IP, not homeassistant.local — containers resolve via DNS, which returns
+      # NXDOMAIN for mDNS names.
+      HA_URL: ${HA_URL:-}
+      HA_TOKEN: ${HA_TOKEN:-}
+      HA_SYNC_ENABLED: ${HA_SYNC_ENABLED:-true}
+      HA_SYNC_INTERVAL_MINUTES: ${HA_SYNC_INTERVAL_MINUTES:-15}
+      HA_SYNC_LOOKBACK_HOURS: ${HA_SYNC_LOOKBACK_HOURS:-48}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    image: ghcr.io/${GHCR_OWNER:-14yannick}/energymanager-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      # Unraid's own UI owns 80, and 8080 collides with many community apps.
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api

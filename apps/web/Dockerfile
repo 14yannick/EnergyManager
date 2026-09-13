@@ -1,7 +1,11 @@
 # syntax=docker/dockerfile:1
 FROM node:26-slim AS base
 WORKDIR /repo
-RUN corepack enable
+# Node 26 no longer bundles corepack (bin/ has only node, npm, npx), so it has
+# to be installed before it can be enabled. Enabling it rather than installing
+# pnpm directly keeps package.json's "packageManager" field the single source
+# of truth for the pnpm version, matching CI.
+RUN npm install -g corepack && corepack enable
 
 FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
