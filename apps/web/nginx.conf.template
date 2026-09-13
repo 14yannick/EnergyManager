@@ -2,17 +2,30 @@
 # envsubst over /etc/nginx/templates/*.template into /etc/nginx/conf.d/.
 #
 # Only ${API_UPSTREAM} is substituted — NGINX_ENVSUBST_FILTER pins it to that
-# one name so nginx's own runtime variables ($host, $remote_addr, $uri) survive
-# untouched. Without that filter envsubst would blank out any of them that
-# happened to match an environment variable.
+# one name so nginx's own runtime variables ($host, $request_uri, $upstream)
+# survive untouched. Without that filter envsubst would blank out any of them
+# that happened to match an environment variable.
 server {
     listen 80;
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
 
+    # Docker's embedded DNS, available on any user-defined network.
+    resolver 127.0.0.11 ipv6=off valid=10s;
+
     location /api/ {
-        proxy_pass ${API_UPSTREAM}/api/;
+        # Deliberately routed through a variable. nginx resolves a *literal*
+        # proxy_pass host once at startup and caches it for the process
+        # lifetime, which breaks twice in a container setup: the web container
+        # refuses to start at all if the API isn't up yet, and it keeps
+        # proxying to a stale IP after the API container is recreated (as it is
+        # on every image update). With a variable, resolution happens per
+        # request against the resolver above.
+        set $upstream "${API_UPSTREAM}";
+        # $request_uri already begins with /api/ and carries the query string,
+        # so this reproduces the previous literal form exactly.
+        proxy_pass $upstream$request_uri;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
