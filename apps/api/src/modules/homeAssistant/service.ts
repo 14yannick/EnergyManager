@@ -1,3 +1,4 @@
+import { splitInverterOutput } from "./split.js";
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type {
   HaEntityMapping,
@@ -221,7 +222,24 @@ export async function syncHomeAssistant(
       );
   }
 
-  const { inserted, updated } = await upsertMetricRows(siteId, toWrite);
+  // Raw metrics first: the split reads them back out of the database, so it has
+  // to run *after* they land. Deriving first silently reads the previous
+  // sync's state — pv_dc missing for the newest hours, those intervals skipped,
+  // and any stale `production` left in place reading as pure solar at midnight.
+  const raw = await upsertMetricRows(siteId, toWrite);
+
+  // `production` and `battery_discharge_ac` are not synced — they are the two
+  // halves of the inverter's AC output, and the inverter reports only the
+  // total. Derive them from the raw metrics just written, so freshly synced
+  // data is split the same way the historical backfill was.
+  const derived = await deriveSplitRows(siteId, from, to);
+  const split = await upsertMetricRows(siteId, derived);
+  const inserted = raw.inserted + split.inserted;
+  const updated = raw.updated + split.updated;
+  if (derived.length > 0) {
+    metrics.push({ metricKind: "production", statisticId: "(derived: PV share of AC)", rows: derived.length / 2 });
+    metrics.push({ metricKind: "battery_discharge_ac", statisticId: "(derived: battery share of AC)", rows: derived.length / 2 });
+  }
   return {
     from: from.toISOString(),
     to: to.toISOString(),
@@ -231,4 +249,70 @@ export async function syncHomeAssistant(
     updated,
     skipped,
   };
+}
+
+
+/**
+ * Splits inverter AC output into its PV and battery halves for every interval
+ * in the window, reading back the raw metrics just written.
+ *
+ * The ratio is taken per hour, because `pv_dc` only exists hourly (Home
+ * Assistant keeps 5-minute statistics for about 10 days but hourly ones
+ * indefinitely), and then applied to each interval inside that hour so
+ * sub-hour shape survives. The battery's share is additionally capped at the
+ * DC that interval actually discharged: conversion only loses energy, so it
+ * can never deliver more AC than it gave up, and that bound binds per interval
+ * rather than merely across the hour.
+ */
+async function deriveSplitRows(siteId: string, from: Date, to: Date): Promise<UpsertRow[]> {
+  const hours = await db
+    .select({
+      h: sql<string>`date_trunc('hour', ${intervalMetrics.ts})`,
+      ac: sql<number>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'inverter_ac'), 0)::float8`,
+      pv: sql<number | null>`sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'pv_dc')::float8`,
+      chg: sql<number>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_charge'), 0)::float8`,
+      dis: sql<number>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_discharge'), 0)::float8`,
+    })
+    .from(intervalMetrics)
+    .where(and(eq(intervalMetrics.siteId, siteId), gte(intervalMetrics.ts, from), lt(intervalMetrics.ts, to)))
+    .groupBy(sql`date_trunc('hour', ${intervalMetrics.ts})`);
+
+  const ratioByHour = new Map<number, number>();
+  for (const h of hours) {
+    if (h.pv == null) continue; // no PV figure for this hour: nothing to split by
+    const { productionKwh } = splitInverterOutput({
+      inverterAcKwh: h.ac,
+      pvDcKwh: h.pv,
+      batteryChargeKwh: h.chg,
+      batteryDischargeKwh: h.dis,
+    });
+    ratioByHour.set(new Date(h.h).getTime(), h.ac > 0 ? productionKwh / h.ac : 0);
+  }
+  if (ratioByHour.size === 0) return [];
+
+  const intervals = await db
+    .select({
+      ts: intervalMetrics.ts,
+      ac: sql<number>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'inverter_ac'), 0)::float8`,
+      dis: sql<number>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_discharge'), 0)::float8`,
+    })
+    .from(intervalMetrics)
+    .where(and(eq(intervalMetrics.siteId, siteId), gte(intervalMetrics.ts, from), lt(intervalMetrics.ts, to)))
+    .groupBy(intervalMetrics.ts);
+
+  const rows: UpsertRow[] = [];
+  for (const i of intervals) {
+    const hourKey = new Date(i.ts);
+    hourKey.setUTCMinutes(0, 0, 0);
+    const ratio = ratioByHour.get(hourKey.getTime());
+    if (ratio === undefined) continue;
+
+    let production = i.ac * ratio;
+    if (i.ac - production > i.dis) production = i.ac - i.dis;
+    production = Math.max(production, 0);
+
+    rows.push({ ts: i.ts, metricKind: "production", valueKwh: Number(production.toFixed(4)) });
+    rows.push({ ts: i.ts, metricKind: "battery_discharge_ac", valueKwh: Number((i.ac - production).toFixed(4)) });
+  }
+  return rows;
 }

@@ -9,6 +9,7 @@ import { parseMetricsCsv } from "./csvImport.js";
 import {
   deleteReadings,
   exportReadings,
+  getFirstProductionDate,
   getReadingsRange,
   listReadings,
   upsertReadings,
@@ -37,7 +38,11 @@ export async function readingsRoutes(app: FastifyInstance) {
   );
 
   app.get<{ Params: { siteId: string } }>("/api/sites/:siteId/readings/range", async (req) => {
-    return (await getReadingsRange(req.params.siteId)) ?? { from: null, to: null };
+    const [range, firstProduction] = await Promise.all([
+      getReadingsRange(req.params.siteId),
+      getFirstProductionDate(req.params.siteId),
+    ]);
+    return { ...(range ?? { from: null, to: null }), firstProduction };
   });
 
   app.get<{ Params: { siteId: string }; Querystring: { from: string; to: string } }>(

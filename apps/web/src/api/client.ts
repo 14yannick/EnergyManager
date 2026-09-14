@@ -20,6 +20,7 @@ import type {
   SavingsSummary,
   SavingsQuery,
   Site,
+  SiteUpdateInput,
   TariffKind,
   TariffPeriod,
   TariffPeriodInput,
@@ -43,6 +44,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   sites: {
     list: () => request<Site[]>("/sites"),
+    update: (id: string, input: SiteUpdateInput) =>
+      request<Site>(`/sites/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   },
   tariffPeriods: {
     list: (siteId: string) => request<TariffPeriod[]>(`/sites/${siteId}/tariff-periods`),
@@ -97,7 +100,9 @@ export const api = {
       return res.json() as Promise<ReadingsImportResult>;
     },
     range: (siteId: string) =>
-      request<{ from: string | null; to: string | null }>(`/sites/${siteId}/readings/range`),
+      request<{ from: string | null; to: string | null; firstProduction: string | null }>(
+        `/sites/${siteId}/readings/range`,
+      ),
     // A plain URL rather than a fetch: the browser's own download handling
     // gets the filename from Content-Disposition, with no blob juggling.
     exportUrl: (siteId: string, from: string, to: string, kinds: IntervalMetricKind[]) => {

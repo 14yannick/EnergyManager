@@ -136,6 +136,27 @@ export async function getReadingsRange(
   return { from: row.from, to: row.to };
 }
 
+/**
+ * First Europe/Zurich day with any recorded production. Used as the default
+ * production start date when the site has none stated, so payback isn't
+ * computed over days the panels weren't running.
+ */
+export async function getFirstProductionDate(siteId: string): Promise<string | null> {
+  const [row] = await db
+    .select({
+      day: sql<string | null>`to_char(min(${intervalMetrics.ts}) AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`,
+    })
+    .from(intervalMetrics)
+    .where(
+      and(
+        eq(intervalMetrics.siteId, siteId),
+        eq(intervalMetrics.metricKind, "production"),
+        sql`${intervalMetrics.valueKwh} > 0`,
+      ),
+    );
+  return row?.day ?? null;
+}
+
 export interface ExportedReadingRow {
   localDate: string;
   localTime: string;

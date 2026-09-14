@@ -1,13 +1,18 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { HaSyncResult, IntervalMetricKind } from "@energy-manager/shared";
+import type { HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useDefaultSite } from "../lib/useDefaultSite";
 
 // Only site-level flows are pullable from Home Assistant: per-party
 // consumption needs a party attached, which a single statistic can't express.
+// `production` and `battery_discharge_ac` are deliberately absent: the inverter
+// reports one AC figure covering both PV and battery discharge, so those two
+// are derived by splitting it rather than read from a sensor. Offering them
+// here would invite mapping a sensor that then gets overwritten every sync.
 const SYNCABLE_KINDS: Array<{ kind: IntervalMetricKind; label: string; hint: string }> = [
-  { kind: "production", label: "Production", hint: "Inverter AC yield" },
+  { kind: "inverter_ac", label: "Inverter AC output", hint: "Total AC yield — PV and battery combined" },
+  { kind: "pv_dc", label: "PV yield (DC)", hint: "Panel output, used to split the AC figure" },
   { kind: "consumption_own", label: "Own consumption", hint: "Total household load" },
   { kind: "export_grid", label: "Export — grid", hint: "Fed into the grid" },
   { kind: "export_local", label: "Export — local", hint: "Total leaving the household" },
@@ -25,7 +30,7 @@ function daysAgo(n: number) {
   return d.toISOString().slice(0, 10);
 }
 
-export function HomeAssistantPage() {
+export function SettingsPage() {
   const { site } = useDefaultSite();
   const statusQuery = useQuery({ queryKey: ["ha-status"], queryFn: api.homeAssistant.status });
 
@@ -35,7 +40,19 @@ export function HomeAssistantPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Home Assistant</h1>
+        <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
+        <p className="text-sm text-slate-500">
+          Investment totals used for payback, and the Home Assistant connection that supplies the
+          energy data.
+        </p>
+      </div>
+
+      <ProductionStartSection site={site} />
+
+      <InvestmentSection siteId={site.id} />
+
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">Home Assistant</h2>
         <p className="text-sm text-slate-500">
           Pulls energy statistics straight from Home Assistant instead of importing CSVs. It reads
           the long-term statistics (the same numbers the Energy dashboard uses), so meter resets are
@@ -166,6 +183,14 @@ function MappingSection({ siteId }: { siteId: string }) {
           })}
         </tbody>
       </table>
+
+      <p className="mt-3 text-xs text-slate-500">
+        <span className="font-medium text-slate-600">Production</span> and{" "}
+        <span className="font-medium text-slate-600">battery discharge (AC)</span> are not listed
+        because they are not sensors. The inverter reports a single AC figure covering both the
+        panels and the battery, so the two are derived from it after each sync, split in proportion
+        to the DC each source supplied. That is what stops solar being recorded at midnight.
+      </p>
     </div>
   );
 }
@@ -292,5 +317,208 @@ function SyncSection({ siteId }: { siteId: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+
+/**
+ * Investment totals, as two numbers rather than the itemised list on the
+ * Investment costs page. Each input maps to the single cost item of that
+ * category; if a category has several (separate invoices, a subsidy booked
+ * separately) editing here would be ambiguous, so the field goes read-only and
+ * points at the full page instead.
+ */
+function InvestmentSection({ siteId }: { siteId: string }) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const itemsQuery = useQuery({
+    queryKey: ["cost-items", siteId],
+    queryFn: () => api.costItems.list(siteId),
+  });
+  const items = itemsQuery.data ?? [];
+
+  const save = useMutation({
+    mutationFn: async ({ category, amount }: { category: "battery" | "solar"; amount: number }) => {
+      const existing = items.filter((i) => i.category === category);
+      if (existing.length === 1) {
+        const it = existing[0]!;
+        return api.costItems.update(it.id, {
+          category,
+          label: it.label,
+          amountChf: amount,
+          incurredOn: it.incurredOn ?? undefined,
+          notes: it.notes ?? undefined,
+        });
+      }
+      return api.costItems.create(siteId, {
+        category,
+        label: category === "battery" ? "Battery" : "Solar",
+        amountChf: amount,
+      });
+    },
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ["cost-items", siteId] });
+      void queryClient.invalidateQueries({ queryKey: ["cost-items-summary", siteId] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  function rowFor(category: "battery" | "solar") {
+    const matching = items.filter((i) => i.category === category);
+    const total = matching.reduce((sum, i) => sum + i.amountChf, 0);
+    return { matching, total, editable: matching.length <= 1 };
+  }
+
+  const battery = rowFor("battery");
+  const solar = rowFor("solar");
+  const total = battery.total + solar.total;
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">Investment</h2>
+        <p className="text-xs text-slate-500">
+          What the system cost, used for payback and breakeven. Enter subsidies and tax reductions
+          as negative amounts on the Investment costs page.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {([
+          ["battery", "Battery", battery],
+          ["solar", "Solar", solar],
+        ] as const).map(([category, label, row]) => (
+          <div key={category} className="rounded-lg border bg-white p-4">
+            <p className="text-xs font-medium text-slate-500">{label}</p>
+            {row.editable ? (
+              <input
+                type="number"
+                step="0.01"
+                className="input mt-1 w-full text-lg"
+                value={draft[category] ?? (row.matching[0]?.amountChf ?? "")}
+                onChange={(e) => setDraft((d) => ({ ...d, [category]: e.target.value }))}
+                onBlur={(e) => {
+                  const amount = Number(e.target.value);
+                  if (e.target.value === "" || Number.isNaN(amount)) return;
+                  if (amount === row.matching[0]?.amountChf) return;
+                  save.mutate({ category, amount });
+                }}
+              />
+            ) : (
+              <>
+                <p className="mt-1 text-lg text-slate-700">CHF {row.total.toFixed(2)}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {row.matching.length} items — edit on the Investment costs page
+                </p>
+              </>
+            )}
+          </div>
+        ))}
+        <div className="rounded-lg border bg-white p-4">
+          <p className="text-xs font-medium text-slate-500">Total</p>
+          <p className="mt-1 text-lg font-semibold text-slate-900">CHF {total.toFixed(2)}</p>
+        </div>
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
+
+/**
+ * When the PV system started producing. Payback divides investment cost by
+ * average savings per period, so counting days before the panels existed drags
+ * that average down and overstates payback. The dashboard clamps its range to
+ * this date.
+ *
+ * Unset means "not stated", and everything falls back to the first day with
+ * recorded production — shown here as the placeholder so the fallback is
+ * visible rather than implied.
+ */
+function ProductionStartSection({ site }: { site: Site }) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const rangeQuery = useQuery({
+    queryKey: ["readings-range", site.id],
+    queryFn: () => api.readings.range(site.id),
+  });
+  const firstProduction = rangeQuery.data?.firstProduction ?? null;
+
+  const save = useMutation({
+    mutationFn: (input: SiteUpdateInput) =>
+      api.sites.update(site.id, { productionStartDate: site.productionStartDate, ...input }),
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">Production start</h2>
+        <p className="text-xs text-slate-500">
+          When the system started producing. The dashboard will not measure payback over days
+          before this, which would otherwise count as periods that earned nothing.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4">
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Production start date
+          <input
+            type="date"
+            className="input"
+            max={new Date().toISOString().slice(0, 10)}
+            value={site.productionStartDate ?? firstProduction ?? ""}
+            onChange={(e) =>
+              save.mutate({ productionStartDate: e.target.value === "" ? null : e.target.value })
+            }
+          />
+        </label>
+        {site.productionStartDate == null && firstProduction && (
+          <p className="text-xs text-slate-400">
+            Not stated — defaulting to {firstProduction}, the first day with recorded production.
+          </p>
+        )}
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Battery conversion loss (%)
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            max="90"
+            className="input w-28"
+            defaultValue={(site.batteryConversionLoss * 100).toFixed(1)}
+            onBlur={(e) => {
+              const pct = Number(e.target.value);
+              if (e.target.value === "" || Number.isNaN(pct)) return;
+              const fraction = pct / 100;
+              if (fraction === site.batteryConversionLoss) return;
+              save.mutate({ batteryConversionLoss: fraction });
+            }}
+          />
+          <span className="max-w-56 font-normal text-slate-400">
+            Charging is metered DC but everything priced is AC, so the export it displaced is
+            reduced by this before being charged against the battery.
+          </span>
+        </label>
+        {site.productionStartDate != null && (
+          <button
+            type="button"
+            onClick={() => save.mutate({ productionStartDate: null })}
+            className="text-xs text-slate-400 hover:text-slate-900"
+          >
+            Reset to first recorded production
+          </button>
+        )}
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+    </section>
   );
 }

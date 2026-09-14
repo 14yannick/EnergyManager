@@ -9,7 +9,6 @@ import {
   buildCumulativeSeries,
   computeBatteryRevenue,
   computeDirectUseKwh,
-  computeDirectUseKwhLegacyApprox,
   computeSavingsFromInputs,
   summarizeMonthlySavings,
   summarizeOverallSavings,
@@ -53,7 +52,7 @@ function priceScenario(s: Scenario): DailySavings {
   return computeSavingsFromInputs({
     date: s.date,
     producedKwh: s.producedKwh,
-    directUseKwh: computeDirectUseKwhLegacyApprox(s),
+    directUseKwh: computeDirectUseKwh(s),
     batteryChargeKwh: 0,
     batteryDischargeKwh: s.batteryDischargeKwh,
     exportedKwh: s.exportedKwh,
@@ -65,36 +64,18 @@ function priceScenario(s: Scenario): DailySavings {
   });
 }
 
-describe("computeDirectUseKwhLegacyApprox", () => {
-  it("is production minus discharge minus export", () => {
-    expect(
-      computeDirectUseKwhLegacyApprox({ producedKwh: 100, batteryDischargeKwh: 20, exportedKwh: 30 }),
-    ).toBe(50);
+describe("computeDirectUseKwh", () => {
+  it("is PV output that did not leave for the grid", () => {
+    // No charging term: production is already the panels' share of AC output,
+    // so energy sent to the battery never entered this figure.
+    expect(computeDirectUseKwh({ producedKwh: 100, exportedKwh: 30 })).toBe(70);
   });
 
-  it("floors at zero rather than reporting a negative quantity of energy", () => {
-    expect(
-      computeDirectUseKwhLegacyApprox({ producedKwh: 10, batteryDischargeKwh: 20, exportedKwh: 30 }),
-    ).toBe(0);
-  });
-});
-
-describe("computeDirectUseKwh (corrected) vs the legacy approximation", () => {
-  const base = { producedKwh: 100, exportedKwh: 30 };
-
-  it("agrees with the legacy figure exactly when charge equals discharge", () => {
-    expect(computeDirectUseKwh({ ...base, batteryChargeKwh: 20 })).toBe(
-      computeDirectUseKwhLegacyApprox({ ...base, batteryDischargeKwh: 20 }),
-    );
-  });
-
-  it("diverges by exactly the charge/discharge difference when they differ", () => {
-    const corrected = computeDirectUseKwh({ ...base, batteryChargeKwh: 22 });
-    const legacy = computeDirectUseKwhLegacyApprox({ ...base, batteryDischargeKwh: 20 });
-
-    // The old model could only see discharge, so it mistook round-trip losses
-    // for direct use. The gap is the charge/discharge delta, nothing else.
-    expect(corrected - legacy).toBeCloseTo(20 - 22, 10);
+  it("goes negative when the battery exported more than the panels made", () => {
+    // Real, if rare: the battery can discharge to the grid. The floor belongs
+    // on the summed period (see clampDirectUse), not here, so interval-level
+    // meter timing noise can still cancel out.
+    expect(computeDirectUseKwh({ producedKwh: 1, exportedKwh: 3 })).toBe(-2);
   });
 });
 
@@ -102,11 +83,12 @@ describe("computeSavingsFromInputs", () => {
   it("prices self-consumption at the purchase rate and grid export at the sell rate", () => {
     const row = priceScenario(scenarios[0]!);
 
-    // direct use 50 + discharge 20, both displacing imports at 0.30
-    expect(row.selfConsumptionValueChf).toBeCloseTo(21, 10);
+    // direct use 70 (100 produced - 30 exported) + discharge 20, both
+    // displacing imports at 0.30
+    expect(row.selfConsumptionValueChf).toBeCloseTo(27, 10);
     // 30 kWh exported at 0.10
     expect(row.exportRevenueChf).toBeCloseTo(3, 10);
-    expect(row.savingsWithBatteryChf).toBeCloseTo(24, 10);
+    expect(row.savingsWithBatteryChf).toBeCloseTo(30, 10);
   });
 
   it.each(scenarios)(
@@ -124,7 +106,7 @@ describe("computeSavingsFromInputs", () => {
     "$date: the no-battery counterfactual re-prices discharged energy at the sell rate",
     (s) => {
       const row = priceScenario(s);
-      const directUseKwh = computeDirectUseKwhLegacyApprox(s);
+      const directUseKwh = computeDirectUseKwh(s);
 
       // Without a battery the discharged kWh could not have been stored, so it
       // would have left for the grid alongside whatever was already exported.
@@ -316,15 +298,16 @@ describe("computeBatteryRevenue", () => {
     });
     expect(result.dischargeConsumedKwh).toBeCloseTo(2, 6);
     expect(result.dischargeExportedKwh).toBe(0);
-    expect(result.chargingCostChf).toBeCloseTo(2.2 * 0.09, 6);
+    // 2.2 kWh DC charged, 10% lost converting -> 1.98 kWh of export forgone
+    expect(result.chargingCostChf).toBeCloseTo(2.2 * 0.9 * 0.09, 6);
     expect(result.dischargeConsumedValueChf).toBeCloseTo(2 * 0.28, 6);
     expect(result.dischargeExportedValueChf).toBe(0);
-    expect(result.batteryRevenueChf).toBeCloseTo(2 * 0.28 - 2.2 * 0.09, 6);
+    expect(result.batteryRevenueChf).toBeCloseTo(2 * 0.28 - 2.2 * 0.9 * 0.09, 6);
   });
 
   it("keeps discharge as consumed while production alone explains the export", () => {
-    // A summer day rolled up: 60 kWh produced, 5 charged, 45 exported — PV
-    // could have exported up to 55 on its own, so the night-time discharge
+    // A summer day rolled up: 60 kWh of PV reached the AC bus and 45 was
+    // exported, so PV alone explains all of it and the night-time discharge
     // covered load. Pricing it at feed-in here is the daily-aggregate trap.
     const result = computeBatteryRevenue({
       producedKwh: 60,
@@ -336,7 +319,7 @@ describe("computeBatteryRevenue", () => {
     });
     expect(result.dischargeExportedKwh).toBe(0);
     expect(result.dischargeConsumedKwh).toBeCloseTo(5, 6);
-    expect(result.batteryRevenueChf).toBeCloseTo(5 * 0.28 - 5 * 0.09, 6);
+    expect(result.batteryRevenueChf).toBeCloseTo(5 * 0.28 - 5 * 0.9 * 0.09, 6);
   });
 
   it("credits the battery with export that production cannot account for", () => {
@@ -357,10 +340,10 @@ describe("computeBatteryRevenue", () => {
   });
 
   it("splits a discharge when production explains only part of the export", () => {
-    // Produced 10, charged 4 -> PV could export at most 6; 8 went out, so 2
-    // came from the battery and the other 1 kWh discharged covered load.
+    // 6 kWh of PV reached the AC bus but 8 was exported, so 2 of the 3 kWh
+    // discharged went to the grid and the remaining 1 covered load.
     const result = computeBatteryRevenue({
-      producedKwh: 10,
+      producedKwh: 6,
       batteryChargeKwh: 4,
       batteryDischargeKwh: 3,
       exportedKwh: 8,
@@ -369,7 +352,7 @@ describe("computeBatteryRevenue", () => {
     });
     expect(result.dischargeExportedKwh).toBeCloseTo(2, 6);
     expect(result.dischargeConsumedKwh).toBeCloseTo(1, 6);
-    expect(result.batteryRevenueChf).toBeCloseTo(1 * 0.28 + 2 * 0.09 - 4 * 0.09, 6);
+    expect(result.batteryRevenueChf).toBeCloseTo(1 * 0.28 + 2 * 0.09 - 4 * 0.9 * 0.09, 6);
   });
 
   it("treats a missing rate as zero contribution, not a thrown error", () => {
@@ -382,19 +365,20 @@ describe("computeBatteryRevenue", () => {
       sellRateChfPerKwh: 0.1,
     });
     expect(result.dischargeConsumedValueChf).toBe(0);
-    expect(result.chargingCostChf).toBeCloseTo(0.3, 6);
-    expect(result.batteryRevenueChf).toBeCloseTo(-0.3, 6);
+    // 3 kWh DC charged, 10% conversion loss -> 2.7 kWh of export forgone
+    expect(result.chargingCostChf).toBeCloseTo(0.27, 6);
+    expect(result.batteryRevenueChf).toBeCloseTo(-0.27, 6);
   });
 });
 
 describe("computeSavingsFromInputs — revenue breakdown", () => {
   it("splits export revenue between production-sourced (direct) and battery-sourced, and prices neighbour sales separately", () => {
-    // Produced 10, charged 6 -> PV could export at most 4 of the 5 that went
-    // out, so 1 kWh of the discharge is credited to the battery and the
-    // remaining 4 kWh of export revenue is production-sourced.
+    // 4 kWh of PV reached the AC bus but 5 was exported, so 1 kWh of the
+    // discharge is credited to the battery and the remaining 4 kWh of export
+    // revenue is production-sourced.
     const result = computeSavingsFromInputs({
       date: "2026-06-01",
-      producedKwh: 10,
+      producedKwh: 4,
       directUseKwh: 3,
       batteryChargeKwh: 6,
       batteryDischargeKwh: 2,
@@ -809,5 +793,45 @@ describe("aggregateDailyToQuarterly / summarizeQuarterlySavings", () => {
     const costs = { battery: 0, solar: 2000, total: 2000 };
     const quarterly = summarizeQuarterlySavings([row], costs, "2026-01-01", "2026-03-31");
     expect(quarterly.summary.payback.withBatteryYears).toBeCloseTo(2000 / (500 * 4), 6);
+  });
+});
+
+describe("computeBatteryRevenue — conversion loss on charging", () => {
+  const base = {
+    producedKwh: 50,
+    batteryChargeKwh: 10,
+    batteryDischargeKwh: 8,
+    exportedKwh: 40,
+    purchaseRateChfPerKwh: 0.248,
+    sellRateChfPerKwh: 0.103,
+  };
+
+  it("charges only the AC-equivalent of what went into the battery", () => {
+    // 10 kWh DC in, 10% lost converting, so 9 kWh of export was actually forgone.
+    const r = computeBatteryRevenue({ ...base, batteryConversionLoss: 0.1 });
+    expect(r.chargingCostChf).toBeCloseTo(9 * 0.103, 10);
+  });
+
+  it("defaults to 10% when the site states nothing", () => {
+    expect(computeBatteryRevenue(base).chargingCostChf).toBeCloseTo(9 * 0.103, 10);
+  });
+
+  it("a bigger stated loss lowers the opportunity cost and raises revenue", () => {
+    const low = computeBatteryRevenue({ ...base, batteryConversionLoss: 0.05 });
+    const high = computeBatteryRevenue({ ...base, batteryConversionLoss: 0.2 });
+    expect(high.chargingCostChf).toBeLessThan(low.chargingCostChf);
+    expect(high.batteryRevenueChf).toBeGreaterThan(low.batteryRevenueChf);
+  });
+
+  it("zero loss is the old behaviour — the full DC charge is priced", () => {
+    const r = computeBatteryRevenue({ ...base, batteryConversionLoss: 0 });
+    expect(r.chargingCostChf).toBeCloseTo(10 * 0.103, 10);
+  });
+
+  it("does not subtract charging from production when finding exportable PV", () => {
+    // production is already the PV share of AC output, so all of it could have
+    // been exported; export beyond it must have come from the battery.
+    const r = computeBatteryRevenue({ ...base, exportedKwh: 53 });
+    expect(r.dischargeExportedKwh).toBeCloseTo(3, 10);
   });
 });

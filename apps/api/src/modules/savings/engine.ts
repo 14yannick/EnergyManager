@@ -30,27 +30,30 @@ export interface DailyEnergyAggregate {
  * 311 kWh. The skew cancels once intervals are summed, so the caller's
  * aggregate is the meaningful figure and a single interval is not.
  */
+/**
+ * PV that the household used as it was produced.
+ *
+ * No charging term: `producedKwh` is now the panels' share of inverter AC
+ * output, and energy that went into the battery never reached the inverter, so
+ * it was already excluded upstream (see homeAssistant/split.ts). Subtracting
+ * charging here as well would remove it twice.
+ *
+ * It previously did subtract charging, because `producedKwh` then held raw
+ * inverter AC yield — a figure that both included battery discharge and
+ * excluded charging. That made direct use collapse to the discharge figure
+ * overnight, reporting solar self-consumption at 3am.
+ */
 export function computeDirectUseKwh(
-  day: Pick<DailyEnergyAggregate, "producedKwh" | "batteryChargeKwh" | "exportedKwh">,
+  day: Pick<DailyEnergyAggregate, "producedKwh" | "exportedKwh">,
 ): number {
-  return day.producedKwh - day.batteryChargeKwh - day.exportedKwh;
+  return day.producedKwh - day.exportedKwh;
 }
 
-/**
- * The original spreadsheet's approximation: max(produced - batteryDischarge - exported, 0).
- * It only tracked battery *discharge*, not charge, so it's a proxy that's accurate only
- * to the extent charge ≈ discharge over the aggregation range. Kept solely so the M4
- * regression tests can assert against the historical Excel numbers and make the
- * intentional divergence from `computeDirectUseKwh` visible rather than silent.
- */
-export function computeDirectUseKwhLegacyApprox(
-  day: Pick<DailyEnergyAggregate, "producedKwh" | "batteryDischargeKwh" | "exportedKwh">,
-): number {
-  return Math.max(day.producedKwh - day.batteryDischargeKwh - day.exportedKwh, 0);
-}
 
 export interface SavingsInputs {
   date: string;
+  /** Fraction (0-1) of battery charge lost to conversion; site-level setting. */
+  batteryConversionLoss?: number;
   producedKwh: number;
   directUseKwh: number;
   batteryChargeKwh: number;
@@ -70,8 +73,13 @@ export interface SavingsInputs {
   neighborSellRateChfPerKwh: number | null;
 }
 
+/** Fraction of battery charge lost to conversion when no site value is given. */
+export const DEFAULT_BATTERY_CONVERSION_LOSS = 0.1;
+
 export interface BatteryRevenueInputs {
   producedKwh: number;
+  /** Fraction (0-1). Falls back to DEFAULT_BATTERY_CONVERSION_LOSS. */
+  batteryConversionLoss?: number;
   batteryChargeKwh: number;
   batteryDischargeKwh: number;
   exportedKwh: number;
@@ -114,13 +122,20 @@ export interface BatteryRevenue {
 export function computeBatteryRevenue(inputs: BatteryRevenueInputs): BatteryRevenue {
   const { producedKwh, batteryChargeKwh, batteryDischargeKwh, exportedKwh, purchaseRateChfPerKwh, sellRateChfPerKwh } =
     inputs;
+  const conversionLoss = inputs.batteryConversionLoss ?? DEFAULT_BATTERY_CONVERSION_LOSS;
 
-  const pvAvailableToExportKwh = Math.max(producedKwh - batteryChargeKwh, 0);
+  // No charge term: `producedKwh` is already the panels' share of AC output, so
+  // energy that went into the battery was excluded upstream by the split.
+  // Subtracting it again here understated what PV could have exported.
+  const pvAvailableToExportKwh = Math.max(producedKwh, 0);
   const unexplainedExportKwh = Math.max(exportedKwh - pvAvailableToExportKwh, 0);
   const dischargeExportedKwh = Math.min(unexplainedExportKwh, batteryDischargeKwh);
   const dischargeConsumedKwh = batteryDischargeKwh - dischargeExportedKwh;
 
-  const chargingCostChf = sellRateChfPerKwh != null ? batteryChargeKwh * sellRateChfPerKwh : 0;
+  // Charging is metered DC; the export it displaced would have been AC, so the
+  // forgone revenue is the charge less what conversion would have taken anyway.
+  const chargeAcEquivalentKwh = batteryChargeKwh * (1 - conversionLoss);
+  const chargingCostChf = sellRateChfPerKwh != null ? chargeAcEquivalentKwh * sellRateChfPerKwh : 0;
   const dischargeConsumedValueChf =
     purchaseRateChfPerKwh != null ? dischargeConsumedKwh * purchaseRateChfPerKwh : 0;
   const dischargeExportedValueChf =
@@ -161,6 +176,7 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
   const batteryOnlySavingsChf = savingsWithBatteryChf - savingsWithoutBatteryChf;
   const revenue = computeBatteryRevenue({
     producedKwh: inputs.producedKwh,
+    batteryConversionLoss: inputs.batteryConversionLoss,
     batteryChargeKwh,
     batteryDischargeKwh,
     exportedKwh,
@@ -285,7 +301,15 @@ function clampDirectUse(row: DailySavings): DailySavings {
  * `buildCumulativeSeries` expect, so those two need no changes at all.
  */
 export function aggregateIntervalsToDaily(rows: DailySavings[]): DailySavings[] {
-  return aggregateByPeriod(rows, (date) => date);
+  // Interval rows carry "YYYY-MM-DDTHH" so they can also be rolled up hourly;
+  // slicing to the date is what makes this a *daily* rollup. Rows that already
+  // carry a plain date slice to themselves, so this is a no-op for them.
+  return aggregateByPeriod(rows, (date) => date.slice(0, 10));
+}
+
+/** Same interval rows, grouped by their "YYYY-MM-DDTHH" hour instead. */
+export function aggregateIntervalsToHourly(rows: DailySavings[]): DailySavings[] {
+  return aggregateByPeriod(rows, (date) => date.slice(0, 13));
 }
 
 /**
@@ -427,6 +451,16 @@ export function summarizeSavings(
   to: string,
 ): { summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] } {
   return summarizePeriodSavings(dailyRows, costs, from, to, 365);
+}
+
+/** Same as `summarizeSavings`, but for `aggregateIntervalsToHourly` rows. */
+export function summarizeHourlySavings(
+  hourlyRows: DailySavings[],
+  costs: CostItemsSummary,
+  from: string,
+  to: string,
+): { summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] } {
+  return summarizePeriodSavings(hourlyRows, costs, from, to, 8760);
 }
 
 /** Same as `summarizeSavings`, but for rows produced by `aggregateDailyToMonthly`. */

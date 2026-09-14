@@ -2,6 +2,10 @@ export interface Site {
   id: string;
   name: string;
   timezone: string;
+  /** "YYYY-MM-DD", or null when not stated. */
+  productionStartDate: string | null;
+  /** Fraction (0-1) of battery charge lost to conversion. Defaults to 0.1. */
+  batteryConversionLoss: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -120,7 +124,14 @@ export interface Party {
  * (`partyId` required); every other kind is site-level (`partyId` null).
  */
 export type IntervalMetricKind =
+  /** PV's share of inverter AC output. Derived — see homeAssistant/split.ts. */
   | "production"
+  /** Raw inverter AC output: PV *and* battery discharge. Synced. */
+  | "inverter_ac"
+  /** Raw DC yield of the panels. Synced; used only as the split's ratio. */
+  | "pv_dc"
+  /** The battery's share of inverter AC output. Derived. */
+  | "battery_discharge_ac"
   | "export_local" // shared directly with a neighbour, not through the grid meter
   | "export_grid"
   | "import_grid"

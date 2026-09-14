@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "battery_conversion_loss" numeric(5, 4) DEFAULT '0.1000' NOT NULL;

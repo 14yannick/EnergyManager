@@ -7,7 +7,24 @@ import { parties } from "./parties.js";
 // columns — mirrors tariff_periods' `kind` column. New metrics (a third
 // neighbour, a new flow type) don't need a schema change.
 export const intervalMetricKindEnum = pgEnum("interval_metric_kind", [
+  /**
+   * PV energy that reached the AC bus — the panels' share of inverter output,
+   * *excluding* anything that came back out of the battery.
+   *
+   * Derived, not synced: the inverter reports one AC figure covering both
+   * sources (see `inverter_ac`), so the two are separated by splitting that
+   * measured AC total in proportion to the DC each source supplied. Using the
+   * DC values only as a ratio keeps the result AC-side and needs no assumed
+   * conversion efficiency — both sources share the inverter at the same load
+   * point, so they convert alike.
+   */
   "production",
+  /** Raw inverter AC output: PV *plus* battery discharge. The split's input. */
+  "inverter_ac",
+  /** Raw DC yield of the panels, before conversion. Only used as the ratio. */
+  "pv_dc",
+  /** The battery's share of inverter AC output — the counterpart of production. */
+  "battery_discharge_ac",
   "export_local", // shared directly with a neighbour, not through the grid meter
   "export_grid",
   "import_grid",

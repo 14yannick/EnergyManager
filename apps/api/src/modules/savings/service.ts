@@ -10,6 +10,7 @@ import { db } from "../../db/client.js";
 import {
   dynamicTariffRates,
   intervalMetrics,
+  sites,
   tariffPeriods,
   tariffSurcharges,
 } from "../../db/schema/index.js";
@@ -21,8 +22,10 @@ import {
   aggregateDailyToQuarterly,
   aggregateDailyToYearly,
   aggregateIntervalsToDaily,
+  aggregateIntervalsToHourly,
   computeDirectUseKwh,
   computeSavingsFromInputs,
+  summarizeHourlySavings,
   summarizeMonthlySavings,
   summarizeOverallSavings,
   summarizeQuarterlySavings,
@@ -52,14 +55,20 @@ export async function getDailySavings(
   // exportedKwh deliberately comes only from export_grid, not export_local —
   // locally-shared-to-neighbours energy doesn't feed savings math yet (needs
   // a real per-neighbour allocation model first).
-  const [readingRows, flatRows, dynamicRows, surchargeRows] = await Promise.all([
+  const [siteRows, readingRows, flatRows, dynamicRows, surchargeRows] = await Promise.all([
+    db.select({ loss: sites.batteryConversionLoss }).from(sites).where(eq(sites.id, siteId)),
     db
       .select({
         ts: intervalMetrics.ts,
-        date: sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`,
+        // Hour resolution: aggregateIntervalsToDaily slices this back to the
+        // date, aggregateIntervalsToHourly keeps the hour.
+        date: sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD"T"HH24')`,
         producedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'production'), 0)`,
         batteryChargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_charge'), 0)`,
-        batteryDischargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_discharge'), 0)`,
+        // The AC share, not the DC counter: everything priced here is energy
+        // that actually reached the house or the grid. The DC figure is kept
+        // as its own metric for battery diagnostics.
+        batteryDischargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_discharge_ac'), 0)`,
         exportedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_grid'), 0)`,
         exportLocalKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_local'), 0)`,
         // Summed across every party — the per-party split matters for billing,
@@ -76,6 +85,7 @@ export async function getDailySavings(
             "production",
             "battery_charge",
             "battery_discharge",
+            "battery_discharge_ac",
             "export_grid",
             "export_local",
             "consumption",
@@ -118,6 +128,7 @@ export async function getDailySavings(
     rateChfPerKwh: toNumber(r.rateChfPerKwh),
   }));
   const resolveRate = makeRateResolver(periods, dynamicRates, surcharges);
+  const batteryConversionLoss = siteRows[0] ? toNumber(siteRows[0].loss) : undefined;
 
   const intervalRows: DailySavings[] = readingRows.map((row) => {
     const instantIso = row.ts.toISOString();
@@ -130,8 +141,9 @@ export async function getDailySavings(
 
     return computeSavingsFromInputs({
       date: row.date,
+      batteryConversionLoss,
       producedKwh,
-      directUseKwh: computeDirectUseKwh({ producedKwh, batteryChargeKwh, exportedKwh }),
+      directUseKwh: computeDirectUseKwh({ producedKwh, exportedKwh }),
       batteryChargeKwh,
       batteryDischargeKwh,
       exportedKwh,
@@ -142,6 +154,8 @@ export async function getDailySavings(
       neighborSellRateChfPerKwh: resolveRate("neighbor_sell", instantIso),
     });
   });
+
+  if (granularity === "hourly") return aggregateIntervalsToHourly(intervalRows);
 
   const daily = aggregateIntervalsToDaily(intervalRows);
   if (granularity === "monthly") return aggregateDailyToMonthly(daily);
@@ -157,10 +171,14 @@ export async function getSavingsSummary(
   to: string,
   granularity: SavingsQuery["granularity"] = "daily",
 ): Promise<{ summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] }> {
+  // Hourly summarises its own rows; every other granularity rolls up from daily.
   const [dailyRows, costs] = await Promise.all([
-    getDailySavings(siteId, from, to),
+    getDailySavings(siteId, from, to, granularity === "hourly" ? "hourly" : "daily"),
     getCostItemsSummary(siteId),
   ]);
+  if (granularity === "hourly") {
+    return summarizeHourlySavings(dailyRows, costs, from, to);
+  }
   if (granularity === "monthly") {
     return summarizeMonthlySavings(aggregateDailyToMonthly(dailyRows), costs, from, to);
   }

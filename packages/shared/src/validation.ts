@@ -56,6 +56,14 @@ export const tariffSurchargeInputSchema = z
   });
 export type TariffSurchargeInput = z.infer<typeof tariffSurchargeInputSchema>;
 
+/** Only the fields a user can change; name and timezone are fixed for now. */
+export const siteUpdateInputSchema = z.object({
+  productionStartDate: optionalWhenBlank(isoDate).nullable(),
+  // A fraction, not a percentage — the form divides before sending.
+  batteryConversionLoss: z.coerce.number().min(0).max(0.9).optional(),
+});
+export type SiteUpdateInput = z.infer<typeof siteUpdateInputSchema>;
+
 export const costCategorySchema = z.enum(["battery", "solar"]);
 
 export const costItemInputSchema = z.object({
@@ -71,6 +79,9 @@ export const readingImportModeSchema = z.enum(["delta", "cumulative"]);
 
 export const intervalMetricKindSchema = z.enum([
   "production",
+  "inverter_ac",
+  "pv_dc",
+  "battery_discharge_ac",
   "export_local",
   "export_grid",
   "import_grid",
@@ -148,7 +159,14 @@ export const haSyncRequestSchema = z.object({
 });
 export type HaSyncRequest = z.infer<typeof haSyncRequestSchema>;
 
-export const savingsGranularitySchema = z.enum(["daily", "monthly", "quarterly", "yearly", "overall"]);
+export const savingsGranularitySchema = z.enum([
+  "hourly",
+  "daily",
+  "monthly",
+  "quarterly",
+  "yearly",
+  "overall",
+]);
 
 export const savingsQuerySchema = dateRangeQuerySchema.extend({
   granularity: savingsGranularitySchema.optional(),

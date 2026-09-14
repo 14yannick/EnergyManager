@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "production_start_date" date;

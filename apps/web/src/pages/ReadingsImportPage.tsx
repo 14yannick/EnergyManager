@@ -119,7 +119,10 @@ export function ReadingsImportPage() {
 }
 
 const METRIC_LABELS: Record<IntervalMetricKind, string> = {
-  production: "Production",
+  production: "Production (PV, AC share)",
+  inverter_ac: "Inverter AC output (PV + battery)",
+  pv_dc: "PV yield (DC)",
+  battery_discharge_ac: "Battery discharge (AC share)",
   export_local: "Export — local",
   export_grid: "Export — grid",
   import_grid: "Import — grid",
