@@ -8,13 +8,39 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
 
 ## Features (phase 1)
 
-- Tariff period management (purchase/sell rates in CHF/kWh, per date range)
-- Investment cost tracking (battery vs. solar, subsidies, tax reductions)
-- CSV import of quarter-hour interval readings (production, battery charge/discharge,
-  grid export/import) — supports both per-interval and cumulative-meter CSVs
-- Savings & payback dashboard: total/average-daily savings, simple payback, and
-  breakeven date, computed three ways — with battery, without battery (counterfactual),
-  and battery-only — mirroring the original spreadsheet's Summary sheet
+- **Tariff periods** with per-period purchase/sell rates in CHF/kWh, surcharges, and a
+  pricing mode per period: a flat rate, or the dynamic rate fetched from BKW
+- **Dynamic feed-in rates** synced from BKW's rolling window and stored per interval,
+  so revenue is priced at the rate that actually applied at that hour
+- **Interval data from Home Assistant** (long-term statistics over the websocket API)
+  or from a CSV import — the CSV path takes a long-format file (one row per
+  timestamp + metric) in either per-interval or cumulative-meter form
+- **PV/battery split**: the inverter reports one AC figure covering both panels and
+  battery discharge. It is split proportionally by the DC shares behind it, so
+  night-time discharge is no longer counted as direct solar use — see
+  [`apps/api/src/modules/homeAssistant/split.ts`](apps/api/src/modules/homeAssistant/split.ts)
+- **Savings & payback dashboard**: revenue by category (direct consumption, direct
+  export, battery, neighbour sales) at hourly/daily/monthly/yearly resolution, in CHF,
+  kWh or both; KPIs; and simple payback + breakeven computed three ways — with battery,
+  without battery (counterfactual), and battery-only
+- **Calculation detail** page listing every metric behind the revenue figure per period,
+  exportable as CSV
+- **Settings** holding the Home Assistant connection and entity mapping, investment
+  costs (battery vs. solar, subsidies, tax reductions), the production start date, and
+  the battery's round-trip conversion loss
+
+## VZEV billing (phase 2, in progress)
+
+Beyond the owner's own payback, the app bills the other participants of a Swiss
+VZEV/RCP. Consumption is tracked per party, grid-tariff positions are configured per
+category (énergie, utilisation du réseau, mesure, redevances) with an allocation rule
+each — per kWh drawn from the grid, per kWh consumed in total, shared across the pool,
+or a flat charge per participant — and the app produces a per-participant invoice, with
+a comparison against what the same consumption would have cost billed directly by the
+grid operator. Invoices print to PDF from the browser.
+
+The billing UI is in **French**, unlike the rest of the app: it is the one screen a
+participant actually reads, and the participants here are French-speaking.
 
 ## Quickstart (Docker)
 
@@ -149,10 +175,13 @@ mapping of host `8080` to container `80`.
 
 - **Backend**: Node.js + TypeScript, [Fastify](https://fastify.dev), [Drizzle ORM](https://orm.drizzle.team)
 - **Database**: PostgreSQL + [TimescaleDB](https://www.timescale.com) — interval
-  readings are stored in a hypertable and rolled up into daily totals via a
-  continuous aggregate
+  metrics are stored in a hypertable, one row per `(timestamp, metric kind)` rather
+  than a fixed column per flow, and aggregated at query time. The original daily
+  continuous aggregate was dropped once the savings engine moved to interval
+  resolution: rates change within a day, so a daily rollup cannot price them
 - **Frontend**: React + Vite, TanStack Query, React Hook Form, Recharts, Tailwind CSS
-- **Deployment**: Docker Compose (`timescaledb`, `migrate`, `api`, `web`)
+- **Deployment**: Docker Compose (`migrate`, `api`, `web` — the database is external
+  by default)
 
 See the doc comments in
 [`apps/api/src/modules/savings/engine.ts`](apps/api/src/modules/savings/engine.ts)
@@ -225,11 +254,14 @@ pnpm db:generate   # generate a new Drizzle migration after changing apps/api/sr
 
 ## Roadmap
 
-- [x] Phase 1: tariff/cost tracking, CSV readings import, savings & payback dashboard
-- [ ] Phase 2: VZEV invoicing — multiple parties per site, per-party consumption
-      allocation, billing documents
-- [ ] Phase 3: live data ingestion (inverter/smart-meter APIs) instead of CSV import;
-      real-time monitoring
+- [x] Phase 1: tariff/cost tracking, readings import, savings & payback dashboard
+- [ ] Phase 2: VZEV invoicing — *in progress*. Parties, per-party consumption
+      allocation and per-participant invoices are in place; invoices are computed
+      on demand from a date range, so there is no stored history and no payment
+      tracking yet
+- [ ] Phase 3: real-time monitoring. Live ingestion is partly here already — interval
+      data syncs from Home Assistant and feed-in rates from BKW, both on a timer
+      rather than on demand
 
 ## Contributing
 

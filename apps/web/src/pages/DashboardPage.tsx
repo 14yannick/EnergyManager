@@ -4,6 +4,7 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  ReferenceLine,
   Line,
   Legend,
   ResponsiveContainer,
@@ -28,6 +29,39 @@ type RevenueUnit = "chf" | "both" | "kwh";
 /** Which unit the stacked bars are drawn in. */
 const barUnit = (u: RevenueUnit): "chf" | "kwh" => (u === "kwh" ? "kwh" : "chf");
 
+/**
+ * Axis ticks scaled to the range. A fixed 0 decimals reads "-0 0 0 1 1" on an
+ * hourly chart where the whole range is under a franc.
+ */
+/**
+ * Ticks stepped from zero outwards, so zero is always one of them.
+ *
+ * Recharts' own choice is driven by the domain ends and happily skips zero —
+ * on a charging day it produced -0.41, -0.06, 0.29, 0.96, leaving the axis with
+ * no mark at the line the bars are measured from.
+ */
+function ticksThroughZero(domain: [number, number] | undefined): number[] | undefined {
+  if (!domain) return undefined;
+  const [min, max] = domain;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return undefined;
+  const raw = (max - min) / 5;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const n = raw / mag;
+  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+  const out: number[] = [];
+  // Walk out from zero in both directions, so zero is a tick by construction.
+  for (let v = 0; v >= min - step / 2; v -= step) out.unshift(Number(v.toPrecision(12)));
+  for (let v = step; v <= max + step / 2; v += step) out.push(Number(v.toPrecision(12)));
+  return out;
+}
+
+const axisTick = (v: number) => {
+  // Plain "0", not "0.00": it is the baseline, not a measured value.
+  if (v === 0) return "0";
+  const m = Math.abs(v);
+  return m >= 100 ? v.toFixed(0) : m >= 10 ? v.toFixed(1) : v.toFixed(2);
+};
+
 const formatRevenue = (value: number, unit: RevenueUnit) =>
   barUnit(unit) === "chf" ? `CHF ${value.toFixed(2)}` : `${value.toFixed(1)} kWh`;
 
@@ -37,7 +71,10 @@ const formatRevenue = (value: number, unit: RevenueUnit) =>
 const seriesNames = (unit: RevenueUnit) => ({
   consumption: "Direct consumption",
   direct: "Direct export",
-  battery: barUnit(unit) === "chf" ? "Battery revenue" : "Battery discharge",
+  // Deliberately not "Battery revenue": this segment is the gross value of what
+  // the battery delivered, while the KPI of that name is net of charging. Two
+  // different numbers under one label was the confusion.
+  battery: barUnit(unit) === "chf" ? "Battery discharge" : "Battery discharge",
   neighbor: barUnit(unit) === "chf" ? "Neighbour sale" : "Neighbour supply",
 });
 
@@ -274,7 +311,7 @@ export function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Savings & payback</h1>
-          <p className="text-sm text-slate-500">
+          <p className="max-w-2xl text-sm text-slate-500">
             What the system earned or avoided over the selected range, and how long it takes to pay
             back its cost.
           </p>
@@ -284,7 +321,13 @@ export function DashboardPage() {
             range={{ from, to }}
             onRange={(r, nextGranularity, anchor) => {
               if (nextGranularity) setGranularity(nextGranularity);
-              const c = clampRange(snapRange(r, nextGranularity ?? granularity, anchor), bounds);
+              const g = nextGranularity ?? granularity;
+              // Clamp *before* snapping, then again after. Snapping first lets a
+              // preset that runs into the future — "This month" on the 15th —
+              // anchor the hourly window to a month end that is then clamped
+              // back to today, inverting the range and collapsing it to one day.
+              // Snapping can also push past today (month ends), hence the second.
+              const c = clampRange(snapRange(clampRange(r, bounds), g, anchor), bounds);
               setFrom(c.from);
               setTo(c.to);
             }}
@@ -300,7 +343,7 @@ export function DashboardPage() {
                   key={g}
                   onClick={() => {
                     setGranularity(g);
-                    const snapped = clampRange(snapRange({ from, to }, g), bounds);
+                    const snapped = clampRange(snapRange(clampRange({ from, to }, bounds), g), bounds);
                     setFrom(snapped.from);
                     setTo(snapped.to);
                   }}
@@ -346,7 +389,7 @@ export function DashboardPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-slate-700">KPI</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total savings — with battery"
           value={summary?.totals.withBatteryChf}
@@ -359,17 +402,19 @@ export function DashboardPage() {
         />
         <StatCard
           label="Battery-only savings"
+          hint="vs the same period with no battery — ignores round-trip loss"
           value={summary?.totals.batteryOnlyChf}
           sub={summary ? granularity === "overall" ? avgSuffix : `CHF ${summary.avgDaily.batteryOnlyChf.toFixed(2)}/${unit} avg` : undefined}
         />
         <StatCard
           label="Battery revenue"
+          hint="discharge value less what charging cost — the truer figure"
           value={summary?.totals.batteryRevenueChf}
           sub={
             summary
               ? granularity === "overall"
-                ? `${avgSuffix} — discharge value minus charging cost`
-                : `CHF ${summary.avgDaily.batteryRevenueChf.toFixed(2)}/${unit} avg — discharge value minus charging cost`
+                ? avgSuffix
+                : `CHF ${summary.avgDaily.batteryRevenueChf.toFixed(2)}/${unit} avg`
               : undefined
           }
         />
@@ -430,6 +475,16 @@ const REVENUE_COLORS = {
   neighbor: "#1baf7a",
 };
 
+/**
+ * Charging, deliberately outside the categorical palette above.
+ *
+ * It shared the battery colour, which left two legend entries looking
+ * identical. A darker shade of the same hue keeps it tied to the battery —
+ * it is the same energy, going the other way — while being told apart at a
+ * glance, and reads as the cost it represents.
+ */
+const BATTERY_CHARGING_COLOR = "#8c3f1d";
+
 /** The four flows, in whichever unit the field name says. */
 interface RevenueFlows {
   consumption: number;
@@ -461,10 +516,29 @@ interface RevenuePeriod extends RevenueFlows {
   directKwh: number;
   batteryKwh: number;
   neighborKwh: number;
-  /** Same period with no battery: charged PV exported instead, nothing discharged. */
-  simConsumption: number;
-  simDirect: number;
-  simNeighbor: number;
+  /**
+   * Charging priced as the export it displaced. Normally a cost, but it goes
+   * negative when the feed-in rate does — charging then avoids paying to
+   * export, so it becomes a gain.
+   */
+  batteryChargingCostChf: number;
+  /**
+   * Gross discharge value minus that cost: the Battery revenue KPI. The
+   * `battery` bar segment stays gross so the stack still sums to total
+   * savings, so the tooltip shows both and the bridge between them.
+   */
+  batteryNetChf: number;
+  /**
+   * Charging drawn as its own signed series: negative, because in that interval
+   * the battery took energy that would otherwise have been exported. Positive
+   * when the feed-in rate is negative, since charging then avoids paying to
+   * export — no special case needed, the sign carries it.
+   *
+   * Stacked alongside the positive discharge value rather than subtracted from
+   * it, so an hour that only charges shows a bar below the axis instead of
+   * cancelling to nothing.
+   */
+  batteryChargingChf: number;
 }
 
 function pad2(n: number): string {
@@ -541,20 +615,17 @@ function RevenueTooltip({
   active,
   payload,
   granularity,
-  simulate,
   unit,
   showProduction,
 }: {
   active?: boolean;
   payload?: RevenueTooltipEntry[];
   granularity: Granularity;
-  simulate?: boolean;
   unit: RevenueUnit;
   showProduction?: boolean;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0]!.payload;
-  const simTotal = row.simConsumption + row.simDirect + row.simNeighbor;
   const [y, m, d] = row.key.split("-");
   const heading =
     granularity === "overall"
@@ -571,11 +642,11 @@ function RevenueTooltip({
 
   // Built from the row rather than the chart's payload entries: the payload
   // holds whichever bars happen to be rendered, which changes with the mode
-  // and the simulate toggle, while the row always carries both units.
+  // while the row always carries both units.
   const flows = [
     { key: "consumption", name: "Direct consumption", chf: row.consumptionChf, kwh: row.consumptionKwh },
     { key: "direct", name: "Direct export", chf: row.directChf, kwh: row.directKwh },
-    { key: "battery", name: "Battery", chf: row.batteryChf, kwh: row.batteryKwh },
+    { key: "battery", name: "Battery discharge", chf: row.batteryChf, kwh: row.batteryKwh },
     { key: "neighbor", name: "Neighbour", chf: row.neighborChf, kwh: row.neighborKwh },
   ] as const;
   const totalChf = flows.reduce((sum, f) => sum + f.chf, 0);
@@ -633,6 +704,23 @@ function RevenueTooltip({
         </tbody>
       </table>
       <div className="mt-1.5 space-y-1">
+        {(row.batteryChargingCostChf !== 0 || row.batteryNetChf !== 0) && (
+          <>
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-slate-600">Charging (export forgone)</span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                {row.batteryChargingCostChf > 0 ? "−" : row.batteryChargingCostChf < 0 ? "+" : ""}
+                {formatRevenue(Math.abs(row.batteryChargingCostChf), "chf")}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-slate-600">Battery net</span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                {formatRevenue(row.batteryNetChf, "chf")}
+              </span>
+            </div>
+          </>
+        )}
         {showProduction && (
           <div className="flex items-center justify-between gap-6">
             <span className="text-slate-600">Production + charging</span>
@@ -640,25 +728,6 @@ function RevenueTooltip({
               {row.producedKwh.toFixed(1)} kWh
             </span>
           </div>
-        )}
-        {simulate && (
-          <>
-            <div className="flex items-center justify-between gap-6">
-              <span className="text-slate-600">Without battery</span>
-              <span className="font-semibold tabular-nums text-slate-900">
-                {formatRevenue(simTotal, unit)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-6">
-              <span className="text-slate-600">Battery's net contribution</span>
-              <span
-                className={`font-semibold tabular-nums ${total - simTotal >= 0 ? "text-slate-900" : "text-red-600"}`}
-              >
-                {total - simTotal >= 0 ? "+" : ""}
-                {formatRevenue(total - simTotal, unit)}
-              </span>
-            </div>
-          </>
         )}
       </div>
     </div>
@@ -676,7 +745,6 @@ function RevenueBreakdownChart({
   to: string;
   granularity: Granularity;
 }) {
-  const [simulate, setSimulate] = useState(false);
   const [showProduction, setShowProduction] = useState(false);
   const [unit, setUnit] = useState<RevenueUnit>("chf");
 
@@ -722,6 +790,8 @@ function RevenueBreakdownChart({
         directChf: chf.direct,
         batteryChf: chf.battery,
         neighborChf: chf.neighbor,
+        batteryChargingCostChf: row?.batteryChargingCostChf ?? 0,
+        batteryNetChf: row?.batteryRevenueChf ?? 0,
         producedKwh: (row?.producedKwh ?? 0) + (row?.batteryChargeKwh ?? 0),
         consumptionKwh: kwh.consumption,
         directKwh: kwh.direct,
@@ -729,11 +799,7 @@ function RevenueBreakdownChart({
         neighborKwh: kwh.neighbor,
         // Direct consumption and neighbour sales don't involve the battery, so
         // they carry over into the counterfactual unchanged.
-        simConsumption: bars.consumption,
-        simDirect: money
-          ? row?.noBatteryDirectExportRevenueChf ?? 0
-          : kwh.direct + (row?.batteryChargeKwh ?? 0),
-        simNeighbor: bars.neighbor,
+        batteryChargingChf: -(row?.batteryChargingCostChf ?? 0),
       };
     });
   }, [query.data, from, to, granularity, unit]);
@@ -743,17 +809,68 @@ function RevenueBreakdownChart({
     0,
   );
 
-  const simTotal = chartData.reduce(
-    (sum, d) => sum + d.simConsumption + d.simDirect + d.simNeighbor,
-    0,
-  );
 
   // A year of daily bars is ~365 labels in the width of a dozen: thin them to
   // roughly a dozen ticks so they stay readable, and label every month.
   const names = seriesNames(unit);
   // One bar across a whole chart looks like a rendering fault; give the
   // overall view a wider but still bounded bar.
-  const barSize = granularity === "overall" ? 90 : 20;
+  // Scale with how many periods share the width: a fixed 20px left three
+  // monthly bars stranded in a 1500px chart, while 168 hourly bars need to be
+  // thin. Clamped so a single period doesn't become a slab.
+  const barSize =
+    granularity === "overall"
+      ? 90
+      : Math.max(10, Math.min(72, Math.round(880 / Math.max(chartData.length, 1))));
+
+  /**
+   * Domains that put zero at the same height on both axes.
+   *
+   * Left the two to scale independently and the gridlines disagree: the bars'
+   * zero sits above the kWh axis's zero, so a charging bar hanging below the
+   * axis appears to cross a kWh line that means nothing to it. Nothing else
+   * lines up either — a horizontal gridline reads as two different values
+   * depending on which axis you follow.
+   *
+   * Fixed by giving both the same fraction of their range below zero: take
+   * whichever needs the most, then extend the other down to match.
+   */
+  const axisDomains = useMemo(() => {
+    const posOf = (d: RevenuePeriod) =>
+      Math.max(d.consumption, 0) + Math.max(d.direct, 0) + Math.max(d.battery, 0) + Math.max(d.neighbor, 0);
+    const maxLeft = Math.max(0, ...chartData.map(posOf));
+    const minLeft = Math.min(0, ...chartData.map((d) => (barUnit(unit) === "chf" ? d.batteryChargingChf : 0)));
+    const maxRight = Math.max(
+      0,
+      ...chartData.map((d) =>
+        Math.max(
+          unit === "both" ? d.consumptionKwh + d.directKwh + d.batteryKwh + d.neighborKwh : 0,
+          showProduction ? d.producedKwh : 0,
+        ),
+      ),
+    );
+
+    // Fraction of each axis that must sit below zero.
+    const share = (min: number, max: number) => (max - min === 0 ? 0 : -min / (max - min));
+    const want = Math.max(share(minLeft, maxLeft), 0);
+    if (want <= 0) return { left: undefined, right: undefined };
+
+    // min such that -min/(max-min) === want  =>  min = -want*max/(1-want)
+    const extend = (max: number) => (want >= 1 ? -max : -(want * max) / (1 - want));
+    return {
+      left: [Math.min(minLeft, extend(maxLeft)), maxLeft] as [number, number],
+      right: [extend(maxRight), maxRight] as [number, number],
+    };
+  }, [chartData, unit, showProduction]);
+
+  /**
+   * Hatched means energy, solid means money — in every mode, not just when the
+   * two appear side by side. Keeps the reading consistent when switching.
+   */
+  const flowFill = (flow: keyof typeof REVENUE_COLORS) =>
+    barUnit(unit) === "kwh" ? `url(#kwhHatch-${flow})` : REVENUE_COLORS[flow];
+  const flowStroke = (flow: keyof typeof REVENUE_COLORS) =>
+    barUnit(unit) === "kwh" ? REVENUE_COLORS[flow] : undefined;
 
   const tickInterval =
     granularity === "hourly"
@@ -763,18 +880,21 @@ function RevenueBreakdownChart({
         : 0;
 
   return (
-    <div className="rounded-lg border bg-white p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-medium text-slate-700">Revenue</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Direct consumption (avoided import), direct export, battery and neighbour sales, by{" "}
-            {PERIOD_UNIT[granularity]}
-            {unit === "kwh" && " — the energy behind each revenue figure"}
-            {unit === "both" && " — with the same split in kWh as a second bar on the right axis"}.
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">Revenue</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Direct consumption (avoided import), direct export, battery and neighbour sales, by{" "}
+          {PERIOD_UNIT[granularity]}
+          {unit === "kwh" && " — the energy behind each revenue figure"}
+          {unit === "both" && " — with the same split in kWh hatched beside it, on the right axis"}.
+          {barUnit(unit) === "chf" &&
+            " Charging shows below the axis: in that interval the battery took energy that would otherwise have earned the feed-in rate."}
+        </p>
+      </div>
+
+      <div className="rounded-lg border bg-white p-4">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="flex overflow-hidden rounded-md border border-slate-300 text-sm">
             {(
               [
@@ -802,58 +922,70 @@ function RevenueBreakdownChart({
             />
             Production
           </label>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={simulate} onChange={(e) => setSimulate(e.target.checked)} />
-            Simulate without battery
-          </label>
-          <span className="text-sm text-slate-600">
+          <span className="ml-auto text-sm text-slate-600">
             {barUnit(unit) === "chf" ? "Total revenue" : "Total energy"}{" "}
             <span className="font-semibold text-slate-900">{formatRevenue(total, unit)}</span>
-            {simulate && (
-              <span className="text-slate-500"> vs. {formatRevenue(simTotal, unit)} without</span>
-            )}
           </span>
         </div>
-      </div>
 
-      {simulate && (
-        <p className="mt-2 text-xs text-slate-500">
-          The pale bar is the same period with no battery at all: the PV that charged it is
-          exported instead, nothing is discharged, and direct consumption and neighbour sales carry
-          over unchanged since neither involves the battery. The gap between the bars is what the
-          battery {barUnit(unit) === "chf" ? "contributed" : "shifted"} —{" "}
-          <span className="font-medium text-slate-700">
-            {formatRevenue(total - simTotal, unit)}
-          </span>{" "}
-          over this range, which is the Battery revenue figure above.
-        </p>
-      )}
-
-      <div className="mt-3 h-72">
+        <div className="mt-3 h-72 xl:h-[26rem]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} barCategoryGap="20%">
+          {/* stackOffset="sign" is what puts a negative series below the axis
+              in the *same* column. The default runs a plain sum, so charging
+              was drawn hanging off the top of the positive stack instead. */}
+          <ComposedChart data={chartData} barCategoryGap="20%" stackOffset="sign">
+            <defs>
+              {/* The kWh stack sits beside the CHF one in identical colours,
+                  which made the pair unreadable. Hatching it keeps the colour
+                  meaning while separating money from energy at a glance. */}
+              {(Object.keys(REVENUE_COLORS) as Array<keyof typeof REVENUE_COLORS>).map((flow) => (
+                <pattern
+                  key={flow}
+                  id={`kwhHatch-${flow}`}
+                  patternUnits="userSpaceOnUse"
+                  width={5}
+                  height={5}
+                  patternTransform="rotate(45)"
+                >
+                  <rect width={5} height={5} fill="#ffffff" />
+                  <line x1={0} y1={0} x2={0} y2={5} stroke={REVENUE_COLORS[flow]} strokeWidth={3} />
+                </pattern>
+              ))}
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+            {/* The line the bars are measured from. Dashed and pale so it
+                marks the baseline without competing with the bars. */}
+            <ReferenceLine
+              yAxisId="bars"
+              y={0}
+              stroke="#cbd5e1"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={tickInterval} />
             <YAxis
               yAxisId="bars"
               tick={{ fontSize: 11 }}
-              tickFormatter={(v: number) => v.toFixed(0)}
-              width={barUnit(unit) === "kwh" ? 52 : 40}
+              tickFormatter={axisTick}
+              domain={axisDomains.left ?? ["auto", "auto"]}
+              ticks={ticksThroughZero(axisDomains.left)}
+              width={barUnit(unit) === "kwh" ? 56 : 52}
             />
             {(unit === "both" || (showProduction && barUnit(unit) === "chf")) && (
               <YAxis
                 yAxisId="kwh"
                 orientation="right"
                 tick={{ fontSize: 11, fill: "#64748b" }}
-                tickFormatter={(v: number) => v.toFixed(0)}
-                width={52}
+                tickFormatter={axisTick}
+                domain={axisDomains.right ?? ["auto", "auto"]}
+                ticks={ticksThroughZero(axisDomains.right)}
+                width={56}
               />
             )}
             <Tooltip
               content={
                 <RevenueTooltip
                   granularity={granularity}
-                  simulate={simulate}
                   unit={unit}
                   showProduction={showProduction}
                 />
@@ -865,17 +997,53 @@ function RevenueBreakdownChart({
               dataKey="consumption"
               name={names.consumption}
               stackId="revenue"
-              fill={REVENUE_COLORS.consumption}
+              fill={flowFill("consumption")}
+              stroke={flowStroke("consumption")}
+              strokeWidth={1}
               maxBarSize={barSize}
             />
-            <Bar yAxisId="bars" dataKey="direct" name={names.direct} stackId="revenue" fill={REVENUE_COLORS.direct} maxBarSize={barSize} />
-            <Bar yAxisId="bars" dataKey="battery" name={names.battery} stackId="revenue" fill={REVENUE_COLORS.battery} maxBarSize={barSize} />
+            <Bar
+              yAxisId="bars"
+              dataKey="direct"
+              name={names.direct}
+              stackId="revenue"
+              fill={flowFill("direct")}
+              stroke={flowStroke("direct")}
+              strokeWidth={1}
+              maxBarSize={barSize}
+            />
+            {/* The battery's gross contribution, drawn in two parts: what it
+                kept, and the slice charging cost takes back. Together they equal
+                the gross value, so the stack still sums to total savings — the
+                hatching just shows how much of it is not really yours. */}
+            <Bar
+              yAxisId="bars"
+              dataKey="battery"
+              name={names.battery}
+              stackId="revenue"
+              fill={flowFill("battery")}
+              stroke={flowStroke("battery")}
+              strokeWidth={1}
+              maxBarSize={barSize}
+            />
+            {barUnit(unit) === "chf" && (
+              <Bar
+                yAxisId="bars"
+                dataKey="batteryChargingChf"
+                name="Battery charging (cost)"
+                stackId="revenue"
+                fill={BATTERY_CHARGING_COLOR}
+                maxBarSize={barSize}
+              />
+            )}
             <Bar
               yAxisId="bars"
               dataKey="neighbor"
               name={names.neighbor}
               stackId="revenue"
-              fill={REVENUE_COLORS.neighbor}
+              fill={flowFill("neighbor")}
+              stroke={flowStroke("neighbor")}
+              strokeWidth={1}
               maxBarSize={barSize}
               radius={[4, 4, 0, 0]}
             />
@@ -891,7 +1059,9 @@ function RevenueBreakdownChart({
                   dataKey={`${flow}Kwh`}
                   name={`${names[flow]} (kWh)`}
                   stackId="energy"
-                  fill={REVENUE_COLORS[flow]}
+                  fill={`url(#kwhHatch-${flow})`}
+                  stroke={REVENUE_COLORS[flow]}
+                  strokeWidth={1}
                   maxBarSize={barSize}
                   legendType="none"
                   radius={i === 3 ? [4, 4, 0, 0] : undefined}
@@ -910,45 +1080,11 @@ function RevenueBreakdownChart({
                 dot={false}
               />
             )}
-            {simulate && (
-              <>
-                <Bar
-                  yAxisId="bars"
-                  dataKey="simConsumption"
-                  name={`${names.consumption} (no battery)`}
-                  stackId="sim"
-                  fill={REVENUE_COLORS.consumption}
-                  fillOpacity={0.4}
-                  maxBarSize={barSize}
-                  legendType="none"
-                />
-                <Bar
-                  yAxisId="bars"
-                  dataKey="simDirect"
-                  name={`${names.direct} (no battery)`}
-                  stackId="sim"
-                  fill={REVENUE_COLORS.direct}
-                  fillOpacity={0.4}
-                  maxBarSize={barSize}
-                  legendType="none"
-                />
-                <Bar
-                  yAxisId="bars"
-                  dataKey="simNeighbor"
-                  name={`${names.neighbor} (no battery)`}
-                  stackId="sim"
-                  fill={REVENUE_COLORS.neighbor}
-                  fillOpacity={0.4}
-                  maxBarSize={barSize}
-                  legendType="none"
-                  radius={[4, 4, 0, 0]}
-                />
-              </>
-            )}
-          </ComposedChart>
-        </ResponsiveContainer>
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -978,9 +1114,11 @@ function RangeControls({
     setPreset(id);
     const found = RANGE_PRESETS.find((p) => p.id === id);
     if (!found) return;
-    // Snap to the view the preset asks for, not the one currently active.
-    const g = found.granularity ?? granularity;
-    onRange(snapRange(found.resolve(dataRange), g), found.granularity);
+    // Hand over the raw range: the caller clamps it to the available data
+    // before snapping, which matters for presets that run into the future.
+    // Snapping here instead anchored the hourly window to a month end that was
+    // then clamped back to today, collapsing the range to a single day.
+    onRange(found.resolve(dataRange), found.granularity);
   };
   const setCustom = (next: { from: string; to: string }, anchor: "from" | "to" = "to") => {
     setPreset("custom");
@@ -1009,7 +1147,7 @@ function RangeControls({
     <div className="flex flex-wrap items-end gap-3 text-sm">
       <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
         Period
-        <select className="input" value={preset} onChange={(e) => applyPreset(e.target.value)}>
+        <select className="input w-36" value={preset} onChange={(e) => applyPreset(e.target.value)}>
           {RANGE_PRESETS.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
@@ -1025,7 +1163,7 @@ function RangeControls({
             From
             <input
               type="date"
-              className="input"
+              className="input w-36"
               value={range.from}
               min={bounds.min ?? undefined}
               max={range.to}
@@ -1036,7 +1174,7 @@ function RangeControls({
             To
             <input
               type="date"
-              className="input"
+              className="input w-36"
               value={range.to}
               min={range.from}
               max={bounds.max}
@@ -1052,7 +1190,7 @@ function RangeControls({
             From
             <input
               type="month"
-              className="input"
+              className="input w-36"
               value={range.from.slice(0, 7)}
               onChange={(e) => setCustom({ ...range, from: `${e.target.value}-01` })}
             />
@@ -1061,7 +1199,7 @@ function RangeControls({
             To
             <input
               type="month"
-              className="input"
+              className="input w-36"
               value={range.to.slice(0, 7)}
               onChange={(e) => setCustom({ ...range, to: endOfMonth(`${e.target.value}-01`) })}
             />
@@ -1074,7 +1212,7 @@ function RangeControls({
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
             From
             <select
-              className="input"
+              className="input w-36"
               value={quarterKeyOf(range.from)}
               onChange={(e) =>
                 setCustom({ ...range, from: startOfQuarter(quarterKeyToDate(e.target.value)) })
@@ -1090,7 +1228,7 @@ function RangeControls({
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
             To
             <select
-              className="input"
+              className="input w-36"
               value={quarterKeyOf(range.to)}
               onChange={(e) =>
                 setCustom({ ...range, to: endOfQuarter(quarterKeyToDate(e.target.value)) })
@@ -1111,7 +1249,7 @@ function RangeControls({
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
             From
             <select
-              className="input"
+              className="input w-36"
               value={range.from.slice(0, 4)}
               onChange={(e) => setCustom({ ...range, from: `${e.target.value}-01-01` })}
             >
@@ -1125,7 +1263,7 @@ function RangeControls({
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
             To
             <select
-              className="input"
+              className="input w-36"
               value={range.to.slice(0, 4)}
               onChange={(e) => setCustom({ ...range, to: `${e.target.value}-12-31` })}
             >
@@ -1142,14 +1280,29 @@ function RangeControls({
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value?: number; sub?: string }) {
+function StatCard({
+  label,
+  value,
+  sub,
+  hint,
+}: {
+  label: string;
+  value?: number;
+  sub?: string;
+  /** One line saying what the figure actually measures, for the cards whose
+   * names alone don't separate them (battery savings vs battery revenue). */
+  hint?: string;
+}) {
   return (
     <div className="rounded-lg border bg-white p-4">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="text-xs font-medium text-slate-500" title={hint}>
+        {label}
+      </p>
       <p className="mt-1 text-2xl font-semibold text-slate-900">
         {value != null ? `CHF ${value.toFixed(2)}` : "—"}
       </p>
       {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
+      {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
     </div>
   );
 }

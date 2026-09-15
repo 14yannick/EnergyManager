@@ -323,7 +323,7 @@ function SyncSection({ siteId }: { siteId: string }) {
 
 /**
  * Investment totals, as two numbers rather than the itemised list on the
- * Investment costs page. Each input maps to the single cost item of that
+ * itemised list. Each input maps to the single cost item of that
  * category; if a category has several (separate invoices, a subsidy booked
  * separately) editing here would be ambiguous, so the field goes read-only and
  * points at the full page instead.
@@ -381,12 +381,13 @@ function InvestmentSection({ siteId }: { siteId: string }) {
       <div>
         <h2 className="text-sm font-medium text-slate-700">Investment</h2>
         <p className="text-xs text-slate-500">
-          What the system cost, used for payback and breakeven. Enter subsidies and tax reductions
-          as negative amounts on the Investment costs page.
+          What the system cost, used for payback and breakeven. One figure per category; a
+          category holding several entries (a subsidy booked separately, say) shows its total
+          read-only rather than guessing which one to change.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:max-w-4xl">
         {([
           ["battery", "Battery", battery],
           ["solar", "Solar", solar],
@@ -411,7 +412,7 @@ function InvestmentSection({ siteId }: { siteId: string }) {
               <>
                 <p className="mt-1 text-lg text-slate-700">CHF {row.total.toFixed(2)}</p>
                 <p className="mt-1 text-xs text-slate-400">
-                  {row.matching.length} items — edit on the Investment costs page
+                  {row.matching.length} separate items — shown as a total, not editable here
                 </p>
               </>
             )}

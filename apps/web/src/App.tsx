@@ -1,7 +1,7 @@
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TariffPeriodsPage } from "./pages/TariffPeriodsPage";
-import { CostItemsPage } from "./pages/CostItemsPage";
+import { CalculationDetailPage } from "./pages/CalculationDetailPage";
 import { ReadingsImportPage } from "./pages/ReadingsImportPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { BillingPage } from "./pages/BillingPage";
@@ -15,7 +15,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-4 px-4 py-3 lg:px-8">
           <span className="text-lg font-semibold text-slate-900">EnergyManager</span>
           <nav className="flex gap-1">
             <NavLink to="/" end className={navLinkClass}>
@@ -24,8 +24,8 @@ export function App() {
             <NavLink to="/tariff-periods" className={navLinkClass}>
               Tariff periods
             </NavLink>
-            <NavLink to="/cost-items" className={navLinkClass}>
-              Investment costs
+            <NavLink to="/calculation" className={navLinkClass}>
+              Calculation detail
             </NavLink>
             <NavLink to="/readings" className={navLinkClass}>
               Import readings
@@ -40,11 +40,13 @@ export function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className="mx-auto max-w-[1600px] px-4 py-6 lg:px-8">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/tariff-periods" element={<TariffPeriodsPage />} />
-          <Route path="/cost-items" element={<CostItemsPage />} />
+          <Route path="/calculation" element={<CalculationDetailPage />} />
+          {/* Investment costs moved into Settings; keep old links working. */}
+          <Route path="/cost-items" element={<Navigate to="/settings" replace />} />
           <Route path="/readings" element={<ReadingsImportPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/billing" element={<BillingPage />} />
