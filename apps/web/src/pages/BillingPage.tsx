@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   BillingAllocation,
   BillingCategory,
+  BillingPeriodKind,
+  BillingRange,
   GridTariffPosition,
   InvoiceLine,
   ParticipantInvoice,
 } from "@energy-manager/shared";
+import { billingPeriodLabel, billingPeriodRange } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useDefaultSite } from "../lib/useDefaultSite";
 
@@ -53,14 +56,13 @@ function groupByValidity(positions: GridTariffPosition[]) {
     .sort((a, b) => b.validFrom.localeCompare(a.validFrom));
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-function monthsAgo(n: number) {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n);
-  return d.toISOString().slice(0, 10);
-}
+const PERIOD_LABELS: Record<BillingPeriodKind, string> = {
+  yearly: "Année",
+  quarterly: "Trimestre",
+  monthly: "Mois",
+  custom: "Personnalisé",
+};
+const PERIOD_ORDER: BillingPeriodKind[] = ["yearly", "quarterly", "monthly", "custom"];
 
 export function BillingPage() {
   const { site } = useDefaultSite();
@@ -275,9 +277,37 @@ function PositionsSection({ siteId }: { siteId: string }) {
 }
 
 function InvoiceSection({ siteId }: { siteId: string }) {
-  const [from, setFrom] = useState(() => monthsAgo(3));
-  const [to, setTo] = useState(today);
-  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  // Billing is retrospective: you invoice a period once it has finished, so
+  // the useful default is the previous one rather than the current, partial
+  // one. Offset 0 is the period we are in, -1 the one before it.
+  const [kind, setKind] = useState<BillingPeriodKind>("quarterly");
+  const [offset, setOffset] = useState(-1);
+
+  const seed = useMemo(() => billingPeriodRange("custom", 0), []);
+  const [customFrom, setCustomFrom] = useState(seed.from);
+  const [customTo, setCustomTo] = useState(seed.to);
+  const [customRange, setCustomRange] = useState<BillingRange | null>(null);
+
+  // A calendar period resolves on its own; a custom one waits for the button,
+  // so that typing into a date field doesn't fire an invoice run per keystroke.
+  const range: BillingRange | null =
+    kind === "custom" ? customRange : billingPeriodRange(kind, offset);
+
+  const switchKind = (next: BillingPeriodKind) => {
+    if (next === "custom") {
+      // Carry the dates across so the view doesn't blank out on the switch —
+      // you land on the same range you were looking at, ready to adjust.
+      const current = range ?? seed;
+      setCustomFrom(current.from);
+      setCustomTo(current.to);
+      setCustomRange(current);
+    }
+    setKind(next);
+    // Always land on "the previous one" rather than translating the old
+    // offset into the new unit, where -5 quarters would silently become
+    // 5 months.
+    setOffset(-1);
+  };
 
   const invoicesQuery = useQuery({
     queryKey: ["billing-invoices", siteId, range?.from, range?.to],
@@ -289,19 +319,77 @@ function InvoiceSection({ siteId }: { siteId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4 print:hidden">
-        <Field label="Du">
-          <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <Field label="Période">
+          <select
+            className="input w-36"
+            value={kind}
+            onChange={(e) => switchKind(e.target.value as BillingPeriodKind)}
+          >
+            {PERIOD_ORDER.map((k) => (
+              <option key={k} value={k}>
+                {PERIOD_LABELS[k]}
+              </option>
+            ))}
+          </select>
         </Field>
-        <Field label="Au">
-          <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
-        </Field>
-        <button
-          onClick={() => setRange({ from, to })}
-          disabled={from > to}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          Générer les factures
-        </button>
+
+        {kind === "custom" ? (
+          <>
+            <Field label="Du">
+              <input
+                type="date"
+                className="input"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+              />
+            </Field>
+            <Field label="Au">
+              <input
+                type="date"
+                className="input"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+              />
+            </Field>
+            <button
+              onClick={() => setCustomRange({ from: customFrom, to: customTo })}
+              disabled={customFrom > customTo}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              Générer les factures
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center gap-1 pb-0.5">
+            <button
+              onClick={() => setOffset(offset - 1)}
+              aria-label="Période précédente"
+              className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              ‹
+            </button>
+            <span className="min-w-36 text-center text-sm font-medium text-slate-900">
+              {billingPeriodLabel(kind, offset)}
+            </span>
+            <button
+              onClick={() => setOffset(offset + 1)}
+              // Nothing to invoice in a period that hasn't started. The
+              // current one is reachable, and is deliberately the limit.
+              disabled={offset >= 0}
+              aria-label="Période suivante"
+              className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+            >
+              ›
+            </button>
+          </div>
+        )}
+
+        {range && (
+          <span className="pb-2 text-sm text-slate-500">
+            {localDate(range.from)} – {localDate(range.to)}
+          </span>
+        )}
+
         {result && result.invoices.length > 0 && (
           <button
             onClick={() => window.print()}
