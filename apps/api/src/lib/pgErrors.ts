@@ -23,3 +23,20 @@ export function isExclusionViolation(err: unknown): boolean {
 export function isUniqueViolation(err: unknown): boolean {
   return code(err) === "23505" || code(cause(err)) === "23505";
 }
+
+function constraintOf(err: unknown): string | undefined {
+  const pick = (e: unknown) =>
+    typeof e === "object" && e !== null && "constraint_name" in e
+      ? (e as { constraint_name?: string }).constraint_name
+      : undefined;
+  return pick(err) ?? pick(cause(err));
+}
+
+/**
+ * Which unique index a violation came from, so a route can tell "that name is
+ * taken" from "there is already an operator" — two conditions that otherwise
+ * arrive as the same SQLSTATE and would report the wrong message.
+ */
+export function violatedConstraint(err: unknown, name: string): boolean {
+  return isUniqueViolation(err) && constraintOf(err) === name;
+}

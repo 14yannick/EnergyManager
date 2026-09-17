@@ -14,7 +14,9 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 export function App() {
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
+      {/* Kept out of print: the billing page prints participant invoices,
+          and a nav bar on a document that goes to a neighbour is noise. */}
+      <header className="border-b bg-white print:hidden">
         <div className="mx-auto flex max-w-[1600px] items-center gap-4 px-4 py-3 lg:px-8">
           <span className="text-lg font-semibold text-slate-900">EnergyManager</span>
           <nav className="flex gap-1">

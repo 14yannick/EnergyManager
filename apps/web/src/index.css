@@ -7,3 +7,70 @@
     @apply rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-slate-500 focus:outline-none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Printing participant invoices.
+
+   Two sheets per participant: the itemisation, then the RCP comparison with
+   the payment part flush against the bottom edge — which is where the
+   perforation is on QR-bill paper, and where a payer expects to tear.
+
+   The page margin is zero on purpose. A Swiss QR-bill payment part is exactly
+   210 x 105 mm and must print at that size: a default page margin scales the
+   sheet down to fit, shrinking the QR code below the 46 mm the specification
+   fixes it at and risking scanners failing on it. Padding moves onto the
+   content instead, so only the payment part touches the paper edge.
+--------------------------------------------------------------------------- */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  /* The app's own chrome. Any padding or max-width here offsets every sheet
+     below it, and an offset sheet of exactly one page height spills onto the
+     next — which is how two sheets per participant became four. */
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  /* The wrapper holding the invoice sheets. `space-y-6` on the page puts a
+     margin above it, which offsets every sheet below — and an offset sheet of
+     exactly one page height spills onto the next. */
+  .print-invoices {
+    margin: 0 !important;
+  }
+
+  /* One printed sheet: a column, so the payment part can be pushed to the
+     bottom of it. */
+  .print-sheet {
+    display: flex;
+    flex-direction: column;
+    min-height: 297mm;
+    break-after: page;
+    /* `space-y-*` on the surrounding wrappers would offset each sheet. */
+    margin: 0 !important;
+  }
+  /* The on-screen gap between a sheet's children isn't wanted on paper, and
+     the app's grey page background would otherwise print as a band across the
+     empty space above the payment part. */
+  .print-sheet {
+    gap: 0;
+    background: #fff;
+  }
+  /* No trailing blank sheet after the final participant. */
+  .print-sheet:last-child {
+    break-after: auto;
+  }
+
+  .print-body {
+    padding: 12mm;
+  }
+
+  /* Pinned to the bottom of its sheet, and never padded, so the 210 mm width
+     and the tear line land exactly on the paper edges. */
+  .print-payment {
+    margin-top: auto;
+  }
+}

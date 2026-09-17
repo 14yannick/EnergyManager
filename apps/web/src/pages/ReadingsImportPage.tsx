@@ -219,7 +219,20 @@ function ExportSection({ siteId }: { siteId: string }) {
   );
 }
 
-const EMPTY_PARTY = { reference: "", name: "", emails: "" };
+const EMPTY_PARTY = {
+  reference: "",
+  name: "",
+  emails: "",
+  // Postal address, for the QR-bill's "payable by" half.
+  address: "",
+  buildingNumber: "",
+  zip: "",
+  city: "",
+  // The operator is the party that bills the others; their IBAN is what the
+  // QR-bill is payable to.
+  isOperator: false,
+  iban: "",
+};
 
 /** One address per line, or comma-separated — whichever the user finds natural. */
 function parseEmails(raw: string): string[] {
@@ -249,6 +262,12 @@ function PartiesSection({ siteId }: { siteId: string }) {
     name: v.name.trim(),
     reference: v.reference.trim(),
     emails: parseEmails(v.emails),
+    address: v.address.trim(),
+    buildingNumber: v.buildingNumber.trim(),
+    zip: v.zip.trim(),
+    city: v.city.trim(),
+    isOperator: v.isOperator,
+    iban: v.iban.trim(),
   });
 
   const createMutation = useMutation({
@@ -283,7 +302,10 @@ function PartiesSection({ siteId }: { siteId: string }) {
         <p className="mt-1 text-xs text-slate-500">
           The neighbours sharing your grid connection. Their consumption is billed separately and
           they count towards the pool size. New names in an imported CSV are added here
-          automatically, without a reference or email — fill those in afterwards.
+          automatically, without a reference or email — fill those in afterwards. The postal
+          address is what the QR-bill prints as the payer; an invoice still works without it, just
+          with an empty box for them to complete. Mark yourself as the RCP operator and add your
+          IBAN — that is the account the QR-bill is payable to.
         </p>
       </div>
 
@@ -314,6 +336,42 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Street
+          <input
+            type="text"
+            className="input w-48"
+            value={draft.address}
+            onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          No.
+          <input
+            type="text"
+            className="input w-16"
+            value={draft.buildingNumber}
+            onChange={(e) => setDraft({ ...draft, buildingNumber: e.target.value })}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Postcode
+          <input
+            type="text"
+            className="input w-20"
+            value={draft.zip}
+            onChange={(e) => setDraft({ ...draft, zip: e.target.value })}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Town
+          <input
+            type="text"
+            className="input w-40"
+            value={draft.city}
+            onChange={(e) => setDraft({ ...draft, city: e.target.value })}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
           Emails (one per line or comma-separated)
           <textarea
             rows={2}
@@ -321,6 +379,23 @@ function PartiesSection({ siteId }: { siteId: string }) {
             value={draft.emails}
             onChange={(e) => setDraft({ ...draft, emails: e.target.value })}
           />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          IBAN (operator only)
+          <input
+            type="text"
+            className="input w-56"
+            value={draft.iban}
+            onChange={(e) => setDraft({ ...draft, iban: e.target.value })}
+          />
+        </label>
+        <label className="flex items-center gap-2 pb-2 text-xs font-medium text-slate-600">
+          <input
+            type="checkbox"
+            checked={draft.isOperator}
+            onChange={(e) => setDraft({ ...draft, isOperator: e.target.checked })}
+          />
+          RCP operator
         </label>
         <button
           type="submit"
@@ -337,7 +412,9 @@ function PartiesSection({ siteId }: { siteId: string }) {
           <tr>
             <th className="py-1 pr-3 font-medium">No.</th>
             <th className="py-1 pr-3 font-medium">Name</th>
+            <th className="py-1 pr-3 font-medium">Address</th>
             <th className="py-1 pr-3 font-medium">Emails</th>
+            <th className="py-1 pr-3 font-medium">Role / IBAN</th>
             <th className="py-1" />
           </tr>
         </thead>
@@ -370,6 +447,44 @@ function PartiesSection({ siteId }: { siteId: string }) {
                 </td>
                 <td className="py-2 pr-3">
                   {isEditing ? (
+                    <div className="flex flex-wrap gap-1">
+                      <input
+                        className="input w-36"
+                        placeholder="Street"
+                        value={edit.address}
+                        onChange={(e) => setEdit({ ...edit, address: e.target.value })}
+                      />
+                      <input
+                        className="input w-14"
+                        placeholder="No."
+                        value={edit.buildingNumber}
+                        onChange={(e) => setEdit({ ...edit, buildingNumber: e.target.value })}
+                      />
+                      <input
+                        className="input w-20"
+                        placeholder="NPA"
+                        value={edit.zip}
+                        onChange={(e) => setEdit({ ...edit, zip: e.target.value })}
+                      />
+                      <input
+                        className="input w-32"
+                        placeholder="Town"
+                        value={edit.city}
+                        onChange={(e) => setEdit({ ...edit, city: e.target.value })}
+                      />
+                    </div>
+                  ) : p.address || p.city ? (
+                    <span className="text-slate-600">
+                      {[p.address, p.buildingNumber].filter(Boolean).join(" ")}
+                      {(p.address || p.buildingNumber) && (p.zip || p.city) ? ", " : ""}
+                      {[p.zip, p.city].filter(Boolean).join(" ")}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">no address</span>
+                  )}
+                </td>
+                <td className="py-2 pr-3">
+                  {isEditing ? (
                     <textarea
                       rows={2}
                       className="input w-80"
@@ -386,6 +501,35 @@ function PartiesSection({ siteId }: { siteId: string }) {
                     </ul>
                   ) : (
                     <span className="text-slate-400">no email</span>
+                  )}
+                </td>
+                <td className="py-2 pr-3">
+                  {isEditing ? (
+                    <div className="flex flex-col gap-1">
+                      <label className="flex items-center gap-2 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={edit.isOperator}
+                          onChange={(e) => setEdit({ ...edit, isOperator: e.target.checked })}
+                        />
+                        RCP operator
+                      </label>
+                      <input
+                        className="input w-52"
+                        placeholder="IBAN"
+                        value={edit.iban}
+                        onChange={(e) => setEdit({ ...edit, iban: e.target.value })}
+                      />
+                    </div>
+                  ) : p.isOperator ? (
+                    <span className="text-slate-900">
+                      operator
+                      <span className="ml-2 font-mono text-xs text-slate-500">
+                        {p.iban ?? "no IBAN"}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">participant</span>
                   )}
                 </td>
                 <td className="py-2 text-right whitespace-nowrap">
@@ -412,6 +556,12 @@ function PartiesSection({ siteId }: { siteId: string }) {
                             reference: p.reference ?? "",
                             name: p.name,
                             emails: p.emails.join("\n"),
+                            address: p.address ?? "",
+                            buildingNumber: p.buildingNumber ?? "",
+                            zip: p.zip ?? "",
+                            city: p.city ?? "",
+                            isOperator: p.isOperator,
+                            iban: p.iban ?? "",
                           });
                         }}
                         className="mr-3 text-slate-500 hover:text-slate-900"

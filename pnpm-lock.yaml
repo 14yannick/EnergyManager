@@ -99,6 +99,9 @@ importers:
       recharts:
         specifier: ^2.13.0
         version: 2.15.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      swissqrbill:
+        specifier: ^4.4.1
+        version: 4.4.1(typescript@5.9.3)
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -2541,6 +2544,21 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
+  svg-engine@0.3.0:
+    resolution: {integrity: sha512-s172jAcwfoCcvM/6DwNBvmWN3brztHGFENCR+RU3CBJKeBxPrRlTltVxX1Je5hst782QgP8PM6U37vUR/RhPng==}
+
+  swissqrbill@4.4.1:
+    resolution: {integrity: sha512-iDz+1F1trXoyUhnNWg7F4D1mmJ+0MM0JUtkTGenQw7nQGaQrHjYdEcJBkevN170B/oSNKJvpTeH92+dHGvFRnQ==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      pdfkit: '>=0.13.0'
+      typescript: '>=4.7.0'
+    peerDependenciesMeta:
+      pdfkit:
+        optional: true
+      typescript:
+        optional: true
+
   tailwindcss@3.4.19:
     resolution: {integrity: sha512-3ofp+LL8E+pK/JuPLPggVAIaEuhvIz4qNcf3nA1Xn2o/7fb7s/TYpHhwGDv1ZU3PkBluUVaF8PyCHcm48cKLWQ==}
     engines: {node: '>=14.0.0'}
@@ -4879,6 +4897,14 @@ snapshots:
       has-flag: 4.0.0
 
   supports-preserve-symlinks-flag@1.0.0: {}
+
+  svg-engine@0.3.0: {}
+
+  swissqrbill@4.4.1(typescript@5.9.3):
+    dependencies:
+      svg-engine: 0.3.0
+    optionalDependencies:
+      typescript: 5.9.3
 
   tailwindcss@3.4.19(tsx@4.23.12):
     dependencies:

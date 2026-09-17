@@ -189,8 +189,20 @@ export async function runInvoices(
     usageByParty.set(row.partyId, entry);
   }
 
-  const participantCount = participants.length + 1; // + the operator
-  const invoices = participants.map((party) => {
+  // The operator shares the connection and so counts towards how `pool_shared`
+  // positions divide, but is never invoiced — you don't bill yourself.
+  //
+  // Historically the operator was not a party at all and this was
+  // `participants.length + 1`. Now that they can be one (flagged
+  // `isOperator`), adding the constant as well would count them twice and
+  // under-charge everyone. Fall back to the old `+ 1` only while no party
+  // carries the flag, so an install that hasn't been updated bills the same
+  // as before.
+  const operator = participants.find((p) => p.isOperator);
+  const billable = participants.filter((p) => !p.isOperator);
+  const participantCount = participants.length + (operator ? 0 : 1);
+
+  const invoices = billable.map((party) => {
     const usage = usageByParty.get(party.id) ?? { grid: 0, local: 0 };
     const participantUsage: ParticipantUsage = {
       partyId: party.id,
@@ -210,7 +222,7 @@ export async function runInvoices(
     });
   });
 
-  if (participants.length === 0) {
+  if (billable.length === 0) {
     warnings.push("No participants defined yet — add the neighbours sharing your connection.");
   } else if (usageByParty.size === 0) {
     warnings.push("No per-participant consumption recorded for this period.");

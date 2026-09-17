@@ -57,6 +57,17 @@ export const tariffSurchargeInputSchema = z
 export type TariffSurchargeInput = z.infer<typeof tariffSurchargeInputSchema>;
 
 /** Only the fields a user can change; name and timezone are fixed for now. */
+/**
+ * An IBAN as typed, with the spaces people naturally add stripped. Only the
+ * shape is checked here; the QR-bill library validates the checksum and
+ * decides whether it is a QR-IBAN.
+ */
+const ibanish = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/\s+/g, "").toUpperCase())
+  .refine((v) => /^[A-Z]{2}[0-9A-Z]{13,32}$/.test(v), "Not a valid IBAN");
+
 export const siteUpdateInputSchema = z.object({
   productionStartDate: optionalWhenBlank(isoDate).nullable(),
   // A fraction, not a percentage — the form divides before sending.
@@ -127,6 +138,16 @@ export const partyInputSchema = z.object({
   // Each address is validated individually so one typo names itself rather
   // than rejecting the whole list.
   emails: z.array(z.string().trim().email("Not a valid email address")).max(10).optional().default([]),
+  // Postal address for the QR-bill. Lengths follow the QR-bill field limits.
+  address: optionalWhenBlank(z.string().trim().max(70)).nullable(),
+  buildingNumber: optionalWhenBlank(z.string().trim().max(16)).nullable(),
+  zip: optionalWhenBlank(z.string().trim().max(16)).nullable(),
+  city: optionalWhenBlank(z.string().trim().max(35)).nullable(),
+  country: optionalWhenBlank(z.string().trim().length(2).toUpperCase()),
+  /** Marks this party as the RCP operator; the DB permits only one per site. */
+  isOperator: z.boolean().optional(),
+  /** Payable-to account for the QR-bill. Only read for the operator. */
+  iban: optionalWhenBlank(ibanish).nullable(),
 });
 export type PartyInput = z.infer<typeof partyInputSchema>;
 

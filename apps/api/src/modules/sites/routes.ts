@@ -31,13 +31,19 @@ export async function siteRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: "invalid_input", issues: parsed.error.issues });
     }
+    // Only fields the request actually carried are written, so the Settings
+    // page can save one section without blanking another. `productionStartDate`
+    // keeps its old behaviour of being cleared by an absent value, because its
+    // input sends an empty string to mean "not stated".
+    const d = parsed.data;
+    const set = <K extends string, V>(key: K, value: V | undefined) =>
+      value === undefined ? {} : ({ [key]: value } as Record<K, V>);
+
     const [row] = await db
       .update(sites)
       .set({
-        productionStartDate: parsed.data.productionStartDate ?? null,
-        ...(parsed.data.batteryConversionLoss !== undefined
-          ? { batteryConversionLoss: String(parsed.data.batteryConversionLoss) }
-          : {}),
+        productionStartDate: d.productionStartDate ?? null,
+        ...set("batteryConversionLoss", d.batteryConversionLoss?.toString()),
         updatedAt: new Date(),
       })
       .where(eq(sites.id, req.params.id))

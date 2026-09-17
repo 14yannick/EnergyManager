@@ -114,6 +114,20 @@ export interface Party {
   name: string;
   /** Contact addresses; a household can have several. */
   emails: string[];
+  /** Postal address for the QR-bill's "payable by" half. */
+  address: string | null;
+  buildingNumber: string | null;
+  zip: string | null;
+  city: string | null;
+  country: string;
+  /**
+   * True for the party that runs the RCP and issues the invoices. At most one
+   * per site. They are still a party, because they consume from the same
+   * connection — the flag only places them on the creditor side.
+   */
+  isOperator: boolean;
+  /** Account the QR-bill is payable to. Only meaningful on the operator. */
+  iban: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -127,6 +127,20 @@
       "when": 1789422353257,
       "tag": "0017_cynical_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789677637290,
+      "tag": "0018_short_abomination",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789678093201,
+      "tag": "0019_dapper_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

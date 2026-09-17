@@ -8,10 +8,13 @@ import type {
   GridTariffPosition,
   InvoiceLine,
   ParticipantInvoice,
+  Party,
+  Site,
 } from "@energy-manager/shared";
-import { billingPeriodLabel, billingPeriodRange } from "@energy-manager/shared";
+import { billingPeriodLabel, billingPeriodRange, toDateString } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useDefaultSite } from "../lib/useDefaultSite";
+import { QrBill } from "../components/QrBill";
 
 const CATEGORY_LABELS: Record<BillingCategory, string> = {
   energie: "Énergie",
@@ -64,6 +67,12 @@ const PERIOD_LABELS: Record<BillingPeriodKind, string> = {
 };
 const PERIOD_ORDER: BillingPeriodKind[] = ["yearly", "quarterly", "monthly", "custom"];
 
+/** Today as a local "YYYY-MM-DD", for comparing against a period's bounds. */
+function todayLocal(): string {
+  const d = new Date();
+  return toDateString(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
 export function BillingPage() {
   const { site } = useDefaultSite();
   if (!site) return <p className="text-slate-500">Loading…</p>;
@@ -79,7 +88,7 @@ export function BillingPage() {
         </p>
       </div>
       <PositionsSection siteId={site.id} />
-      <InvoiceSection siteId={site.id} />
+      <InvoiceSection site={site} />
     </div>
   );
 }
@@ -276,7 +285,8 @@ function PositionsSection({ siteId }: { siteId: string }) {
   );
 }
 
-function InvoiceSection({ siteId }: { siteId: string }) {
+function InvoiceSection({ site }: { site: Site }) {
+  const siteId = site.id;
   // Billing is retrospective: you invoice a period once it has finished, so
   // the useful default is the previous one rather than the current, partial
   // one. Offset 0 is the period we are in, -1 the one before it.
@@ -309,6 +319,14 @@ function InvoiceSection({ siteId }: { siteId: string }) {
     setOffset(-1);
   };
 
+  const partiesQuery = useQuery({
+    queryKey: ["parties", siteId],
+    queryFn: () => api.parties.list(siteId),
+  });
+  const parties: Party[] = partiesQuery.data ?? [];
+  const partyById = new Map(parties.map((p) => [p.id, p]));
+  const operator = parties.find((p) => p.isOperator);
+
   const invoicesQuery = useQuery({
     queryKey: ["billing-invoices", siteId, range?.from, range?.to],
     queryFn: () => api.billing.invoices(siteId, range!.from, range!.to),
@@ -317,7 +335,7 @@ function InvoiceSection({ siteId }: { siteId: string }) {
   const result = invoicesQuery.data;
 
   return (
-    <div className="space-y-4">
+    <div className="print-invoices space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4 print:hidden">
         <Field label="Période">
           <select
@@ -373,11 +391,8 @@ function InvoiceSection({ siteId }: { siteId: string }) {
             </span>
             <button
               onClick={() => setOffset(offset + 1)}
-              // Nothing to invoice in a period that hasn't started. The
-              // current one is reachable, and is deliberately the limit.
-              disabled={offset >= 0}
               aria-label="Période suivante"
-              className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               ›
             </button>
@@ -387,6 +402,14 @@ function InvoiceSection({ siteId }: { siteId: string }) {
         {range && (
           <span className="pb-2 text-sm text-slate-500">
             {localDate(range.from)} – {localDate(range.to)}
+            {/* Periods ahead of today are selectable — handy for checking how
+                the fixed positions bill before the energy exists. Say so, so
+                that missing consumption doesn't read as a fault. */}
+            {range.from > todayLocal() ? (
+              <span className="ml-2 text-amber-700">· période à venir</span>
+            ) : range.to > todayLocal() ? (
+              <span className="ml-2 text-amber-700">· période en cours</span>
+            ) : null}
           </span>
         )}
 
@@ -414,14 +437,27 @@ function InvoiceSection({ siteId }: { siteId: string }) {
       ))}
 
       {result?.invoices.map((inv) => (
-        <InvoiceDocument key={inv.partyId ?? inv.partyName} invoice={inv} />
+        <InvoiceDocument
+          key={inv.partyId ?? inv.partyName}
+          invoice={inv}
+          operator={operator}
+          party={inv.partyId ? partyById.get(inv.partyId) : undefined}
+        />
       ))}
     </div>
   );
 }
 
 /** Page one mirrors the provider's layout; page two is the VZEV comparison. */
-function InvoiceDocument({ invoice }: { invoice: ParticipantInvoice }) {
+function InvoiceDocument({
+  invoice,
+  operator,
+  party,
+}: {
+  invoice: ParticipantInvoice;
+  operator?: Party;
+  party?: Party;
+}) {
   const grouped = CATEGORY_ORDER.map((category) => ({
     category,
     lines: invoice.lines.filter((l) => l.category === category),
@@ -429,7 +465,7 @@ function InvoiceDocument({ invoice }: { invoice: ParticipantInvoice }) {
 
   return (
     <>
-      <section className="rounded-lg border bg-white p-6 print:break-after-page print:border-0">
+      <section className="print-sheet print-body rounded-lg border bg-white p-6 print:border-0">
         <header className="mb-4 border-b pb-3">
           <h2 className="text-lg font-semibold text-slate-900">{invoice.partyName}</h2>
           {invoice.partyReference && (
@@ -465,7 +501,12 @@ function InvoiceDocument({ invoice }: { invoice: ParticipantInvoice }) {
         </p>
       </section>
 
-      <section className="rounded-lg border bg-white p-6 print:break-after-page print:border-0">
+      {/* `gap`, not `space-y`: space-y works by putting a margin-top on every
+          child but the first, and Tailwind's selector for it outranks the
+          `margin-top: auto` that pins the payment part to the foot of the
+          printed sheet. A gap creates no margins to compete with. */}
+      <div className="print-sheet flex flex-col gap-4">
+        <section className="print-body rounded-lg border bg-white p-6 print:border-0">
         <header className="mb-4 border-b pb-3">
           <h2 className="text-lg font-semibold text-slate-900">
             Votre avantage dans le RCP — {invoice.partyName}
@@ -507,6 +548,14 @@ function InvoiceDocument({ invoice }: { invoice: ParticipantInvoice }) {
           {invoice.localKwh.toFixed(1)} kWh provenaient de la production locale plutôt que du réseau.
         </p>
       </section>
+
+      {/* The payment part shares this sheet with the comparison and is pinned
+          to its bottom edge, where the tear line is.
+
+          Skipped on the operator's own invoice — a slip payable from and to
+          the same account is meaningless. */}
+      {!party?.isOperator && <QrBill operator={operator} invoice={invoice} party={party} />}
+      </div>
     </>
   );
 }

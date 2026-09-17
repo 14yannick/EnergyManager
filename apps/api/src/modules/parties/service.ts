@@ -12,6 +12,13 @@ function toDomain(row: Row): Party {
     reference: row.reference,
     name: row.name,
     emails: row.emails,
+    address: row.address,
+    buildingNumber: row.buildingNumber,
+    zip: row.zip,
+    city: row.city,
+    country: row.country,
+    isOperator: row.isOperator,
+    iban: row.iban,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -30,6 +37,13 @@ export async function createParty(siteId: string, input: PartyInput): Promise<Pa
       name: input.name,
       reference: input.reference ?? null,
       emails: input.emails ?? [],
+      address: input.address ?? null,
+      buildingNumber: input.buildingNumber ?? null,
+      zip: input.zip ?? null,
+      city: input.city ?? null,
+      ...(input.country ? { country: input.country } : {}),
+      ...(input.isOperator !== undefined ? { isOperator: input.isOperator } : {}),
+      iban: input.iban ?? null,
     })
     .returning();
   return toDomain(row!);
@@ -42,6 +56,13 @@ export async function updateParty(id: string, input: PartyInput): Promise<Party 
       name: input.name,
       reference: input.reference ?? null,
       emails: input.emails ?? [],
+      address: input.address ?? null,
+      buildingNumber: input.buildingNumber ?? null,
+      zip: input.zip ?? null,
+      city: input.city ?? null,
+      ...(input.country ? { country: input.country } : {}),
+      ...(input.isOperator !== undefined ? { isOperator: input.isOperator } : {}),
+      iban: input.iban ?? null,
       updatedAt: new Date(),
     })
     .where(eq(parties.id, id))

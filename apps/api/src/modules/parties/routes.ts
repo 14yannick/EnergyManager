@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { partyInputSchema } from "@energy-manager/shared";
 import { createParty, deleteParty, listParties, updateParty } from "./service.js";
-import { isUniqueViolation } from "../../lib/pgErrors.js";
+import { isUniqueViolation, violatedConstraint } from "../../lib/pgErrors.js";
 
 export async function partyRoutes(app: FastifyInstance) {
   app.get<{ Params: { siteId: string } }>("/api/sites/:siteId/parties", async (req) => {
@@ -17,6 +17,12 @@ export async function partyRoutes(app: FastifyInstance) {
       const created = await createParty(req.params.siteId, parsed.data);
       return reply.status(201).send(created);
     } catch (err) {
+      if (violatedConstraint(err, "parties_one_operator_idx")) {
+        return reply.status(409).send({
+          error: "operator_exists",
+          message: "Another party is already the RCP operator. Clear that flag first.",
+        });
+      }
       if (isUniqueViolation(err)) {
         return reply.status(409).send({ error: "duplicate_name", message: "A party with this name already exists." });
       }
@@ -34,6 +40,12 @@ export async function partyRoutes(app: FastifyInstance) {
       if (!updated) return reply.status(404).send({ error: "not_found" });
       return updated;
     } catch (err) {
+      if (violatedConstraint(err, "parties_one_operator_idx")) {
+        return reply.status(409).send({
+          error: "operator_exists",
+          message: "Another party is already the RCP operator. Clear that flag first.",
+        });
+      }
       if (isUniqueViolation(err)) {
         return reply.status(409).send({ error: "duplicate_name", message: "A party with this name already exists." });
       }

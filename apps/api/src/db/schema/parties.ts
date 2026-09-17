@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { sites } from "./sites.js";
 
@@ -27,8 +27,39 @@ export const parties = pgTable(
      * a single field.
      */
     emails: text("emails").array().notNull().default(sql`'{}'::text[]`),
+    /**
+     * Postal address, for the "Payable by" half of the QR-bill. Nullable
+     * throughout: a party created on the fly by a CSV import has only a name,
+     * and an invoice without an address is still a valid QR-bill — it just
+     * prints an empty box for the payer to complete.
+     */
+    address: text("address"),
+    buildingNumber: text("building_number"),
+    zip: text("zip"),
+    city: text("city"),
+    country: text("country").notNull().default("CH"),
+    /**
+     * Marks the party that operates the RCP — the owner, who bills everyone
+     * else. They are a party like any other because they consume from the
+     * same connection; the flag only says who is on the creditor side of an
+     * invoice.
+     *
+     * At most one per site, enforced by a partial unique index below rather
+     * than by application code, so two operators can't exist even briefly.
+     */
+    isOperator: boolean("is_operator").notNull().default(false),
+    /**
+     * Account the QR-bill is payable to. Only meaningful on the operator; a
+     * participant's own IBAN is none of this app's business.
+     */
+    iban: text("iban"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("parties_site_name_idx").on(table.siteId, table.name)],
+  (table) => [
+    uniqueIndex("parties_site_name_idx").on(table.siteId, table.name),
+    uniqueIndex("parties_one_operator_idx")
+      .on(table.siteId)
+      .where(sql`${table.isOperator}`),
+  ],
 );
