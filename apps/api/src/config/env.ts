@@ -1,15 +1,38 @@
 import { z } from "zod";
 
+/**
+ * A boolean flag from the environment.
+ *
+ * Deliberately strict about what it *doesn't* understand: an unrecognised
+ * value throws instead of quietly falling back to the default. The earlier
+ * version compared `v === "true"`, which turned `AUTH_ENABLED=True`, `=1` or
+ * a stray trailing space into a silently disabled auth layer — the one
+ * failure direction this whole feature exists to avoid. Being noisy about a
+ * typo is worth more than being lenient about a spelling.
+ */
+const TRUE_VALUES = new Set(["true", "1", "yes", "on"]);
+const FALSE_VALUES = new Set(["false", "0", "no", "off", ""]);
+
+function boolFlag(name: string, defaultValue: boolean) {
+  return z
+    .string()
+    .optional()
+    .transform((raw) => {
+      if (raw === undefined) return defaultValue;
+      const v = raw.trim().toLowerCase();
+      if (TRUE_VALUES.has(v)) return true;
+      if (FALSE_VALUES.has(v)) return false;
+      throw new Error(
+        `${name} must be one of true/false/1/0/yes/no/on/off (got ${JSON.stringify(raw)}).`,
+      );
+    });
+}
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default("0.0.0.0"),
-  // z.coerce.boolean() would treat the string "false" as truthy (non-empty
-  // string) — compare explicitly instead.
-  BKW_SYNC_ENABLED: z
-    .string()
-    .default("true")
-    .transform((v) => v !== "false"),
+  BKW_SYNC_ENABLED: boolFlag("BKW_SYNC_ENABLED", true),
   BKW_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(30),
   // Home Assistant. Unset simply disables the integration — the rest of the
   // app runs fine without it.
@@ -18,10 +41,7 @@ const envSchema = z.object({
     .optional()
     .transform((v) => v?.replace(/\/$/, "")),
   HA_TOKEN: z.string().optional(),
-  HA_SYNC_ENABLED: z
-    .string()
-    .default("true")
-    .transform((v) => v !== "false"),
+  HA_SYNC_ENABLED: boolFlag("HA_SYNC_ENABLED", true),
   HA_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(15),
   /** How far back each scheduled sync re-reads, to pick up late-arriving statistics. */
   HA_SYNC_LOOKBACK_HOURS: z.coerce.number().int().positive().default(48),
@@ -31,10 +51,7 @@ const envSchema = z.object({
   // working unchanged. With it off every request is treated as admin, which
   // is only safe because the app is then expected to sit behind something
   // else (a LAN-only port, or Access with no per-user roles).
-  AUTH_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v === "true"),
+  AUTH_ENABLED: boolFlag("AUTH_ENABLED", false),
   /** e.g. "yourteam.cloudflareaccess.com" — no scheme. */
   CF_ACCESS_TEAM_DOMAIN: z
     .string()

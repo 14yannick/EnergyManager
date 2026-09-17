@@ -1,5 +1,5 @@
 import { buildApp } from "./app.js";
-import { env } from "./config/env.js";
+import { adminEmails, env, viewerEmails } from "./config/env.js";
 import { syncDynamicTariffs } from "./modules/dynamicTariffs/service.js";
 import { syncHomeAssistant } from "./modules/homeAssistant/service.js";
 import { db } from "./db/client.js";
@@ -12,6 +12,20 @@ try {
 } catch (err) {
   app.log.error(err);
   process.exit(1);
+}
+
+// Say out loud which mode we came up in. Getting this wrong is quiet by
+// nature — a disabled auth layer serves every request happily — so it should
+// not take a request to /api/me to find out.
+if (env.AUTH_ENABLED) {
+  app.log.info(
+    { admins: adminEmails.size, viewers: viewerEmails.size, team: env.CF_ACCESS_TEAM_DOMAIN },
+    "authentication enabled (Cloudflare Access)",
+  );
+} else {
+  app.log.warn(
+    "AUTH_ENABLED is off — every request is treated as admin. Fine on a LAN-only port; not for public access.",
+  );
 }
 
 if (env.BKW_SYNC_ENABLED) {
