@@ -1,4 +1,5 @@
 import type {
+  AuthIdentity,
   CostItem,
   CostItemInput,
   CostItemsSummary,
@@ -180,6 +181,9 @@ export const api = {
         warnings: string[];
       }>(`/sites/${siteId}/billing/invoices?from=${from}&to=${to}`),
   },
+  /** Who the server thinks we are. `email: null` means auth is switched off. */
+  me: () => request<AuthIdentity>("/me"),
+
   parties: {
     list: (siteId: string) => request<Party[]>(`/sites/${siteId}/parties`),
     create: (siteId: string, input: PartyInput) =>
