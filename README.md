@@ -28,6 +28,9 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
 - **Settings** holding the Home Assistant connection and entity mapping, investment
   costs (battery vs. solar, subsidies, tax reductions), the production start date, and
   the battery's round-trip conversion loss
+- **Role-based access** via Cloudflare Access — admin, read-only, and a
+  participant role scoped to a single neighbour's own consumption and invoice.
+  Off by default; see [Access control](#access-control)
 
 ## VZEV billing (phase 2, in progress)
 
@@ -41,6 +44,85 @@ grid operator. Invoices print to PDF from the browser.
 
 The billing UI is in **French**, unlike the rest of the app: it is the one screen a
 participant actually reads, and the participants here are French-speaking.
+
+## Access control
+
+Off by default (`AUTH_ENABLED=false`), which treats every request as admin —
+right for local development and for an instance only reachable on the LAN.
+
+**Leaving it off changes nothing.** No token is looked for, no key set is
+fetched, no role lookup runs; every caller is an admin, exactly as before this
+feature existed. An existing deployment upgrades without touching its
+environment. (One thing does apply either way: the app refuses to start if a
+route has no policy entry — see below.)
+
+Turn it on when the app is exposed publicly. With it on, the API trusts exactly one thing: the signed JWT that Cloudflare
+Access puts in `Cf-Access-Jwt-Assertion`. The `Cf-Access-Authenticated-User-Email`
+header that Access also sets is **deliberately ignored** — it is unsigned, so
+anything reaching the origin without passing through Cloudflare could forge it
+and become an admin. The token's `aud` is checked against `CF_ACCESS_AUD`,
+which is what scopes it to this application rather than to any other Access
+app in the same account.
+
+Three roles, resolved from the verified address:
+
+| Role | Sees |
+|---|---|
+| `admin` | Everything, read and write. |
+| `viewer` | Everything, read only — no writes anywhere. |
+| `participant` | Only their own consumption and invoice, plus site-level community totals (PV produced, size of the local pool). Never another participant's figures, never your production, battery, export, tariffs or investment data. |
+
+A participant is anyone whose address appears in a party's `emails` — the same
+list the invoices go to, so there is nothing extra to maintain. The admin and
+viewer lists win over the parties table, so adding yourself as a participant to
+preview their view cannot demote you. An authenticated address that matches
+none of the three gets a 403.
+
+Two properties are enforced structurally rather than by review:
+
+- **Default deny.** Permissions live in one table in
+  [`apps/api/src/auth/policy.ts`](apps/api/src/auth/policy.ts), keyed by the
+  route pattern. A route missing from it is denied to everyone.
+- **The app refuses to start** if any registered route has no policy entry, so
+  a new endpoint fails at boot rather than quietly answering 403 — or, worse,
+  being added to a future permissive default.
+
+Note that `registerAuth` is called directly on the root instance rather than
+through `app.register()`. Fastify encapsulates hooks added inside a registered
+plugin, so registering it would have left every sibling route module unguarded
+with nothing to indicate it.
+
+### Turning it on
+
+1. **Put the app behind a Cloudflare Access application** covering the whole
+   hostname. `/api/` must be inside it — a path-scoped policy that protects
+   only the UI leaves the API open.
+2. **Copy the Application Audience (AUD) tag** from the application's settings
+   into `CF_ACCESS_AUD`.
+3. **Set the variables together** and restart:
+
+   | Variable | |
+   |---|---|
+   | `AUTH_ENABLED` | `true` |
+   | `CF_ACCESS_TEAM_DOMAIN` | `yourteam.cloudflareaccess.com`, no scheme |
+   | `CF_ACCESS_AUD` | the AUD tag from step 2 |
+   | `AUTH_ADMIN_EMAILS` | your address; comma- or space-separated |
+   | `AUTH_VIEWER_EMAILS` | optional, same format |
+
+   The app **refuses to start** on a partial configuration. Half-enabled auth
+   would otherwise fail open on every request while looking enabled, and a
+   missing AUD would accept tokens minted for any other Access application in
+   the same account.
+
+4. **Add participants to the Access application** — and not before. While
+   `AUTH_ENABLED` is false, Access decides who gets in and everyone who does is
+   an admin, so a neighbour added early would be able to edit tariffs, change
+   settings and delete metering history.
+
+Participants need no account here beyond their address being on their party
+(the Facturation page). Their client reads `GET /api/me` to learn its own role
+and site id — `/api/sites` is closed to them, because a site row carries your
+investment figures.
 
 ## Quickstart (Docker)
 
@@ -165,6 +247,12 @@ docker run -d --name EnergyManager-web --network energymanager \
 Everything else has a working default: `PORT`, `BKW_SYNC_ENABLED`,
 `BKW_SYNC_INTERVAL_MINUTES`, `HA_SYNC_ENABLED`, `HA_SYNC_INTERVAL_MINUTES` and
 `HA_SYNC_LOOKBACK_HOURS`. Pass them only to change them.
+
+`AUTH_ENABLED` defaults to `false`, so the api container above accepts every
+request as admin — fine while the port is only reachable on the LAN. Exposing
+it publicly means adding `AUTH_ENABLED`, `CF_ACCESS_TEAM_DOMAIN`,
+`CF_ACCESS_AUD` and `AUTH_ADMIN_EMAILS` as further `-e` flags; see
+[Access control](#access-control).
 
 In the **Add Container** form the same thing maps to: *Repository* =
 `ghcr.io/14yannick/energymanager-api:latest`, *Network Type* = `energymanager`,

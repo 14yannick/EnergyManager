@@ -332,3 +332,46 @@ export interface CumulativeSavingsPoint {
   cumulativeWithoutBatteryChf: number;
   cumulativeBatteryOnlyChf: number;
 }
+
+/**
+ * Who is calling the API.
+ *
+ * - `admin` — full read/write.
+ * - `viewer` — reads everything, writes nothing.
+ * - `participant` — a VZEV neighbour. Sees only their own consumption and
+ *   invoice plus site-level community totals; never another participant's
+ *   figures, and never the owner's production, battery, export or investment
+ *   data.
+ *
+ * Deliberately not a linear hierarchy: a participant is not "less than" a
+ * viewer, it sees a different and much narrower slice. Permissions are
+ * therefore expressed as explicit role sets, never as `role >= x`.
+ */
+export type Role = "admin" | "viewer" | "participant";
+
+export interface AuthIdentity {
+  role: Role;
+  /** Null when authentication is disabled, or for the local/LAN door. */
+  email: string | null;
+  /** Set only for `participant`; the party whose data this user may see. */
+  partyId: string | null;
+  partyName: string | null;
+  /** The site this identity belongs to. Null for admin/viewer, who see all. */
+  siteId: string | null;
+}
+
+/**
+ * Site-level context a participant is allowed to see: enough to understand how
+ * the local pool they were billed from came about, with no per-party
+ * breakdown and no money.
+ */
+export interface CommunitySummary {
+  from: string;
+  to: string;
+  /** PV generated at the site over the range. */
+  productionKwh: number;
+  /** Energy shared locally with participants (the pool). */
+  localPoolKwh: number;
+  /** How many participants the pool was shared between. */
+  participantCount: number;
+}

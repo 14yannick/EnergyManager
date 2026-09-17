@@ -11,6 +11,9 @@ import { dynamicTariffRoutes } from "./modules/dynamicTariffs/routes.js";
 import { partyRoutes } from "./modules/parties/routes.js";
 import { homeAssistantRoutes } from "./modules/homeAssistant/routes.js";
 import { billingRoutes } from "./modules/billing/routes.js";
+import { communityRoutes } from "./modules/community/routes.js";
+import { meRoutes } from "./modules/me/routes.js";
+import { registerAuth } from "./auth/plugin.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -19,6 +22,11 @@ export async function buildApp() {
   await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 
   app.get("/api/health", async () => ({ status: "ok" }));
+
+  // Deliberately a direct call, not app.register() — see the note on
+  // registerAuth. The hook must live on the root instance to cover every
+  // route module below.
+  registerAuth(app);
 
   // Fastify's default handler echoes error.message to the client, which for an
   // uncaught DB error means the full SQL query and bound params. Routes handle
@@ -40,6 +48,8 @@ export async function buildApp() {
   await app.register(partyRoutes);
   await app.register(homeAssistantRoutes);
   await app.register(billingRoutes);
+  await app.register(communityRoutes);
+  await app.register(meRoutes);
 
   return app;
 }
