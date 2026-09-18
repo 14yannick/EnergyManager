@@ -1,0 +1,476 @@
+import type { en } from "./en";
+
+/**
+ * The French catalogue. Typed against the English one, so every key it is
+ * missing is a compile error rather than an English string appearing in a
+ * French page.
+ */
+export const fr: Record<keyof typeof en, string> = {
+  // ---- Chrome ------------------------------------------------------------
+  "app.name": "EnergyManager",
+  "nav.dashboard": "Tableau de bord",
+  "nav.tariffs": "Périodes tarifaires",
+  "nav.calculation": "Détail du calcul",
+  "nav.readings": "Import des relevés",
+  "nav.settings": "Paramètres",
+  "nav.billing": "Facturation",
+  "session.signOut": "Se déconnecter",
+  "session.noAccess": "aucun accès",
+  "session.language": "Langue",
+  "role.admin": "administrateur",
+  "role.viewer": "lecture seule",
+  "role.participant": "participant",
+
+  "noAccess.title": "Aucun accès",
+  "noAccess.knownAs":
+    "Vous êtes connecté en tant que {email}, mais cette adresse n'est pas enregistrée dans EnergyManager.",
+  "noAccess.unknown": "Votre adresse n'est pas enregistrée dans EnergyManager.",
+  "noAccess.askAdmin":
+    "Demandez à l'administrateur de l'ajouter à votre fiche de participant, puis rechargez cette page. Si vous vouliez utiliser un autre compte, déconnectez-vous d'abord.",
+  "noAccess.unrecognised": "Votre session n'a pas été reconnue. Déconnectez-vous et reconnectez-vous.",
+
+  // ---- Shared ------------------------------------------------------------
+  "common.loading": "Chargement…",
+  "common.from": "Du",
+  "common.to": "Au",
+  "common.period": "Période",
+  "common.save": "Enregistrer",
+  "common.cancel": "Annuler",
+  "common.add": "Ajouter",
+  "common.delete": "Supprimer",
+  "common.edit": "Modifier",
+  "common.today": "Aujourd'hui",
+  "common.total": "Total",
+  "common.readOnly":
+    "Lecture seule — la modification de ces paramètres est réservée à l'administrateur du RCP.",
+  "common.nothingInRange": "Rien dans cette plage.",
+
+  // ---- Calculation detail ------------------------------------------------
+  "calc.title": "Détail du calcul",
+  "calc.intro":
+    "Une journée, et tous les chiffres qui la composent. Chaque tarif est la moyenne de la journée, pondérée par l'énergie — dépliez une ligne pour voir les intervalles qui la constituent.",
+  "calc.prevDay": "Jour précédent",
+  "calc.nextDay": "Jour suivant",
+  "calc.nothingToday": "Rien d'enregistré ce jour-là.",
+  "calc.flow": "Flux",
+  "calc.avgRate": "ø CHF/kWh",
+  "calc.interval": "Intervalle",
+  "calc.intervalCount": "{count} intervalles",
+  "calc.noInterval": "Aucun intervalle ne contribue à ce chiffre.",
+  "calc.noParties":
+    "Aucune consommation de participant ce jour-là. Les relevés par participant arriveront avec l'import vZEV.",
+  "calc.party": "Participant",
+
+  "calc.solar": "Solaire",
+  "calc.solarSub": "Où est allée la production du jour, et ce qu'elle a rapporté",
+  "calc.production": "Production",
+  "calc.productionNote": "Part du photovoltaïque dans la production AC de l'onduleur",
+  "calc.directUse": "Consommation directe",
+  "calc.directUseNote":
+    "Production consommée par la maison au moment où elle était produite, valant l'achat qu'elle a évité",
+  "calc.partyDraw": "Consommé par les participants",
+  "calc.partyDrawNote": "Prélevé sur le pool local par les autres participants, au tarif RCP",
+  "calc.exportGrid": "Injection dans le réseau",
+  "calc.exportGridNote": "Ce qui restait, au tarif de reprise",
+
+  "calc.battery": "Batterie",
+  "calc.batterySub": "Ce que stocker l'énergie a coûté, et ce que la restituer a rapporté",
+  "calc.charged": "Chargé",
+  "calc.chargedNote": "Mesuré côté DC, avant pertes de conversion",
+  "calc.forgone": "Injection perdue",
+  "calc.forgoneNote":
+    "La charge en AC, soit l'injection qu'elle a remplacée, valorisée au tarif de reprise du moment où elle a été stockée",
+  "calc.toHouse": "Déchargé vers la maison",
+  "calc.toHouseNote": "A couvert la consommation, donc vaut l'achat qu'elle a évité",
+  "calc.toGrid": "Déchargé vers le réseau",
+  "calc.toGridNote":
+    "Plus d'énergie a quitté la maison que les panneaux n'auraient pu en produire : le reste vient de la batterie",
+  "calc.net": "Net",
+  "calc.netNote": "Ce que la batterie a rapporté, moins ce que le stockage a coûté",
+
+  "calc.rangeTable": "Tous les chiffres, sur une plage",
+  "calc.rangeTableSub": "— le détail complet du moteur de calcul, et le CSV",
+  "calc.exportCsv": "Exporter en CSV",
+  "calc.periodCount": "{count} périodes",
+  "calc.g.hourly": "horaire",
+  "calc.g.daily": "journalier",
+  "calc.g.monthly": "mensuel",
+  "calc.g.quarterly": "trimestriel",
+  "calc.g.yearly": "annuel",
+  "calc.g.overall": "global",
+  "calc.col.production": "Production",
+  "calc.col.directUse": "Consommation directe",
+  "calc.col.exportGrid": "Injection (réseau)",
+  "calc.col.exportTotal": "Injection (totale)",
+  "calc.col.partyDraw": "Conso. participants",
+  "calc.col.batteryCharge": "Charge batterie",
+  "calc.col.batteryDischarge": "Décharge batterie",
+  "calc.col.ofWhichUsed": "…dont consommé",
+  "calc.col.ofWhichExported": "…dont injecté",
+  "calc.col.purchaseRate": "Tarif d'achat",
+  "calc.col.feedInRate": "Tarif de reprise",
+  "calc.col.partyRate": "Tarif participant",
+  "calc.col.directConsumption": "Consommation directe",
+  "calc.col.directExport": "Injection directe",
+  "calc.col.batteryToHouse": "Batterie → maison",
+  "calc.col.batteryToGrid": "Batterie → réseau",
+  "calc.col.chargingCost": "Coût de charge",
+  "calc.col.batteryNet": "Net batterie",
+  "calc.col.partySales": "Ventes participants",
+  "calc.col.selfConsumption": "Valeur de l'autoconsommation",
+  "calc.col.exportRevenue": "Revenu d'injection",
+  "calc.col.totalWithBattery": "Total (avec batterie)",
+  "calc.col.totalWithoutBattery": "Total (sans batterie)",
+  "calc.col.batteryOnly": "Gain de la batterie seule",
+
+  // ---- Settings ----------------------------------------------------------
+  "settings.title": "Paramètres",
+  "settings.intro":
+    "Montants d'investissement utilisés pour l'amortissement, et la connexion Home Assistant qui fournit les données d'énergie.",
+
+  "settings.ha": "Home Assistant",
+  "settings.haIntro":
+    "Récupère les statistiques d'énergie directement depuis Home Assistant au lieu d'importer des CSV. Il lit les statistiques long terme (les mêmes chiffres que le tableau de bord Énergie), les remises à zéro des compteurs sont donc déjà prises en compte.",
+  "settings.haUnconfigured":
+    "Non configuré — définissez HA_URL et HA_TOKEN dans l'environnement de l'API, puis redémarrez-la.",
+  "settings.haConnected": "Connecté à {url}.",
+  "settings.haSyncing": "Synchronisation automatique toutes les {minutes} minutes.",
+  "settings.haSyncOff": "La synchronisation automatique est désactivée.",
+
+  "settings.mapping": "Correspondance des entités",
+  "settings.mappingNote":
+    "Quelle statistique Home Assistant alimente chaque métrique. Seules les statistiques portant un total cumulé sont listées — ce sont les seules pour lesquelles Home Assistant peut rapporter l'énergie par période.",
+  "settings.statListFailed": "Impossible de lire la liste des statistiques : {message}",
+  "settings.metric": "Métrique",
+  "settings.haStatistic": "Statistique Home Assistant",
+  "settings.notSynced": "— non synchronisé —",
+  "settings.mapped": "associé",
+  "settings.derivedNote":
+    "La production et la décharge batterie (AC) ne sont pas listées car ce ne sont pas des capteurs. L'onduleur ne rapporte qu'un seul chiffre AC couvrant à la fois les panneaux et la batterie ; les deux en sont donc déduits après chaque synchronisation, répartis au prorata du DC fourni par chaque source. C'est ce qui évite d'enregistrer du solaire à minuit.",
+
+  "settings.metric.inverterAc": "Production AC de l'onduleur",
+  "settings.metric.inverterAcHint": "Production AC totale — photovoltaïque et batterie confondus",
+  "settings.metric.pvDc": "Production photovoltaïque (DC)",
+  "settings.metric.pvDcHint": "Production des panneaux, utilisée pour répartir le chiffre AC",
+  "settings.metric.ownConsumption": "Consommation propre",
+  "settings.metric.ownConsumptionHint": "Consommation totale du ménage",
+  "settings.metric.exportGrid": "Injection — réseau",
+  "settings.metric.exportGridHint": "Injecté dans le réseau",
+  "settings.metric.exportLocal": "Injection — locale",
+  "settings.metric.exportLocalHint": "Total quittant le ménage",
+  "settings.metric.importGrid": "Soutirage — réseau",
+  "settings.metric.importGridHint": "Prélevé sur le réseau",
+  "settings.metric.batteryCharge": "Charge batterie",
+  "settings.metric.batteryChargeHint": "Énergie entrant dans la batterie",
+  "settings.metric.batteryDischarge": "Décharge batterie",
+  "settings.metric.batteryDischargeHint": "Énergie sortant de la batterie",
+
+  "settings.sync": "Synchronisation",
+  "settings.syncNote":
+    "Home Assistant conserve les statistiques de 5 minutes pendant environ 10 jours, et les horaires indéfiniment. Le quart d'heure ne remonte donc que dans cette fenêtre récente ; utilisez l'horaire pour reprendre un historique plus ancien. Resynchroniser une période est sans risque — les lignes sont remplacées, pas dupliquées.",
+  "settings.granularity": "Granularité",
+  "settings.quarterHour": "Quart d'heure",
+  "settings.hourly": "Horaire",
+  "settings.dateRange": "Plage de dates précise",
+  "settings.syncNow": "Synchroniser",
+  "settings.syncing": "Synchronisation…",
+  "settings.rangeInvalid": "«\u00a0Au\u00a0» doit être identique ou postérieur à «\u00a0Du\u00a0».",
+  "settings.inserted": "ajoutées",
+  "settings.updated": "mises à jour",
+  "settings.rows": "{count} lignes",
+
+  "settings.investment": "Investissement",
+  "settings.investmentNote":
+    "Ce que l'installation a coûté, utilisé pour l'amortissement et le seuil de rentabilité. Un montant par catégorie ; une catégorie contenant plusieurs entrées (une subvention comptabilisée séparément, par exemple) affiche son total en lecture seule plutôt que de deviner laquelle modifier.",
+  "settings.battery": "Batterie",
+  "settings.solar": "Solaire",
+  "settings.splitItems": "{count} entrées distinctes — affichées en total, non modifiable ici",
+
+  "settings.productionStart": "Début de production",
+  "settings.productionStartNote":
+    "Quand l'installation a commencé à produire. Le tableau de bord ne mesure pas l'amortissement sur les jours antérieurs, qui compteraient sinon comme des périodes sans aucun gain.",
+  "settings.productionStartDate": "Date de début de production",
+  "settings.productionStartFallback":
+    "Non renseignée — par défaut le {date}, premier jour avec de la production enregistrée.",
+  "settings.resetProductionStart": "Rétablir le premier jour de production",
+  "settings.conversionLoss": "Pertes de conversion batterie (%)",
+  "settings.conversionLossNote":
+    "La charge est mesurée en DC mais tout ce qui est valorisé est en AC ; l'injection remplacée est donc réduite d'autant avant d'être imputée à la batterie.",
+
+  // ---- Tariff periods ----------------------------------------------------
+  "tariff.title": "Périodes tarifaires",
+  "tariff.intro":
+    "Tarifs d'achat, de reprise et de vente aux participants, chacun sur une plage de dates et d'heures — d'un quart d'heure à une année. Les périodes de même type ne doivent pas se chevaucher. Chaque période indique aussi son mode de valorisation : à son propre tarif fixe, ou d'après le flux day-ahead.",
+  "tariff.kind": "Type",
+  "tariff.start": "Début",
+  "tariff.end": "Fin",
+  "tariff.pricedBy": "Valorisé par",
+  "tariff.rate": "Tarif",
+  "tariff.rateChf": "Tarif (CHF/kWh)",
+  "tariff.label": "Libellé",
+  "tariff.labelOptional": "Libellé (facultatif)",
+  "tariff.fallbackRate": "Tarif de repli (facultatif)",
+  "tariff.fallbackHint":
+    "Utilisé uniquement là où le flux n'indique aucun prix. Laissez vide pour laisser ces intervalles non valorisés.",
+  "tariff.saveChanges": "Enregistrer",
+  "tariff.addPeriod": "Ajouter une période",
+  "tariff.addSurcharge": "Ajouter un supplément",
+  "tariff.fromFeed": "selon le flux",
+  "tariff.fallback": "repli",
+  "tariff.kind.purchase": "Achat",
+  "tariff.kind.feedIn": "Reprise",
+  "tariff.kind.neighborSell": "Vente aux participants",
+  "tariff.mode.flat": "Trimestriel (tarif fixe)",
+  "tariff.mode.dynamic": "Day-ahead (spot)",
+
+  "tariff.dynamic": "Tarification de reprise dynamique (BKW)",
+  "tariff.dynamicLoaded":
+    "{count} tarifs au quart d'heure chargés pour la fenêtre en cours, publiés le {published}.",
+  "tariff.dynamicEmpty":
+    "Aucun tarif dynamique chargé pour l'instant — les périodes de reprise fixes ci-dessus s'appliquent jusque-là.",
+
+  "tariff.surcharges": "Suppléments",
+  "tariff.surchargesNote":
+    "Composants additifs au kWh empilés sur le tarif d'une période — par exemple un Herkunftsnachweis ou une Mindestvergütungsprämie s'ajoutant au tarif de reprise. Contrairement aux périodes ci-dessus, les suppléments peuvent se chevaucher : tous ceux qui correspondent s'ajoutent au tarif de base.",
+
+  // ---- Import readings ---------------------------------------------------
+  "readings.title": "Import des relevés",
+  "readings.csvNote":
+    "Colonnes CSV : timestamp, metric_kind, party, value_kwh — une ligne par horodatage et métrique. metric_kind vaut production, export_local, export_grid, import_grid, battery_charge, battery_discharge ou consumption. party est obligatoire (le nom d'un participant) lorsque metric_kind vaut consumption, et doit rester vide sinon. Réimporter des lignes qui se recoupent les remplace.",
+  "readings.modeDelta": "Delta — les valeurs sont déjà des kWh par intervalle",
+  "readings.modeCumulative":
+    "Cumulatif — les valeurs sont des index de compteur, par métrique et participant",
+  "readings.import": "Importer",
+  "readings.importing": "Import en cours…",
+  "readings.skipped": "ignorées",
+  "readings.row": "Ligne",
+  "readings.message": "Message",
+
+  "readings.export": "Export",
+  "readings.exportNote":
+    "Relevés bruts sous forme de fichier Excel — une ligne par horodatage et métrique, dates en Europe/Zurich (l'horodatage UTC est conservé dans la dernière colonne).",
+  "readings.metrics": "Métriques",
+  "readings.all": "toutes",
+  "readings.none": "aucune",
+  "readings.download": "Télécharger le .xlsx",
+  "readings.pickMetric": "Sélectionnez au moins une métrique.",
+
+  "readings.metric.production": "Production (PV, part AC)",
+  "readings.metric.inverterAc": "Production AC de l'onduleur (PV + batterie)",
+  "readings.metric.pvDc": "Production photovoltaïque (DC)",
+  "readings.metric.batteryDischargeAc": "Décharge batterie (part AC)",
+  "readings.metric.exportLocal": "Injection — locale",
+  "readings.metric.exportGrid": "Injection — réseau",
+  "readings.metric.importGrid": "Soutirage — réseau",
+  "readings.metric.batteryCharge": "Charge batterie",
+  "readings.metric.batteryDischarge": "Décharge batterie",
+  "readings.metric.consumption": "Consommation (par participant)",
+  "readings.metric.consumptionOwn": "Consommation propre (ménage)",
+  "readings.metric.consumptionGrid": "Soutirage réseau (par participant)",
+
+  "parties.title": "Participants",
+  "parties.note":
+    "Les voisins qui partagent votre raccordement au réseau. Leur consommation est facturée séparément et ils comptent dans la taille du pool. Les nouveaux noms présents dans un CSV importé sont ajoutés ici automatiquement, sans numéro ni e-mail — complétez-les ensuite. L'adresse postale est ce que le bulletin QR imprime comme payeur ; une facture fonctionne aussi sans elle, avec simplement une case vide à compléter. Attribuez-vous le rôle d'administrateur RCP et indiquez votre IBAN — c'est le compte auquel le bulletin QR est payable, et cela continue de vous facturer ce que vous avez consommé. Seuls «\u00a0Administrateur RCP uniquement\u00a0» et «\u00a0Lecture seule\u00a0» restent hors du RCP : jamais facturés, jamais comptés dans les frais communs.",
+  "parties.number": "N° de participant",
+  "parties.numberShort": "N°",
+  "parties.name": "Nom",
+  "parties.street": "Rue",
+  "parties.buildingNo": "N°",
+  "parties.postcode": "NPA",
+  "parties.town": "Localité",
+  "parties.address": "Adresse",
+  "parties.emails": "E-mails (un par ligne ou séparés par des virgules)",
+  "parties.emailsShort": "E-mails",
+  "parties.iban": "IBAN (administrateur uniquement)",
+  "parties.role": "Rôle",
+  "parties.roleIban": "Rôle / IBAN",
+  "parties.addParticipant": "Ajouter un participant",
+  "parties.empty": "Aucun participant pour l'instant.",
+  "parties.noAddress": "pas d'adresse",
+  "parties.noEmail": "pas d'e-mail",
+  "parties.noIban": "pas d'IBAN",
+  "parties.role.party": "Participant RCP",
+  "parties.role.partyHint":
+    "Un membre : consomme, est facturé, compte dans la répartition des frais communs",
+  "parties.role.admin": "Administrateur RCP",
+  "parties.role.adminHint": "Gère l'application et est membre — facturé comme les autres",
+  "parties.role.adminOnly": "Administrateur RCP uniquement",
+  "parties.role.adminOnlyHint":
+    "Gère l'application sans faire partie du RCP : jamais facturé, jamais compté",
+  "parties.role.viewer": "Lecture seule",
+  "parties.role.viewerHint": "Voit tout en lecture seule, ne consomme rien",
+
+  // ---- Billing -----------------------------------------------------------
+  "billing.title": "Facturation",
+  "billing.cat.energie": "Énergie",
+  "billing.cat.netznutzung": "Utilisation du réseau",
+  "billing.cat.messung": "Mesure",
+  "billing.cat.abgaben": "Redevances et prestations",
+  "billing.alloc.perKwh": "par kWh soutiré du réseau",
+  "billing.alloc.perKwhTotal": "par kWh consommé (réseau + production locale)",
+  "billing.alloc.poolShared": "facturé une fois au RCP, réparti entre les participants",
+  "billing.alloc.perParticipant": "facturé une fois par participant",
+
+  "billing.positions": "Positions tarifaires du réseau",
+  "billing.positionsNote":
+    "Une ligne par position de la facture du gestionnaire de réseau. La répartition indique comment chaque position est répercutée sur le RCP : les tarifs de base facturés une seule fois au raccordement sont divisés entre les participants, tandis que la mesure est facturée pour chacun d'eux.",
+  "billing.category": "Rubrique",
+  "billing.position": "Position",
+  "billing.allocation": "Répartition",
+  "billing.ratePerKwh": "Tarif (CHF/kWh)",
+  "billing.ratePerYear": "Tarif (CHF/an)",
+  "billing.rate": "Tarif",
+  "billing.validFrom": "Valable du",
+  "billing.validTo": "Valable au",
+  "billing.existsWithout": "Existe sans le RCP",
+  "billing.withoutRcp": "Sans RCP",
+  "billing.addPosition": "Ajouter la position",
+  "billing.noPositions":
+    "Aucune position — ajoutez-les telles qu'elles figurent sur la facture du réseau.",
+  "billing.validRange": "Valable du {from} au {to}",
+  "billing.positionCount": "{count} positions",
+  "billing.yes": "oui",
+  "billing.no": "non",
+  "billing.perYear": "CHF/an",
+
+  "billing.period.yearly": "Année",
+  "billing.period.quarterly": "Trimestre",
+  "billing.period.monthly": "Mois",
+  "billing.period.custom": "Personnalisé",
+  "billing.prevPeriod": "Période précédente",
+  "billing.nextPeriod": "Période suivante",
+  "billing.generate": "Générer les factures",
+  "billing.futurePeriod": "· période à venir",
+  "billing.currentPeriod": "· période en cours",
+  "billing.print": "Imprimer / enregistrer en PDF",
+  "billing.summary": "{days} jours · RCP de {participants} participants",
+  "billing.localRate": " · énergie locale {rate} {cents}",
+
+  "invoice.participantNo": "N° de participant {reference}",
+  "invoice.header":
+    "Facturation du {from} au {to} · {days} jours · RCP de {participants} participants",
+  "invoice.subtotal": "Sous-total",
+  "invoice.amountDue": "Montant à payer",
+  "invoice.footnote":
+    "Soutirage du réseau {grid} kWh · consommation issue de la production locale {local} kWh. Montants TVA incluse (TVA du fournisseur répercutée, aucune TVA supplémentaire).",
+  "invoice.benefitTitle": "Votre avantage dans le RCP — {name}",
+  "invoice.benefitIntro":
+    "Ce que vous auriez payé si vous étiez approvisionné directement par le gestionnaire de réseau.",
+  "invoice.directSupply": "Approvisionnement direct (comparaison)",
+  "invoice.directSupplyTotal": "Total approvisionnement direct",
+  "invoice.directly": "Directement par le gestionnaire de réseau",
+  "invoice.yourRcpBill": "Votre facture RCP",
+  "invoice.yourBenefit": "Votre avantage",
+  "invoice.benefitNote":
+    "L'avantage a deux origines : les tarifs de base du raccordement sont répartis dans le RCP entre {participants} participants au lieu d'être facturés individuellement, et {local} kWh provenaient de la production locale plutôt que du réseau.",
+  "invoice.quantity": "Quantité",
+  "invoice.price": "Prix",
+  "invoice.amountChf": "Montant CHF",
+  "invoice.days": "{count} jours",
+  "billing.intro":
+    "Saisissez la facture du gestionnaire de réseau position par position, puis générez une facture pour chaque participant du RCP. Les montants sont TVA incluse : la TVA du fournisseur est répercutée telle quelle, aucune TVA n'est ajoutée.",
+
+  // ---- QR-bill -----------------------------------------------------------
+  "qr.noBill":
+    "Aucun bulletin de versement : marquez un participant comme gestionnaire du RCP et complétez son IBAN et son adresse sous «\u00a0Import des relevés\u00a0» → Participants.",
+  "qr.failed": "Bulletin de versement impossible : {message}",
+  "qr.message": "Facture RCP {from}-{to}",
+  "qr.error": "Le bulletin QR n'a pas pu être généré",
+
+  // ---- Dashboard ---------------------------------------------------------
+  "dash.title": "Économies et amortissement",
+  "dash.intro":
+    "Ce que l'installation a rapporté ou évité sur la plage sélectionnée, et le temps qu'elle met à rembourser son coût.",
+  "dash.view": "Vue",
+  "dash.g.hourly": "horaire",
+  "dash.g.daily": "journalier",
+  "dash.g.monthly": "mensuel",
+  "dash.g.quarterly": "trimestriel",
+  "dash.g.yearly": "annuel",
+  "dash.g.overall": "global",
+  "dash.hourlyCap":
+    "La vue horaire n'affiche que {days} jours à la fois — un trimestre représenterait plus de 2000 barres. Déplacer une extrémité fait glisser l'autre pour conserver cette durée.",
+  "dash.overallNote":
+    "Vue globale : toute la plage forme une seule période de {days} jours. L'amortissement est annualisé d'après cette durée réelle plutôt que d'après un mois ou une année supposés entiers, de sorte qu'une période partielle ne peut pas le fausser.",
+  "dash.periodNote":
+    "Chaque chiffre ci-dessous est par {unit} calendaire — les moyennes, l'annualisation de l'amortissement ({periods} périodes par an plutôt que 365), et une barre de revenu par {unit}. Les totaux sont identiques dans les deux cas ; seule la période de découpage change.",
+
+  "dash.unit.hour": "heure",
+  "dash.unit.day": "jour",
+  "dash.unit.month": "mois",
+  "dash.unit.quarter": "trimestre",
+  "dash.unit.year": "année",
+  "dash.unit.period": "période",
+  "dash.units.hour": "heures",
+  "dash.units.day": "jours",
+  "dash.units.month": "mois",
+  "dash.units.quarter": "trimestres",
+  "dash.units.year": "années",
+  "dash.units.period": "périodes",
+
+  "dash.kpi": "Indicateurs",
+  "dash.withBatteryTotal": "Économies totales — avec batterie",
+  "dash.noBatteryTotal": "Économies totales — sans batterie",
+  "dash.batteryOnly": "Économies dues à la batterie",
+  "dash.batteryOnlyHint":
+    "par rapport à la même période sans batterie — ne tient pas compte des pertes de cycle",
+  "dash.batteryRevenue": "Revenu de la batterie",
+  "dash.batteryRevenueHint":
+    "valeur de la décharge moins le coût de la charge — le chiffre le plus juste",
+  "dash.avgSuffix": "CHF {value}/{unit} en moyenne",
+
+  "dash.payback": "Amortissement par catégorie",
+  "dash.paybackNote":
+    "Ce n'est pas une mesure mais une projection. Le coût d'investissement est divisé par les économies moyennes par {unit} sur la plage sélectionnée{annualised}. Une plage non représentative d'une année complète la rend trompeuse : une plage estivale projette un amortissement qui n'arrivera jamais, une plage hivernale l'inverse. Le seuil de rentabilité ci-dessous est l'opposé — une date réelle, indiquée seulement si les économies cumulées ont dépassé le coût à l'intérieur de la plage.",
+  "dash.annualisedOverall": ", annualisées d'après la durée réelle de la plage ({days} jours)",
+  "dash.annualisedYearly": ", ce qui est déjà un chiffre annuel",
+  "dash.annualisedOther": ", annualisées sur {periods} {units} par an",
+  "dash.withBattery": "Avec batterie",
+  "dash.noBattery": "Sans batterie",
+  "dash.batteryOnlyShort": "Batterie seule",
+  "dash.years": "{value} ans",
+  "dash.breakeven": "Seuil de rentabilité : {date}",
+  "dash.notReached": "non atteint dans la plage",
+
+  "dash.revenue": "Revenus",
+  "dash.revenueNote":
+    "Consommation directe (achat évité), injection directe, batterie et ventes aux participants, par {unit}",
+  "dash.revenueKwh": " — l'énergie derrière chaque montant",
+  "dash.revenueBoth": " — avec la même répartition en kWh hachurée à côté, sur l'axe de droite",
+  "dash.revenueCharging":
+    " La charge s'affiche sous l'axe : sur cet intervalle, la batterie a absorbé de l'énergie qui aurait sinon été rémunérée au tarif de reprise.",
+  "dash.production": "Production",
+  "dash.totalRevenue": "Revenu total",
+  "dash.totalEnergy": "Énergie totale",
+
+  "dash.flow.consumption": "Consommation directe",
+  "dash.flow.direct": "Injection directe",
+  "dash.flow.battery": "Décharge batterie",
+  "dash.flow.neighborSale": "Vente aux participants",
+  "dash.flow.neighborSupply": "Fourniture aux participants",
+  "dash.flow.neighbor": "Participants",
+  "dash.wholePeriod": "Toute la période",
+  "dash.chargingForgone": "Charge (injection perdue)",
+  "dash.batteryNet": "Net batterie",
+  "dash.productionPlusCharging": "Production + charge",
+  "dash.chargingCostSeries": "Charge de la batterie (coût)",
+  "dash.productionSeries": "Production + charge (kWh)",
+
+  "dash.preset.last24h": "Dernières 24 heures",
+  "dash.preset.last7d": "7 derniers jours",
+  "dash.preset.last30d": "30 derniers jours",
+  "dash.preset.thisMonth": "Ce mois",
+  "dash.preset.last3m": "3 derniers mois",
+  "dash.preset.thisQuarter": "Ce trimestre",
+  "dash.preset.lastQuarter": "Trimestre précédent",
+  "dash.preset.last12m": "12 derniers mois",
+  "dash.preset.thisYear": "Cette année",
+  "dash.preset.lastYear": "Année précédente",
+  "dash.preset.all": "Toutes les données",
+  "dash.preset.custom": "Personnalisé…",
+  "dash.overallAvg": "sur {days} jours",
+  "tariff.emptyPeriods": "Aucune période tarifaire pour l'instant.",
+  "tariff.emptySurcharges": "Aucun supplément pour l'instant.",
+  "billing.cents": "ct.",
+  "billing.centsPerKwh": "ct./kWh",
+};

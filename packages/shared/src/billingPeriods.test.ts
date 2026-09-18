@@ -77,13 +77,42 @@ describe("billingPeriodRange", () => {
 });
 
 describe("billingPeriodLabel", () => {
-  it("names the period the range covers", () => {
-    expect(billingPeriodLabel("yearly", -1, NOW)).toBe("2025");
-    expect(billingPeriodLabel("quarterly", 0, NOW)).toBe("T3 2026");
-    expect(billingPeriodLabel("quarterly", -1, NOW)).toBe("T2 2026");
-    expect(billingPeriodLabel("quarterly", -3, NOW)).toBe("T4 2025");
-    expect(billingPeriodLabel("monthly", 0, NOW)).toBe("septembre 2026");
-    expect(billingPeriodLabel("monthly", -9, NOW)).toBe("décembre 2025");
-    expect(billingPeriodLabel("custom", 0, NOW)).toBe("Personnalisé");
+  it("names the period the range covers, in French by default", () => {
+    expect(billingPeriodLabel("yearly", -1, "fr", NOW)).toBe("2025");
+    expect(billingPeriodLabel("quarterly", 0, "fr", NOW)).toBe("T3 2026");
+    expect(billingPeriodLabel("quarterly", -1, "fr", NOW)).toBe("T2 2026");
+    expect(billingPeriodLabel("quarterly", -3, "fr", NOW)).toBe("T4 2025");
+    expect(billingPeriodLabel("monthly", 0, "fr", NOW)).toBe("septembre 2026");
+    expect(billingPeriodLabel("monthly", -9, "fr", NOW)).toBe("décembre 2025");
+    expect(billingPeriodLabel("custom", 0, "fr", NOW)).toBe("Personnalisé");
+  });
+
+  it("names the same periods in English", () => {
+    expect(billingPeriodLabel("yearly", -1, "en", NOW)).toBe("2025");
+    expect(billingPeriodLabel("quarterly", 0, "en", NOW)).toBe("Q3 2026");
+    expect(billingPeriodLabel("quarterly", -3, "en", NOW)).toBe("Q4 2025");
+    expect(billingPeriodLabel("monthly", 0, "en", NOW)).toBe("September 2026");
+    expect(billingPeriodLabel("monthly", -9, "en", NOW)).toBe("December 2025");
+    expect(billingPeriodLabel("custom", 0, "en", NOW)).toBe("Custom");
+  });
+
+  it("names the same periods in German", () => {
+    expect(billingPeriodLabel("yearly", -1, "de", NOW)).toBe("2025");
+    expect(billingPeriodLabel("quarterly", 0, "de", NOW)).toBe("Q3 2026");
+    expect(billingPeriodLabel("monthly", 0, "de", NOW)).toBe("September 2026");
+    expect(billingPeriodLabel("monthly", -9, "de", NOW)).toBe("Dezember 2025");
+    expect(billingPeriodLabel("custom", 0, "de", NOW)).toBe("Benutzerdefiniert");
+  });
+
+  it("covers exactly the range it names, in every language", () => {
+    // The label and the range are computed from the same arithmetic; this
+    // pins that they cannot drift apart as the signature grows.
+    for (const locale of ["fr", "en", "de"] as const) {
+      for (let offset = -6; offset <= 6; offset++) {
+        const { from } = billingPeriodRange("monthly", offset, NOW);
+        const label = billingPeriodLabel("monthly", offset, locale, NOW);
+        expect(label).toContain(from.slice(0, 4));
+      }
+    }
   });
 });

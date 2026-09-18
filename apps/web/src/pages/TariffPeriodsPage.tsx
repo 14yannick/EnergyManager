@@ -13,21 +13,23 @@ import {
   type TariffSurchargeInput,
 } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 
-const KIND_LABELS: Record<TariffKind, string> = {
-  purchase: "Purchase",
-  feed_in: "Feed-in",
-  neighbor_sell: "Neighbour sale",
+const KIND_LABELS: Record<TariffKind, MessageKey> = {
+  purchase: "tariff.kind.purchase",
+  feed_in: "tariff.kind.feedIn",
+  neighbor_sell: "tariff.kind.neighborSell",
 };
 
-const PRICING_MODE_LABELS: Record<TariffPricingMode, string> = {
-  flat: "Quarterly (fixed rate)",
-  dynamic: "Day-ahead (spot)",
+const PRICING_MODE_LABELS: Record<TariffPricingMode, MessageKey> = {
+  flat: "tariff.mode.flat",
+  dynamic: "tariff.mode.dynamic",
 };
 
 export function TariffPeriodsPage() {
   const { site } = useDefaultSite();
+  const t = useT();
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -98,17 +100,13 @@ export function TariffPeriodsPage() {
     },
   });
 
-  if (!site) return <p className="text-slate-500">Loading…</p>;
+  if (!site) return <p className="text-slate-500">{t("common.loading")}</p>;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Tariff periods</h1>
-        <p className="text-sm text-slate-500">
-          Purchase, feed-in and neighbour-sale rates, each for a date/time range — as short as a
-          quarter-hour or as long as a year. Periods of the same kind must not overlap. Each
-          period also says how it is priced: at its own fixed rate, or from the day-ahead feed.
-        </p>
+        <h1 className="text-xl font-semibold text-slate-900">{t("tariff.title")}</h1>
+        <p className="text-sm text-slate-500">{t("tariff.intro")}</p>
       </div>
 
       <form
@@ -117,35 +115,35 @@ export function TariffPeriodsPage() {
         )}
         className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4"
       >
-        <Field label="Kind">
+        <Field label={t("tariff.kind")}>
           <select {...register("kind")} className="input">
             {Object.entries(KIND_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
-                {label}
+                {t(label)}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Start">
+        <Field label={t("tariff.start")}>
           <input type="datetime-local" {...register("startTs")} className="input" />
         </Field>
-        <Field label="End">
+        <Field label={t("tariff.end")}>
           <input type="datetime-local" {...register("endTs")} className="input" />
         </Field>
-        <Field label="Priced by">
+        <Field label={t("tariff.pricedBy")}>
           <select {...register("pricingMode")} className="input">
             {Object.entries(PRICING_MODE_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
-                {label}
+                {t(label)}
               </option>
             ))}
           </select>
         </Field>
         <Field
-          label={pricingMode === "dynamic" ? "Fallback rate (optional)" : "Rate (CHF/kWh)"}
+          label={pricingMode === "dynamic" ? t("tariff.fallbackRate") : t("tariff.rateChf")}
           hint={
             pricingMode === "dynamic"
-              ? "Used only where the feed has no price. Leave blank to leave those intervals unpriced."
+              ? t("tariff.fallbackHint")
               : undefined
           }
         >
@@ -156,7 +154,7 @@ export function TariffPeriodsPage() {
             className="input w-32"
           />
         </Field>
-        <Field label="Label (optional)">
+        <Field label={t("tariff.labelOptional")}>
           <input type="text" {...register("label")} className="input" />
         </Field>
         <button
@@ -164,7 +162,7 @@ export function TariffPeriodsPage() {
           disabled={createMutation.isPending || updateMutation.isPending}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {editingId ? "Save changes" : "Add period"}
+          {editingId ? t("tariff.saveChanges") : t("tariff.addPeriod")}
         </button>
         {editingId && (
           <button
@@ -172,7 +170,7 @@ export function TariffPeriodsPage() {
             onClick={stopEditing}
             className="rounded-md border px-4 py-2 text-sm font-medium text-slate-600"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         )}
       </form>
@@ -185,30 +183,30 @@ export function TariffPeriodsPage() {
       <table className="w-full overflow-hidden rounded-lg border bg-white text-sm">
         <thead className="bg-slate-100 text-left text-slate-600">
           <tr>
-            <th className="px-3 py-2">Kind</th>
-            <th className="px-3 py-2">Start</th>
-            <th className="px-3 py-2">End</th>
-            <th className="px-3 py-2">Priced by</th>
-            <th className="px-3 py-2">Rate</th>
-            <th className="px-3 py-2">Label</th>
+            <th className="px-3 py-2">{t("tariff.kind")}</th>
+            <th className="px-3 py-2">{t("tariff.start")}</th>
+            <th className="px-3 py-2">{t("tariff.end")}</th>
+            <th className="px-3 py-2">{t("tariff.pricedBy")}</th>
+            <th className="px-3 py-2">{t("tariff.rate")}</th>
+            <th className="px-3 py-2">{t("tariff.label")}</th>
             <th className="px-3 py-2" />
           </tr>
         </thead>
         <tbody>
           {periodsQuery.data?.map((p) => (
             <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50" : "border-t"}>
-              <td className="px-3 py-2">{KIND_LABELS[p.kind]}</td>
+              <td className="px-3 py-2">{t(KIND_LABELS[p.kind])}</td>
               <td className="px-3 py-2">{formatLocal(p.startTs)}</td>
               <td className="px-3 py-2">{formatLocal(p.endTs)}</td>
-              <td className="px-3 py-2">{PRICING_MODE_LABELS[p.pricingMode]}</td>
+              <td className="px-3 py-2">{t(PRICING_MODE_LABELS[p.pricingMode])}</td>
               <td className="px-3 py-2">
                 {p.rateChfPerKwh == null ? (
-                  <span className="text-slate-400">from feed</span>
+                  <span className="text-slate-400">{t("tariff.fromFeed")}</span>
                 ) : (
                   <>
                     {p.rateChfPerKwh.toFixed(5)}
                     {p.pricingMode === "dynamic" && (
-                      <span className="ml-1 text-xs text-slate-400">fallback</span>
+                      <span className="ml-1 text-xs text-slate-400">{t("tariff.fallback")}</span>
                     )}
                   </>
                 )}
@@ -219,13 +217,13 @@ export function TariffPeriodsPage() {
                   onClick={() => startEditing(p)}
                   className="mr-3 text-slate-400 hover:text-slate-900"
                 >
-                  Edit
+                  {t("common.edit")}
                 </button>
                 <button
                   onClick={() => deleteMutation.mutate(p.id)}
                   className="text-slate-400 hover:text-red-600"
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
               </td>
             </tr>
@@ -233,7 +231,7 @@ export function TariffPeriodsPage() {
           {periodsQuery.data?.length === 0 && (
             <tr>
               <td colSpan={7} className="px-3 py-6 text-center text-slate-400">
-                No tariff periods yet.
+                {t("tariff.emptyPeriods")}
               </td>
             </tr>
           )}
@@ -280,6 +278,7 @@ function formatLocal(iso: string): string {
 }
 
 function DynamicTariffStatus({ siteId }: { siteId: string }) {
+  const t = useT();
   const now = new Date();
   const from = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const to = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -304,13 +303,14 @@ function DynamicTariffStatus({ siteId }: { siteId: string }) {
     <div className="rounded-lg border bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium text-slate-700">Dynamic feed-in pricing (BKW)</h2>
+          <h2 className="text-sm font-medium text-slate-700">{t("tariff.dynamic")}</h2>
           <p className="mt-1 text-xs text-slate-500">
             {rates.length > 0
-              ? `${rates.length} quarter-hour rates loaded for the current window, published ${
-                  latestPublication ? formatLocal(latestPublication) : "—"
-                }.`
-              : "No dynamic rates loaded yet — flat feed-in periods above are used until then."}
+              ? t("tariff.dynamicLoaded", {
+                  count: rates.length,
+                  published: latestPublication ? formatLocal(latestPublication) : "—",
+                })
+              : t("tariff.dynamicEmpty")}
           </p>
         </div>
         <button
@@ -318,7 +318,7 @@ function DynamicTariffStatus({ siteId }: { siteId: string }) {
           disabled={syncMutation.isPending}
           className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
-          {syncMutation.isPending ? "Syncing…" : "Sync now"}
+          {syncMutation.isPending ? t("settings.syncing") : t("settings.syncNow")}
         </button>
       </div>
       {syncMutation.isError && (
@@ -329,6 +329,7 @@ function DynamicTariffStatus({ siteId }: { siteId: string }) {
 }
 
 function TariffSurchargesSection({ siteId }: { siteId: string }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -392,12 +393,8 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
   return (
     <div className="space-y-3 rounded-lg border bg-white p-4">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Surcharges</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Additive per-kWh components stacked on top of a period's rate — e.g. a Herkunftsnachweis
-          or Mindestvergütungsprämie on top of the feed-in rate. Unlike periods above, surcharges
-          may overlap each other; every matching one is added to the base rate.
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("tariff.surcharges")}</h2>
+        <p className="mt-1 text-xs text-slate-500">{t("tariff.surchargesNote")}</p>
       </div>
 
       <form
@@ -406,22 +403,22 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
         )}
         className="flex flex-wrap items-end gap-3"
       >
-        <Field label="Kind">
+        <Field label={t("tariff.kind")}>
           <select {...register("kind")} className="input">
             {Object.entries(KIND_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
-                {label}
+                {t(label)}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Start">
+        <Field label={t("tariff.start")}>
           <input type="datetime-local" {...register("startTs")} className="input" />
         </Field>
-        <Field label="End">
+        <Field label={t("tariff.end")}>
           <input type="datetime-local" {...register("endTs")} className="input" />
         </Field>
-        <Field label="Rate (CHF/kWh)">
+        <Field label={t("tariff.rateChf")}>
           <input
             type="number"
             step="0.00001"
@@ -429,7 +426,7 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
             className="input w-32"
           />
         </Field>
-        <Field label="Label">
+        <Field label={t("tariff.label")}>
           <input type="text" {...register("label")} className="input" />
         </Field>
         <button
@@ -437,7 +434,7 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
           disabled={createMutation.isPending || updateMutation.isPending}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {editingId ? "Save changes" : "Add surcharge"}
+          {editingId ? t("tariff.saveChanges") : t("tariff.addSurcharge")}
         </button>
         {editingId && (
           <button
@@ -445,7 +442,7 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
             onClick={stopEditing}
             className="rounded-md border px-4 py-2 text-sm font-medium text-slate-600"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         )}
       </form>
@@ -458,18 +455,18 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
       <table className="w-full overflow-hidden rounded-lg border text-sm">
         <thead className="bg-slate-100 text-left text-slate-600">
           <tr>
-            <th className="px-3 py-2">Kind</th>
-            <th className="px-3 py-2">Start</th>
-            <th className="px-3 py-2">End</th>
-            <th className="px-3 py-2">Rate</th>
-            <th className="px-3 py-2">Label</th>
+            <th className="px-3 py-2">{t("tariff.kind")}</th>
+            <th className="px-3 py-2">{t("tariff.start")}</th>
+            <th className="px-3 py-2">{t("tariff.end")}</th>
+            <th className="px-3 py-2">{t("tariff.rate")}</th>
+            <th className="px-3 py-2">{t("tariff.label")}</th>
             <th className="px-3 py-2" />
           </tr>
         </thead>
         <tbody>
           {surchargesQuery.data?.map((s) => (
             <tr key={s.id} className={editingId === s.id ? "border-t bg-amber-50" : "border-t"}>
-              <td className="px-3 py-2">{KIND_LABELS[s.kind]}</td>
+              <td className="px-3 py-2">{t(KIND_LABELS[s.kind])}</td>
               <td className="px-3 py-2">{formatLocal(s.startTs)}</td>
               <td className="px-3 py-2">{formatLocal(s.endTs)}</td>
               <td className="px-3 py-2">{s.rateChfPerKwh.toFixed(5)}</td>
@@ -479,13 +476,13 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
                   onClick={() => startEditing(s)}
                   className="mr-3 text-slate-400 hover:text-slate-900"
                 >
-                  Edit
+                  {t("common.edit")}
                 </button>
                 <button
                   onClick={() => deleteMutation.mutate(s.id)}
                   className="text-slate-400 hover:text-red-600"
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
               </td>
             </tr>
@@ -493,7 +490,7 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
           {surchargesQuery.data?.length === 0 && (
             <tr>
               <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
-                No surcharges yet.
+                {t("tariff.emptySurcharges")}
               </td>
             </tr>
           )}

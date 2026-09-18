@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useDefaultSite } from "../lib/useDefaultSite";
+import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useCanEdit } from "../lib/useIdentity";
 
 // Only site-level flows are pullable from Home Assistant: per-party
@@ -11,15 +12,31 @@ import { useCanEdit } from "../lib/useIdentity";
 // reports one AC figure covering both PV and battery discharge, so those two
 // are derived by splitting it rather than read from a sensor. Offering them
 // here would invite mapping a sensor that then gets overwritten every sync.
-const SYNCABLE_KINDS: Array<{ kind: IntervalMetricKind; label: string; hint: string }> = [
-  { kind: "inverter_ac", label: "Inverter AC output", hint: "Total AC yield — PV and battery combined" },
-  { kind: "pv_dc", label: "PV yield (DC)", hint: "Panel output, used to split the AC figure" },
-  { kind: "consumption_own", label: "Own consumption", hint: "Total household load" },
-  { kind: "export_grid", label: "Export — grid", hint: "Fed into the grid" },
-  { kind: "export_local", label: "Export — local", hint: "Total leaving the household" },
-  { kind: "import_grid", label: "Import — grid", hint: "Drawn from the grid" },
-  { kind: "battery_charge", label: "Battery charge", hint: "Energy into the battery" },
-  { kind: "battery_discharge", label: "Battery discharge", hint: "Energy out of the battery" },
+const SYNCABLE_KINDS: Array<{ kind: IntervalMetricKind; label: MessageKey; hint: MessageKey }> = [
+  { kind: "inverter_ac", label: "settings.metric.inverterAc", hint: "settings.metric.inverterAcHint" },
+  { kind: "pv_dc", label: "settings.metric.pvDc", hint: "settings.metric.pvDcHint" },
+  {
+    kind: "consumption_own",
+    label: "settings.metric.ownConsumption",
+    hint: "settings.metric.ownConsumptionHint",
+  },
+  { kind: "export_grid", label: "settings.metric.exportGrid", hint: "settings.metric.exportGridHint" },
+  {
+    kind: "export_local",
+    label: "settings.metric.exportLocal",
+    hint: "settings.metric.exportLocalHint",
+  },
+  { kind: "import_grid", label: "settings.metric.importGrid", hint: "settings.metric.importGridHint" },
+  {
+    kind: "battery_charge",
+    label: "settings.metric.batteryCharge",
+    hint: "settings.metric.batteryChargeHint",
+  },
+  {
+    kind: "battery_discharge",
+    label: "settings.metric.batteryDischarge",
+    hint: "settings.metric.batteryDischargeHint",
+  },
 ];
 
 function today() {
@@ -33,6 +50,7 @@ function daysAgo(n: number) {
 
 export function SettingsPage() {
   const { site } = useDefaultSite();
+  const t = useT();
   // Everything on this page is an admin-only write in the API's policy table,
   // so the whole page reads rather than edits for anyone else. The controls
   // are left visible on purpose: a viewer being shown the current
@@ -40,24 +58,21 @@ export function SettingsPage() {
   const { canEdit, isKnown } = useCanEdit();
   const statusQuery = useQuery({ queryKey: ["ha-status"], queryFn: api.homeAssistant.status });
 
-  if (!site) return <p className="text-slate-500">Loading…</p>;
+  if (!site) return <p className="text-slate-500">{t("common.loading")}</p>;
   const status = statusQuery.data;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
-        <p className="text-sm text-slate-500">
-          Investment totals used for payback, and the Home Assistant connection that supplies the
-          energy data.
-        </p>
+        <h1 className="text-xl font-semibold text-slate-900">{t("settings.title")}</h1>
+        <p className="text-sm text-slate-500">{t("settings.intro")}</p>
       </div>
 
       {/* Only once the role is actually known, so an admin never sees this
           flash by while `/api/me` is still in flight. */}
       {isKnown && !canEdit && (
         <p className="rounded-lg border border-slate-300 bg-slate-100 p-4 text-sm text-slate-600">
-          Read-only — changing these settings is reserved to the RCP administrator.
+          {t("common.readOnly")}
         </p>
       )}
 
@@ -66,28 +81,23 @@ export function SettingsPage() {
       <InvestmentSection siteId={site.id} canEdit={canEdit} />
 
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Home Assistant</h2>
-        <p className="text-sm text-slate-500">
-          Pulls energy statistics straight from Home Assistant instead of importing CSVs. It reads
-          the long-term statistics (the same numbers the Energy dashboard uses), so meter resets are
-          already accounted for.
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("settings.ha")}</h2>
+        <p className="text-sm text-slate-500">{t("settings.haIntro")}</p>
       </div>
 
       {status && !status.configured && (
         <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          Not configured — set <code>HA_URL</code> and <code>HA_TOKEN</code> in the API environment,
-          then restart it.
+          {t("settings.haUnconfigured")}
         </p>
       )}
 
       {status?.configured && (
         <>
           <div className="rounded-lg border bg-white p-4 text-sm text-slate-600">
-            Connected to <span className="font-medium text-slate-900">{status.url}</span>.{" "}
+            {t("settings.haConnected", { url: status.url ?? "" })}{" "}
             {status.syncEnabled
-              ? `Syncing automatically every ${status.syncIntervalMinutes} minutes.`
-              : "Automatic sync is disabled."}
+              ? t("settings.haSyncing", { minutes: status.syncIntervalMinutes ?? 0 })
+              : t("settings.haSyncOff")}
           </div>
           <MappingSection siteId={site.id} canEdit={canEdit} />
           <SyncSection siteId={site.id} canEdit={canEdit} />
@@ -98,6 +108,7 @@ export function SettingsPage() {
 }
 
 function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -137,23 +148,22 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
   return (
     <div className="space-y-3 rounded-lg border bg-white p-4">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Entity mapping</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Which Home Assistant statistic feeds each metric. Only statistics carrying a cumulative
-          total are listed — those are the ones Home Assistant can report energy per period for.
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("settings.mapping")}</h2>
+        <p className="mt-1 text-xs text-slate-500">{t("settings.mappingNote")}</p>
       </div>
 
       {statsQuery.isError && (
-        <p className="text-sm text-red-600">Could not read the statistic list: {(statsQuery.error as Error).message}</p>
+        <p className="text-sm text-red-600">
+          {t("settings.statListFailed", { message: (statsQuery.error as Error).message })}
+        </p>
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <table className="w-full text-sm">
         <thead className="text-left text-slate-500">
           <tr>
-            <th className="py-1 pr-4 font-medium">Metric</th>
-            <th className="py-1 pr-4 font-medium">Home Assistant statistic</th>
+            <th className="py-1 pr-4 font-medium">{t("settings.metric")}</th>
+            <th className="py-1 pr-4 font-medium">{t("settings.haStatistic")}</th>
             <th className="py-1" />
           </tr>
         </thead>
@@ -163,8 +173,8 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
             return (
               <tr key={kind} className="border-t align-middle">
                 <td className="py-2 pr-4">
-                  <div className="text-slate-900">{label}</div>
-                  <div className="text-xs text-slate-500">{hint}</div>
+                  <div className="text-slate-900">{t(label)}</div>
+                  <div className="text-xs text-slate-500">{t(hint)}</div>
                 </td>
                 <td className="py-2 pr-4">
                   <select
@@ -180,7 +190,7 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
                       setMutation.mutate({ metricKind: kind, statisticId });
                     }}
                   >
-                    <option value="">— not synced —</option>
+                    <option value="">{t("settings.notSynced")}</option>
                     {options.map((o) => (
                       <option key={o.statisticId} value={o.statisticId}>
                         {o.statisticId}
@@ -190,7 +200,7 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
                   </select>
                 </td>
                 <td className="py-2 text-right text-xs text-slate-400">
-                  {current ? "mapped" : ""}
+                  {current ? t("settings.mapped") : ""}
                 </td>
               </tr>
             );
@@ -198,18 +208,13 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
         </tbody>
       </table>
 
-      <p className="mt-3 text-xs text-slate-500">
-        <span className="font-medium text-slate-600">Production</span> and{" "}
-        <span className="font-medium text-slate-600">battery discharge (AC)</span> are not listed
-        because they are not sensors. The inverter reports a single AC figure covering both the
-        panels and the battery, so the two are derived from it after each sync, split in proportion
-        to the DC each source supplied. That is what stops solar being recorded at midnight.
-      </p>
+      <p className="mt-3 text-xs text-slate-500">{t("settings.derivedNote")}</p>
     </div>
   );
 }
 
 function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
+  const { t, tag } = useI18n();
   const [granularity, setGranularity] = useState<"quarter_hour" | "hour">("quarter_hour");
   const [useRange, setUseRange] = useState(false);
   const [from, setFrom] = useState(() => daysAgo(7));
@@ -235,22 +240,18 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
   return (
     <div className="space-y-4 rounded-lg border bg-white p-4">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Sync</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Home Assistant keeps 5-minute statistics for about 10 days and hourly ones indefinitely.
-          Quarter-hour therefore only reaches back into that recent window; use hourly to backfill
-          older history. Re-syncing a period is safe — rows are replaced, not duplicated.
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("settings.sync")}</h2>
+        <p className="mt-1 text-xs text-slate-500">{t("settings.syncNote")}</p>
       </div>
 
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Granularity
+          {t("settings.granularity")}
           <div className="flex overflow-hidden rounded-md border border-slate-300">
             {(
               [
-                ["quarter_hour", "Quarter-hour"],
-                ["hour", "Hourly"],
+                ["quarter_hour", "settings.quarterHour"],
+                ["hour", "settings.hourly"],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -261,7 +262,7 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
                   granularity === value ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                {label}
+                {t(label)}
               </button>
             ))}
           </div>
@@ -274,13 +275,13 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
             disabled={!canEdit}
             onChange={(e) => setUseRange(e.target.checked)}
           />
-          Specific date range
+          {t("settings.dateRange")}
         </label>
 
         {useRange && (
           <>
             <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-              From
+              {t("common.from")}
               <input
                 type="date"
                 value={from}
@@ -290,7 +291,7 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
               />
             </label>
             <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-              To
+              {t("common.to")}
               <input
                 type="date"
                 value={to}
@@ -307,25 +308,27 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
           disabled={!canEdit || syncMutation.isPending || !rangeValid}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {syncMutation.isPending ? "Syncing…" : "Sync now"}
+          {syncMutation.isPending ? t("settings.syncing") : t("settings.syncNow")}
         </button>
       </div>
 
-      {!rangeValid && <p className="text-sm text-red-600">"To" must be on or after "From".</p>}
+      {!rangeValid && <p className="text-sm text-red-600">{t("settings.rangeInvalid")}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {result && (
         <div className="space-y-2 border-t pt-3 text-sm">
           <div className="flex flex-wrap gap-6">
             <span>
-              <span className="font-semibold text-slate-900">{result.inserted}</span> inserted
+              <span className="font-semibold text-slate-900">{result.inserted}</span>{" "}
+              {t("settings.inserted")}
             </span>
             <span>
-              <span className="font-semibold text-slate-900">{result.updated}</span> updated
+              <span className="font-semibold text-slate-900">{result.updated}</span>{" "}
+              {t("settings.updated")}
             </span>
             <span className="text-slate-500">
-              {new Date(result.from).toLocaleString("en-CH", { timeZone: "Europe/Zurich" })} –{" "}
-              {new Date(result.to).toLocaleString("en-CH", { timeZone: "Europe/Zurich" })}
+              {new Date(result.from).toLocaleString(tag, { timeZone: "Europe/Zurich" })} –{" "}
+              {new Date(result.to).toLocaleString(tag, { timeZone: "Europe/Zurich" })}
             </span>
           </div>
           <table className="w-full text-sm">
@@ -334,7 +337,9 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
                 <tr key={m.metricKind} className="border-t">
                   <td className="py-1 pr-4 text-slate-700">{m.metricKind}</td>
                   <td className="py-1 pr-4 text-slate-500">{m.statisticId}</td>
-                  <td className="py-1 text-right text-slate-900">{m.rows} rows</td>
+                  <td className="py-1 text-right text-slate-900">
+                    {t("settings.rows", { count: m.rows })}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -361,6 +366,7 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
  * points at the full page instead.
  */
 function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -386,6 +392,8 @@ function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boole
       }
       return api.costItems.create(siteId, {
         category,
+        // Stored on the cost item and read back by the itemised page: this is
+        // data, not chrome, so it does not follow the interface language.
         label: category === "battery" ? "Battery" : "Solar",
         amountChf: amount,
       });
@@ -413,21 +421,17 @@ function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boole
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Investment</h2>
-        <p className="text-xs text-slate-500">
-          What the system cost, used for payback and breakeven. One figure per category; a
-          category holding several entries (a subsidy booked separately, say) shows its total
-          read-only rather than guessing which one to change.
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("settings.investment")}</h2>
+        <p className="text-xs text-slate-500">{t("settings.investmentNote")}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:max-w-4xl">
         {([
-          ["battery", "Battery", battery],
-          ["solar", "Solar", solar],
+          ["battery", "settings.battery", battery],
+          ["solar", "settings.solar", solar],
         ] as const).map(([category, label, row]) => (
           <div key={category} className="rounded-lg border bg-white p-4">
-            <p className="text-xs font-medium text-slate-500">{label}</p>
+            <p className="text-xs font-medium text-slate-500">{t(label)}</p>
             {row.editable ? (
               <input
                 type="number"
@@ -447,7 +451,7 @@ function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boole
                 <p className="mt-1 text-lg text-slate-700">CHF {row.total.toFixed(2)}</p>
                 {row.split && (
                   <p className="mt-1 text-xs text-slate-400">
-                    {row.matching.length} separate items — shown as a total, not editable here
+                    {t("settings.splitItems", { count: row.matching.length })}
                   </p>
                 )}
               </>
@@ -455,7 +459,7 @@ function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boole
           </div>
         ))}
         <div className="rounded-lg border bg-white p-4">
-          <p className="text-xs font-medium text-slate-500">Total</p>
+          <p className="text-xs font-medium text-slate-500">{t("common.total")}</p>
           <p className="mt-1 text-lg font-semibold text-slate-900">CHF {total.toFixed(2)}</p>
         </div>
       </div>
@@ -476,6 +480,7 @@ function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boole
  * visible rather than implied.
  */
 function ProductionStartSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -498,16 +503,13 @@ function ProductionStartSection({ site, canEdit }: { site: Site; canEdit: boolea
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Production start</h2>
-        <p className="text-xs text-slate-500">
-          When the system started producing. The dashboard will not measure payback over days
-          before this, which would otherwise count as periods that earned nothing.
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("settings.productionStart")}</h2>
+        <p className="text-xs text-slate-500">{t("settings.productionStartNote")}</p>
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4">
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Production start date
+          {t("settings.productionStartDate")}
           <input
             type="date"
             className="input"
@@ -521,11 +523,11 @@ function ProductionStartSection({ site, canEdit }: { site: Site; canEdit: boolea
         </label>
         {site.productionStartDate == null && firstProduction && (
           <p className="text-xs text-slate-400">
-            Not stated — defaulting to {firstProduction}, the first day with recorded production.
+            {t("settings.productionStartFallback", { date: firstProduction })}
           </p>
         )}
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Battery conversion loss (%)
+          {t("settings.conversionLoss")}
           <input
             type="number"
             step="0.1"
@@ -543,8 +545,7 @@ function ProductionStartSection({ site, canEdit }: { site: Site; canEdit: boolea
             }}
           />
           <span className="max-w-56 font-normal text-slate-400">
-            Charging is metered DC but everything priced is AC, so the export it displaced is
-            reduced by this before being charged against the battery.
+            {t("settings.conversionLossNote")}
           </span>
         </label>
         {canEdit && site.productionStartDate != null && (
@@ -553,7 +554,7 @@ function ProductionStartSection({ site, canEdit }: { site: Site; canEdit: boolea
             onClick={() => save.mutate({ productionStartDate: null })}
             className="text-xs text-slate-400 hover:text-slate-900"
           >
-            Reset to first recorded production
+            {t("settings.resetProductionStart")}
           </button>
         )}
       </div>

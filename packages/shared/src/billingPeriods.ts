@@ -79,28 +79,31 @@ export function billingPeriodRange(
   return { from: toDateString(y, m1, 1), to: toDateString(y, m1, daysInMonth(y, m1)) };
 }
 
-const MONTHS_FR = [
-  "janvier",
-  "février",
-  "mars",
-  "avril",
-  "mai",
-  "juin",
-  "juillet",
-  "août",
-  "septembre",
-  "octobre",
-  "novembre",
-  "décembre",
-];
+export type PeriodLocale = "fr" | "en" | "de";
+
+/** Regional tags, so a label reads as the surrounding UI does. */
+const INTL_TAG: Record<PeriodLocale, string> = { fr: "fr-CH", en: "en-CH", de: "de-CH" };
+
+/** Quarters are written T1–T4 in French, Q1–Q4 in English and German. */
+const QUARTER_PREFIX: Record<PeriodLocale, string> = { fr: "T", en: "Q", de: "Q" };
+
+const CUSTOM: Record<PeriodLocale, string> = {
+  fr: "Personnalisé",
+  en: "Custom",
+  de: "Benutzerdefiniert",
+};
 
 /**
- * Human label for a period, in French to match the billing page — it is the
- * one screen a participant reads.
+ * Human label for a period.
+ *
+ * Month names come from `Intl` rather than a table: the two spellings already
+ * exist in the platform, and a hand-written list is one more place for a
+ * language to be half-added.
  */
 export function billingPeriodLabel(
   kind: BillingPeriodKind,
   offset: number,
+  locale: PeriodLocale = "fr",
   now: Date = new Date(),
 ): string {
   const { from } = billingPeriodRange(kind, offset, now);
@@ -109,7 +112,14 @@ export function billingPeriodLabel(
   const month1 = Number(monthStr);
 
   if (kind === "yearly") return String(year);
-  if (kind === "quarterly") return `T${Math.floor((month1 - 1) / 3) + 1} ${year}`;
-  if (kind === "monthly") return `${MONTHS_FR[month1 - 1]} ${year}`;
-  return "Personnalisé";
+  if (kind === "quarterly") {
+    return `${QUARTER_PREFIX[locale]}${Math.floor((month1 - 1) / 3) + 1} ${year}`;
+  }
+  if (kind === "monthly") {
+    return new Date(year, month1 - 1, 1).toLocaleDateString(INTL_TAG[locale], {
+      month: "long",
+      year: "numeric",
+    });
+  }
+  return CUSTOM[locale];
 }

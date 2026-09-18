@@ -3,6 +3,7 @@ import type { ParticipantInvoice, Party } from "@energy-manager/shared";
 import { SwissQRBill } from "swissqrbill/svg";
 import type { Data } from "swissqrbill/types";
 import { calculateQRReferenceChecksum, calculateSCORReferenceChecksum, isQRIBAN } from "swissqrbill/utils";
+import { useI18n } from "../i18n/context";
 
 /** "2026-04-01" to "01.04.2026", the form a Swiss payer expects. */
 const swissDate = (iso: string) => iso.split("-").reverse().join(".");
@@ -72,6 +73,9 @@ function debtorOf(invoice: ParticipantInvoice, party?: Party): Data["debtor"] | 
   };
 }
 
+/** The slip's own four languages; ours are a subset. */
+const QR_LANGUAGE = { fr: "FR", de: "DE", en: "EN" } as const;
+
 export interface QrBillProps {
   /** The party flagged as RCP operator — the payee. */
   operator?: Party;
@@ -81,6 +85,7 @@ export interface QrBillProps {
 }
 
 export function QrBill({ operator, invoice, party }: QrBillProps) {
+  const { t, locale } = useI18n();
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,10 +103,10 @@ export function QrBill({ operator, invoice, party }: QrBillProps) {
       debtor: debtorOf(invoice, party),
       // Joined without spaces: the bill's text box breaks on whitespace, and
       // a spaced dash sends the closing date onto a third line.
-      message: `Facture RCP ${swissDate(invoice.from)}-${swissDate(invoice.to)}`,
+      message: t("qr.message", { from: swissDate(invoice.from), to: swissDate(invoice.to) }),
       reference: buildReference(creditor.account, invoice.from, invoice.partyReference),
     };
-  }, [operator, invoice, party]);
+  }, [operator, invoice, party, t]);
 
   useEffect(() => {
     const node = host.current;
@@ -112,19 +117,22 @@ export function QrBill({ operator, invoice, party }: QrBillProps) {
       // appendChild of the library's own DOM node rather than setting
       // innerHTML: the bill embeds names and addresses as SVG text, and this
       // way they are never parsed as markup.
-      node.appendChild(new SwissQRBill(data, { language: "FR" }).element);
+      // The slip's own headings ("Payable to", "Reference", …) come from the
+      // library, so it follows the app's language rather than being fixed to
+      // French — the bill and the invoice around it stay in one language.
+      node.appendChild(
+        new SwissQRBill(data, { language: QR_LANGUAGE[locale] }).element,
+      );
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "QR-bill could not be generated");
+      setError(err instanceof Error ? err.message : t("qr.error"));
     }
-  }, [data]);
+  }, [data, locale, t]);
 
   if (!data) {
     return (
       <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 print:hidden">
-        Aucun bulletin de versement : marquez un participant comme gestionnaire du RCP et
-        complétez son IBAN et son adresse sous &laquo;&nbsp;Import readings&nbsp;&raquo; →
-        Participants.
+        {t("qr.noBill")}
       </p>
     );
   }
@@ -133,7 +141,7 @@ export function QrBill({ operator, invoice, party }: QrBillProps) {
     <section className="print-payment rounded-lg border bg-white p-4 print:border-0 print:p-0">
       {error && (
         <p className="mb-2 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          Bulletin de versement impossible : {error}
+          {t("qr.failed", { message: error })}
         </p>
       )}
       {/* Fixed 210 × 105 mm by specification, so never scaled — a resized QR

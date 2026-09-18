@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import type { SavingsQuery } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { useT, type MessageKey, type Translate } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 
 type Granularity = NonNullable<SavingsQuery["granularity"]>;
@@ -68,23 +69,42 @@ const formatRevenue = (value: number, unit: RevenueUnit) =>
 // Two of the four series are named for the money they earn, which reads wrong
 // once the bars are energy: the same segment is a revenue in one unit and a
 // flow of kWh in the other.
-const seriesNames = (unit: RevenueUnit) => ({
-  consumption: "Direct consumption",
-  direct: "Direct export",
+const seriesNames = (unit: RevenueUnit, t: Translate) => ({
+  consumption: t("dash.flow.consumption"),
+  direct: t("dash.flow.direct"),
   // Deliberately not "Battery revenue": this segment is the gross value of what
   // the battery delivered, while the KPI of that name is net of charging. Two
   // different numbers under one label was the confusion.
-  battery: barUnit(unit) === "chf" ? "Battery discharge" : "Battery discharge",
-  neighbor: barUnit(unit) === "chf" ? "Neighbour sale" : "Neighbour supply",
+  battery: t("dash.flow.battery"),
+  neighbor: barUnit(unit) === "chf" ? t("dash.flow.neighborSale") : t("dash.flow.neighborSupply"),
 });
 
-const PERIOD_UNIT: Record<Granularity, string> = {
-  hourly: "hour",
-  daily: "day",
-  monthly: "month",
-  quarterly: "quarter",
-  yearly: "year",
-  overall: "period",
+const PERIOD_UNIT: Record<Granularity, MessageKey> = {
+  hourly: "dash.unit.hour",
+  daily: "dash.unit.day",
+  monthly: "dash.unit.month",
+  quarterly: "dash.unit.quarter",
+  yearly: "dash.unit.year",
+  overall: "dash.unit.period",
+};
+
+/** The same words in the plural, for "annualised at 12 months a year". */
+const PERIOD_UNITS: Record<Granularity, MessageKey> = {
+  hourly: "dash.units.hour",
+  daily: "dash.units.day",
+  monthly: "dash.units.month",
+  quarterly: "dash.units.quarter",
+  yearly: "dash.units.year",
+  overall: "dash.units.period",
+};
+
+const GRANULARITY_LABEL: Record<Granularity, MessageKey> = {
+  hourly: "dash.g.hourly",
+  daily: "dash.g.daily",
+  monthly: "dash.g.monthly",
+  quarterly: "dash.g.quarterly",
+  yearly: "dash.g.yearly",
+  overall: "dash.g.overall",
 };
 
 /** How many of each period fall in a year — what payback is annualised by. */
@@ -218,45 +238,45 @@ function clampRange(
 
 const RANGE_PRESETS: Array<{
   id: string;
-  label: string;
+  label: MessageKey;
   resolve: (data: DataRange) => { from: string; to: string };
   /** Switches the view too — a 24-hour range is meaningless as a single bar. */
   granularity?: Granularity;
 }> = [
-  { id: "last_24_hours", label: "Last 24 hours", granularity: "hourly", resolve: () => {
+  { id: "last_24_hours", label: "dash.preset.last24h", granularity: "hourly", resolve: () => {
       const d = new Date();
       d.setDate(d.getDate() - 1);
       return { from: iso(d), to: todayIso() };
     } },
-  { id: "last_7_days", label: "Last 7 days", resolve: () => {
+  { id: "last_7_days", label: "dash.preset.last7d", resolve: () => {
       const d = new Date();
       d.setDate(d.getDate() - 6);
       return { from: iso(d), to: todayIso() };
     } },
-  { id: "last_30_days", label: "Last 30 days", resolve: () => {
+  { id: "last_30_days", label: "dash.preset.last30d", resolve: () => {
       const d = new Date();
       d.setDate(d.getDate() - 29);
       return { from: iso(d), to: todayIso() };
     } },
-  { id: "this_month", label: "This month", resolve: () => ({
+  { id: "this_month", label: "dash.preset.thisMonth", resolve: () => ({
       from: startOfMonth(todayIso()), to: endOfMonth(todayIso()) }) },
-  { id: "last_3_months", label: "Last 3 months", resolve: () => ({
+  { id: "last_3_months", label: "dash.preset.last3m", resolve: () => ({
       from: startOfMonth(addMonths(todayIso(), -2)), to: endOfMonth(todayIso()) }) },
-  { id: "this_quarter", label: "This quarter", resolve: () => ({
+  { id: "this_quarter", label: "dash.preset.thisQuarter", resolve: () => ({
       from: startOfQuarter(todayIso()), to: endOfQuarter(todayIso()) }) },
-  { id: "last_quarter", label: "Last quarter", resolve: () => {
+  { id: "last_quarter", label: "dash.preset.lastQuarter", resolve: () => {
       const prev = addMonths(startOfQuarter(todayIso()), -1); // any day in the previous quarter
       return { from: startOfQuarter(prev), to: endOfQuarter(prev) };
     } },
-  { id: "last_12_months", label: "Last 12 months", resolve: () => ({
+  { id: "last_12_months", label: "dash.preset.last12m", resolve: () => ({
       from: startOfMonth(addMonths(todayIso(), -11)), to: endOfMonth(todayIso()) }) },
-  { id: "this_year", label: "This year", resolve: () => ({
+  { id: "this_year", label: "dash.preset.thisYear", resolve: () => ({
       from: startOfYear(todayIso()), to: endOfYear(todayIso()) }) },
-  { id: "last_year", label: "Last year", resolve: () => {
+  { id: "last_year", label: "dash.preset.lastYear", resolve: () => {
       const y = String(new Date().getFullYear() - 1);
       return { from: `${y}-01-01`, to: `${y}-12-31` };
     } },
-  { id: "all", label: "All data", resolve: (data) => ({
+  { id: "all", label: "dash.preset.all", resolve: (data) => ({
       from: data.from ?? startOfYear(todayIso()), to: data.to ?? todayIso() }) },
 ];
 
@@ -266,6 +286,7 @@ function today() {
 
 export function DashboardPage() {
   const { site } = useDefaultSite();
+  const t = useT();
   const initial = useMemo(
     () => RANGE_PRESETS.find((p) => p.id === INITIAL_PRESET)!.resolve({ from: null, to: null }),
     [],
@@ -273,9 +294,14 @@ export function DashboardPage() {
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [granularity, setGranularity] = useState<Granularity>(INITIAL_GRANULARITY);
-  const unit = PERIOD_UNIT[granularity];
+  const unit = t(PERIOD_UNIT[granularity]);
   const avgSuffix =
-    granularity === "overall" ? `over ${inclusiveDays(from, to)} days` : `/${unit} avg`;
+    granularity === "overall"
+      ? t("dash.overallAvg", { days: inclusiveDays(from, to) })
+      : null;
+  /** "CHF 1.23/day avg", or the overall view's "over N days". */
+  const avgOf = (value: number | undefined) =>
+    value == null ? undefined : (avgSuffix ?? t("dash.avgSuffix", { value: value.toFixed(2), unit }));
 
   const rangeQuery = useQuery({
     queryKey: ["readings-range", site?.id],
@@ -303,18 +329,15 @@ export function DashboardPage() {
     enabled: !!site,
   });
 
-  if (!site) return <p className="text-slate-500">Loading…</p>;
+  if (!site) return <p className="text-slate-500">{t("common.loading")}</p>;
   const summary = summaryQuery.data;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Savings & payback</h1>
-          <p className="max-w-2xl text-sm text-slate-500">
-            What the system earned or avoided over the selected range, and how long it takes to pay
-            back its cost.
-          </p>
+          <h1 className="text-xl font-semibold text-slate-900">{t("dash.title")}</h1>
+          <p className="max-w-2xl text-sm text-slate-500">{t("dash.intro")}</p>
         </div>
         <div className="flex flex-wrap items-end gap-3 text-sm">
           <RangeControls
@@ -336,7 +359,7 @@ export function DashboardPage() {
             bounds={bounds}
           />
           <div className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            View
+            {t("dash.view")}
             <div className="flex overflow-hidden rounded-md border border-slate-300">
               {(["hourly", "daily", "monthly", "quarterly", "yearly", "overall"] as const).map((g) => (
                 <button
@@ -351,7 +374,7 @@ export function DashboardPage() {
                     granularity === g ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  {g}
+                  {t(GRANULARITY_LABEL[g])}
                 </button>
               ))}
             </div>
@@ -360,63 +383,41 @@ export function DashboardPage() {
       </div>
 
       {granularity === "hourly" && (
-        <p className="text-xs text-slate-500">
-          Hourly view shows at most {MAX_HOURLY_DAYS} days at a time — a quarter would be over
-          2,000 bars. Moving one end slides the other to keep the window that long.
-        </p>
+        <p className="text-xs text-slate-500">{t("dash.hourlyCap", { days: MAX_HOURLY_DAYS })}</p>
       )}
 
       {granularity !== "daily" && granularity !== "hourly" && (
         <p className="text-xs text-slate-500">
-          {granularity === "overall" ? (
-            <>
-              Overall view: the whole range is one period of {inclusiveDays(from, to)} days. Payback
-              is annualised by that actual length rather than by an assumed whole month or year, so
-              a partial period can't distort it.
-            </>
-          ) : (
-            <>
-              {granularity === "monthly" ? "Monthly" : granularity === "quarterly" ? "Quarterly" : "Yearly"}{" "}
-              view: every figure below is per calendar {unit} — the averages, the payback
-              annualisation ({PERIODS_PER_YEAR[granularity]} period
-              {PERIODS_PER_YEAR[granularity] === 1 ? "" : "s"} a year rather than 365), and one
-              revenue bar per {unit}. Totals are the same either way; only the period they're
-              divided into changes.
-            </>
-          )}
+          {granularity === "overall"
+            ? t("dash.overallNote", { days: inclusiveDays(from, to) })
+            : t("dash.periodNote", { unit, periods: PERIODS_PER_YEAR[granularity] })}
         </p>
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-slate-700">KPI</h2>
+        <h2 className="text-sm font-medium text-slate-700">{t("dash.kpi")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Total savings — with battery"
+          label={t("dash.withBatteryTotal")}
           value={summary?.totals.withBatteryChf}
-          sub={summary ? granularity === "overall" ? avgSuffix : `CHF ${summary.avgDaily.withBatteryChf.toFixed(2)}/${unit} avg` : undefined}
+          sub={avgOf(summary?.avgDaily.withBatteryChf)}
         />
         <StatCard
-          label="Total savings — no battery"
+          label={t("dash.noBatteryTotal")}
           value={summary?.totals.withoutBatteryChf}
-          sub={summary ? granularity === "overall" ? avgSuffix : `CHF ${summary.avgDaily.withoutBatteryChf.toFixed(2)}/${unit} avg` : undefined}
+          sub={avgOf(summary?.avgDaily.withoutBatteryChf)}
         />
         <StatCard
-          label="Battery-only savings"
-          hint="vs the same period with no battery — ignores round-trip loss"
+          label={t("dash.batteryOnly")}
+          hint={t("dash.batteryOnlyHint")}
           value={summary?.totals.batteryOnlyChf}
-          sub={summary ? granularity === "overall" ? avgSuffix : `CHF ${summary.avgDaily.batteryOnlyChf.toFixed(2)}/${unit} avg` : undefined}
+          sub={avgOf(summary?.avgDaily.batteryOnlyChf)}
         />
         <StatCard
-          label="Battery revenue"
-          hint="discharge value less what charging cost — the truer figure"
+          label={t("dash.batteryRevenue")}
+          hint={t("dash.batteryRevenueHint")}
           value={summary?.totals.batteryRevenueChf}
-          sub={
-            summary
-              ? granularity === "overall"
-                ? avgSuffix
-                : `CHF ${summary.avgDaily.batteryRevenueChf.toFixed(2)}/${unit} avg`
-              : undefined
-          }
+          sub={avgOf(summary?.avgDaily.batteryRevenueChf)}
         />
         </div>
       </section>
@@ -425,34 +426,35 @@ export function DashboardPage() {
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-medium text-slate-700">Payback by category</h2>
+          <h2 className="text-sm font-medium text-slate-700">{t("dash.payback")}</h2>
           <p className="mt-1 text-xs text-slate-500">
-            Not a measurement — a projection. Investment cost is divided by the average savings per{" "}
-            {unit} across the selected range
-            {granularity === "overall"
-              ? `, annualised by the range's actual length (${inclusiveDays(from, to)} days)`
-              : granularity === "yearly"
-                ? ", which is already an annual figure"
-                : `, annualised at ${PERIODS_PER_YEAR[granularity]} ${unit}s a year`}
-            . A range that isn't representative of a full year makes it misleading: a summer-only
-            range projects a payback that never arrives, a winter-only one the reverse. Breakeven
-            below is the opposite — an actual date, only reported if cumulative savings crossed the
-            cost inside the range.
+            {t("dash.paybackNote", {
+              unit,
+              annualised:
+                granularity === "overall"
+                  ? t("dash.annualisedOverall", { days: inclusiveDays(from, to) })
+                  : granularity === "yearly"
+                    ? t("dash.annualisedYearly")
+                    : t("dash.annualisedOther", {
+                        periods: PERIODS_PER_YEAR[granularity],
+                        units: t(PERIOD_UNITS[granularity]),
+                      }),
+            })}
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <PaybackCard
-            label="With battery"
+            label={t("dash.withBattery")}
             years={summary?.payback.withBatteryYears}
             breakeven={summary?.breakeven.withBatteryDate}
           />
           <PaybackCard
-            label="No battery"
+            label={t("dash.noBattery")}
             years={summary?.payback.withoutBatteryYears}
             breakeven={summary?.breakeven.withoutBatteryDate}
           />
           <PaybackCard
-            label="Battery only"
+            label={t("dash.batteryOnlyShort")}
             years={summary?.payback.batteryOnlyYears}
             breakeven={summary?.breakeven.batteryOnlyDate}
           />
@@ -587,8 +589,8 @@ function periodKeys(from: string, to: string, granularity: Granularity): string[
   return keys;
 }
 
-function periodLabel(key: string, granularity: Granularity): string {
-  if (granularity === "overall") return "Total";
+function periodLabel(key: string, granularity: Granularity, totalLabel: string): string {
+  if (granularity === "overall") return totalLabel;
   if (granularity === "quarterly") return `${key.slice(5)} ${key.slice(0, 4)}`;
   if (granularity === "hourly") {
     // "YYYY-MM-DDTHH" -> "14.09 08h"
@@ -624,12 +626,13 @@ function RevenueTooltip({
   unit: RevenueUnit;
   showProduction?: boolean;
 }) {
+  const t = useT();
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0]!.payload;
   const [y, m, d] = row.key.split("-");
   const heading =
     granularity === "overall"
-      ? "Whole period"
+      ? t("dash.wholePeriod")
       : granularity === "quarterly"
         ? `${row.key.slice(5)} ${row.key.slice(0, 4)}`
         : granularity === "yearly"
@@ -644,10 +647,10 @@ function RevenueTooltip({
   // holds whichever bars happen to be rendered, which changes with the mode
   // while the row always carries both units.
   const flows = [
-    { key: "consumption", name: "Direct consumption", chf: row.consumptionChf, kwh: row.consumptionKwh },
-    { key: "direct", name: "Direct export", chf: row.directChf, kwh: row.directKwh },
-    { key: "battery", name: "Battery discharge", chf: row.batteryChf, kwh: row.batteryKwh },
-    { key: "neighbor", name: "Neighbour", chf: row.neighborChf, kwh: row.neighborKwh },
+    { key: "consumption", name: t("dash.flow.consumption"), chf: row.consumptionChf, kwh: row.consumptionKwh },
+    { key: "direct", name: t("dash.flow.direct"), chf: row.directChf, kwh: row.directKwh },
+    { key: "battery", name: t("dash.flow.battery"), chf: row.batteryChf, kwh: row.batteryKwh },
+    { key: "neighbor", name: t("dash.flow.neighbor"), chf: row.neighborChf, kwh: row.neighborKwh },
   ] as const;
   const totalChf = flows.reduce((sum, f) => sum + f.chf, 0);
   const totalKwh = flows.reduce((sum, f) => sum + f.kwh, 0);
@@ -693,7 +696,7 @@ function RevenueTooltip({
             );
           })}
           <tr className="font-semibold">
-            <td className="border-t pt-1 text-slate-600">Total</td>
+            <td className="border-t pt-1 text-slate-600">{t("common.total")}</td>
             <td className="border-t pt-1 text-right tabular-nums text-slate-900">
               {totalChf.toFixed(2)}
             </td>
@@ -707,14 +710,14 @@ function RevenueTooltip({
         {(row.batteryChargingCostChf !== 0 || row.batteryNetChf !== 0) && (
           <>
             <div className="flex items-center justify-between gap-6">
-              <span className="text-slate-600">Charging (export forgone)</span>
+              <span className="text-slate-600">{t("dash.chargingForgone")}</span>
               <span className="font-semibold tabular-nums text-slate-900">
                 {row.batteryChargingCostChf > 0 ? "−" : row.batteryChargingCostChf < 0 ? "+" : ""}
                 {formatRevenue(Math.abs(row.batteryChargingCostChf), "chf")}
               </span>
             </div>
             <div className="flex items-center justify-between gap-6">
-              <span className="text-slate-600">Battery net</span>
+              <span className="text-slate-600">{t("dash.batteryNet")}</span>
               <span className="font-semibold tabular-nums text-slate-900">
                 {formatRevenue(row.batteryNetChf, "chf")}
               </span>
@@ -723,7 +726,7 @@ function RevenueTooltip({
         )}
         {showProduction && (
           <div className="flex items-center justify-between gap-6">
-            <span className="text-slate-600">Production + charging</span>
+            <span className="text-slate-600">{t("dash.productionPlusCharging")}</span>
             <span className="font-semibold tabular-nums text-slate-900">
               {row.producedKwh.toFixed(1)} kWh
             </span>
@@ -745,6 +748,7 @@ function RevenueBreakdownChart({
   to: string;
   granularity: Granularity;
 }) {
+  const t = useT();
   const [showProduction, setShowProduction] = useState(false);
   const [unit, setUnit] = useState<RevenueUnit>("chf");
 
@@ -784,7 +788,7 @@ function RevenueBreakdownChart({
 
       return {
         key,
-        label: periodLabel(key, granularity),
+        label: periodLabel(key, granularity, t("common.total")),
         ...bars,
         consumptionChf: chf.consumption,
         directChf: chf.direct,
@@ -812,7 +816,7 @@ function RevenueBreakdownChart({
 
   // A year of daily bars is ~365 labels in the width of a dozen: thin them to
   // roughly a dozen ticks so they stay readable, and label every month.
-  const names = seriesNames(unit);
+  const names = seriesNames(unit, t);
   // One bar across a whole chart looks like a rendering fault; give the
   // overall view a wider but still bounded bar.
   // Scale with how many periods share the width: a fixed 20px left three
@@ -882,14 +886,12 @@ function RevenueBreakdownChart({
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Revenue</h2>
+        <h2 className="text-sm font-medium text-slate-700">{t("dash.revenue")}</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Direct consumption (avoided import), direct export, battery and neighbour sales, by{" "}
-          {PERIOD_UNIT[granularity]}
-          {unit === "kwh" && " — the energy behind each revenue figure"}
-          {unit === "both" && " — with the same split in kWh hatched beside it, on the right axis"}.
-          {barUnit(unit) === "chf" &&
-            " Charging shows below the axis: in that interval the battery took energy that would otherwise have earned the feed-in rate."}
+          {t("dash.revenueNote", { unit: t(PERIOD_UNIT[granularity]) })}
+          {unit === "kwh" && t("dash.revenueKwh")}
+          {unit === "both" && t("dash.revenueBoth")}.
+          {barUnit(unit) === "chf" && t("dash.revenueCharging")}
         </p>
       </div>
 
@@ -920,10 +922,10 @@ function RevenueBreakdownChart({
               checked={showProduction}
               onChange={(e) => setShowProduction(e.target.checked)}
             />
-            Production
+            {t("dash.production")}
           </label>
           <span className="ml-auto text-sm text-slate-600">
-            {barUnit(unit) === "chf" ? "Total revenue" : "Total energy"}{" "}
+            {barUnit(unit) === "chf" ? t("dash.totalRevenue") : t("dash.totalEnergy")}{" "}
             <span className="font-semibold text-slate-900">{formatRevenue(total, unit)}</span>
           </span>
         </div>
@@ -1030,7 +1032,7 @@ function RevenueBreakdownChart({
               <Bar
                 yAxisId="bars"
                 dataKey="batteryChargingChf"
-                name="Battery charging (cost)"
+                name={t("dash.chargingCostSeries")}
                 stackId="revenue"
                 fill={BATTERY_CHARGING_COLOR}
                 maxBarSize={barSize}
@@ -1074,7 +1076,7 @@ function RevenueBreakdownChart({
                 yAxisId={barUnit(unit) === "kwh" ? "bars" : "kwh"}
                 type="monotone"
                 dataKey="producedKwh"
-                name="Production + charging (kWh)"
+                name={t("dash.productionSeries")}
                 stroke="#0f172a"
                 strokeWidth={2}
                 dot={false}
@@ -1108,6 +1110,7 @@ function RangeControls({
   dataRange: DataRange;
   bounds: { min: string | null; max: string };
 }) {
+  const t = useT();
   const [preset, setPreset] = useState(INITIAL_PRESET);
 
   const applyPreset = (id: string) => {
@@ -1146,21 +1149,21 @@ function RangeControls({
   return (
     <div className="flex flex-wrap items-end gap-3 text-sm">
       <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-        Period
+        {t("common.period")}
         <select className="input w-36" value={preset} onChange={(e) => applyPreset(e.target.value)}>
           {RANGE_PRESETS.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.label}
+              {t(p.label)}
             </option>
           ))}
-          <option value="custom">Custom…</option>
+          <option value="custom">{t("dash.preset.custom")}</option>
         </select>
       </label>
 
       {(granularity === "hourly" || granularity === "daily" || granularity === "overall") && (
         <>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            From
+            {t("common.from")}
             <input
               type="date"
               className="input w-36"
@@ -1171,7 +1174,7 @@ function RangeControls({
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            To
+            {t("common.to")}
             <input
               type="date"
               className="input w-36"
@@ -1187,7 +1190,7 @@ function RangeControls({
       {granularity === "monthly" && (
         <>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            From
+            {t("common.from")}
             <input
               type="month"
               className="input w-36"
@@ -1196,7 +1199,7 @@ function RangeControls({
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            To
+            {t("common.to")}
             <input
               type="month"
               className="input w-36"
@@ -1210,7 +1213,7 @@ function RangeControls({
       {granularity === "quarterly" && (
         <>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            From
+            {t("common.from")}
             <select
               className="input w-36"
               value={quarterKeyOf(range.from)}
@@ -1226,7 +1229,7 @@ function RangeControls({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            To
+            {t("common.to")}
             <select
               className="input w-36"
               value={quarterKeyOf(range.to)}
@@ -1247,7 +1250,7 @@ function RangeControls({
       {granularity === "yearly" && (
         <>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            From
+            {t("common.from")}
             <select
               className="input w-36"
               value={range.from.slice(0, 4)}
@@ -1261,7 +1264,7 @@ function RangeControls({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            To
+            {t("common.to")}
             <select
               className="input w-36"
               value={range.to.slice(0, 4)}
@@ -1316,14 +1319,15 @@ function PaybackCard({
   years?: number | null;
   breakeven?: string | null;
 }) {
+  const t = useT();
   return (
     <div className="rounded-lg border bg-white p-4">
       <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="mt-1 text-lg font-semibold text-slate-900">
-        {years != null ? `${years.toFixed(1)} years` : "—"}
+        {years != null ? t("dash.years", { value: years.toFixed(1) }) : "—"}
       </p>
       <p className="mt-1 text-xs text-slate-500">
-        Breakeven: {breakeven ?? "not reached in range"}
+        {t("dash.breakeven", { date: breakeven ?? t("dash.notReached") })}
       </p>
     </div>
   );

@@ -13,27 +13,30 @@ import type {
 } from "@energy-manager/shared";
 import { billingPeriodLabel, billingPeriodRange, toDateString } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { QrBill } from "../components/QrBill";
 
-const CATEGORY_LABELS: Record<BillingCategory, string> = {
-  energie: "Énergie",
-  netznutzung: "Utilisation du réseau",
-  messung: "Mesure",
-  abgaben: "Redevances et prestations",
+const CATEGORY_LABELS: Record<BillingCategory, MessageKey> = {
+  energie: "billing.cat.energie",
+  netznutzung: "billing.cat.netznutzung",
+  messung: "billing.cat.messung",
+  abgaben: "billing.cat.abgaben",
 };
 const CATEGORY_ORDER: BillingCategory[] = ["energie", "netznutzung", "messung", "abgaben"];
 
-const ALLOCATION_LABELS: Record<BillingAllocation, string> = {
-  per_kwh: "par kWh soutiré du réseau",
-  per_kwh_total: "par kWh consommé (réseau + production locale)",
-  pool_shared: "facturé une fois au RCP, réparti entre les participants",
-  per_participant: "facturé une fois par participant",
+const ALLOCATION_LABELS: Record<BillingAllocation, MessageKey> = {
+  per_kwh: "billing.alloc.perKwh",
+  per_kwh_total: "billing.alloc.perKwhTotal",
+  pool_shared: "billing.alloc.poolShared",
+  per_participant: "billing.alloc.perParticipant",
 };
 
 const chf = (n: number) => n.toFixed(2);
 
 const localDate = (iso: string) =>
+  // Numeric DD.MM.YYYY, which is the Swiss form in both languages — so this
+  // one does not need to follow the locale.
   new Date(iso).toLocaleDateString("en-CH", {
     timeZone: "Europe/Zurich",
     year: "numeric",
@@ -59,11 +62,11 @@ function groupByValidity(positions: GridTariffPosition[]) {
     .sort((a, b) => b.validFrom.localeCompare(a.validFrom));
 }
 
-const PERIOD_LABELS: Record<BillingPeriodKind, string> = {
-  yearly: "Année",
-  quarterly: "Trimestre",
-  monthly: "Mois",
-  custom: "Personnalisé",
+const PERIOD_LABELS: Record<BillingPeriodKind, MessageKey> = {
+  yearly: "billing.period.yearly",
+  quarterly: "billing.period.quarterly",
+  monthly: "billing.period.monthly",
+  custom: "billing.period.custom",
 };
 const PERIOD_ORDER: BillingPeriodKind[] = ["yearly", "quarterly", "monthly", "custom"];
 
@@ -75,17 +78,14 @@ function todayLocal(): string {
 
 export function BillingPage() {
   const { site } = useDefaultSite();
-  if (!site) return <p className="text-slate-500">Loading…</p>;
+  const t = useT();
+  if (!site) return <p className="text-slate-500">{t("common.loading")}</p>;
 
   return (
     <div className="space-y-6">
       <div className="print:hidden">
-        <h1 className="text-xl font-semibold text-slate-900">Facturation</h1>
-        <p className="text-sm text-slate-500">
-          Saisissez la facture du gestionnaire de réseau position par position, puis générez une
-          facture pour chaque participant du RCP. Les montants sont TVA incluse : la TVA du
-          fournisseur est répercutée telle quelle, aucune TVA n'est ajoutée.
-        </p>
+        <h1 className="text-xl font-semibold text-slate-900">{t("billing.title")}</h1>
+        <p className="max-w-4xl text-sm text-slate-500">{t("billing.intro")}</p>
       </div>
       <PositionsSection siteId={site.id} />
       <InvoiceSection site={site} />
@@ -105,6 +105,7 @@ const EMPTY_POSITION = {
 };
 
 function PositionsSection({ siteId }: { siteId: string }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState({ ...EMPTY_POSITION });
   const [error, setError] = useState<string | null>(null);
@@ -138,13 +139,8 @@ function PositionsSection({ siteId }: { siteId: string }) {
   return (
     <div className="space-y-4 rounded-lg border bg-white p-4 print:hidden">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Positions tarifaires du réseau</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Une ligne par position de la facture du gestionnaire de réseau. La répartition indique
-          comment chaque position est répercutée sur le RCP : les tarifs de base facturés une seule
-          fois au raccordement sont divisés entre les participants, tandis que la mesure est
-          facturée pour chacun d'eux.
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("billing.positions")}</h2>
+        <p className="mt-1 max-w-4xl text-xs text-slate-500">{t("billing.positionsNote")}</p>
       </div>
 
       <form
@@ -154,7 +150,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
         }}
         className="flex flex-wrap items-end gap-3"
       >
-        <Field label="Rubrique">
+        <Field label={t("billing.category")}>
           <select
             className="input"
             value={draft.category}
@@ -162,19 +158,19 @@ function PositionsSection({ siteId }: { siteId: string }) {
           >
             {CATEGORY_ORDER.map((c) => (
               <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
+                {t(CATEGORY_LABELS[c])}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Position">
+        <Field label={t("billing.position")}>
           <input
             className="input w-64"
             value={draft.label}
             onChange={(e) => setDraft({ ...draft, label: e.target.value })}
           />
         </Field>
-        <Field label="Répartition">
+        <Field label={t("billing.allocation")}>
           <select
             className="input"
             value={draft.allocation}
@@ -182,12 +178,12 @@ function PositionsSection({ siteId }: { siteId: string }) {
           >
             {(Object.keys(ALLOCATION_LABELS) as BillingAllocation[]).map((a) => (
               <option key={a} value={a}>
-                {ALLOCATION_LABELS[a]}
+                {t(ALLOCATION_LABELS[a])}
               </option>
             ))}
           </select>
         </Field>
-        <Field label={isPerKwh ? "Tarif (CHF/kWh)" : "Tarif (CHF/an)"}>
+        <Field label={isPerKwh ? t("billing.ratePerKwh") : t("billing.ratePerYear")}>
           <input
             type="number"
             step={isPerKwh ? "0.0001" : "0.01"}
@@ -196,7 +192,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
             onChange={(e) => setDraft({ ...draft, rateChf: Number(e.target.value) })}
           />
         </Field>
-        <Field label="Valable du">
+        <Field label={t("billing.validFrom")}>
           <input
             type="datetime-local"
             className="input"
@@ -204,7 +200,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
             onChange={(e) => setDraft({ ...draft, validFrom: e.target.value })}
           />
         </Field>
-        <Field label="Valable au">
+        <Field label={t("billing.validTo")}>
           <input
             type="datetime-local"
             className="input"
@@ -218,61 +214,64 @@ function PositionsSection({ siteId }: { siteId: string }) {
             checked={draft.countsInDirectBilling}
             onChange={(e) => setDraft({ ...draft, countsInDirectBilling: e.target.checked })}
           />
-          Existe sans le RCP
+          {t("billing.existsWithout")}
         </label>
         <button
           type="submit"
           disabled={createMutation.isPending || draft.label.trim() === ""}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          Ajouter la position
+          {t("billing.addPosition")}
         </button>
       </form>
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {positions.length === 0 && (
-        <p className="py-6 text-center text-sm text-slate-400">
-          Aucune position — ajoutez-les telles qu'elles figurent sur la facture du réseau.
-        </p>
+        <p className="py-6 text-center text-sm text-slate-400">{t("billing.noPositions")}</p>
       )}
 
       {groupByValidity(positions).map((group) => (
         <div key={`${group.validFrom}|${group.validTo}`}>
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Valable du {localDate(group.validFrom)} au {localDate(group.validTo)}
+            {t("billing.validRange", {
+              from: localDate(group.validFrom),
+              to: localDate(group.validTo),
+            })}
             <span className="ml-2 font-normal normal-case tracking-normal text-slate-400">
-              {group.items.length} position{group.items.length === 1 ? "" : "s"}
+              {t("billing.positionCount", { count: group.items.length })}
             </span>
           </h3>
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500">
               <tr>
-                <th className="py-1 pr-3 font-medium">Rubrique</th>
-                <th className="py-1 pr-3 font-medium">Position</th>
-                <th className="py-1 pr-3 font-medium">Répartition</th>
-                <th className="py-1 pr-3 text-right font-medium">Tarif</th>
-                <th className="py-1 pr-3 font-medium">Sans RCP</th>
+                <th className="py-1 pr-3 font-medium">{t("billing.category")}</th>
+                <th className="py-1 pr-3 font-medium">{t("billing.position")}</th>
+                <th className="py-1 pr-3 font-medium">{t("billing.allocation")}</th>
+                <th className="py-1 pr-3 text-right font-medium">{t("billing.rate")}</th>
+                <th className="py-1 pr-3 font-medium">{t("billing.withoutRcp")}</th>
                 <th className="py-1" />
               </tr>
             </thead>
             <tbody>
               {group.items.map((p) => (
                 <tr key={p.id} className="border-t">
-                  <td className="py-1 pr-3 text-slate-500">{CATEGORY_LABELS[p.category]}</td>
+                  <td className="py-1 pr-3 text-slate-500">{t(CATEGORY_LABELS[p.category])}</td>
                   <td className="py-1 pr-3 text-slate-900">{p.label}</td>
-                  <td className="py-1 pr-3 text-slate-500">{ALLOCATION_LABELS[p.allocation]}</td>
+                  <td className="py-1 pr-3 text-slate-500">{t(ALLOCATION_LABELS[p.allocation])}</td>
                   <td className="py-1 pr-3 text-right tabular-nums">
                     {p.allocation === "per_kwh"
-                      ? `${(p.rateChf * 100).toFixed(2)} ct./kWh`
-                      : `${chf(p.rateChf)} CHF/an`}
+                      ? `${(p.rateChf * 100).toFixed(2)} ${t("billing.centsPerKwh")}`
+                      : `${chf(p.rateChf)} ${t("billing.perYear")}`}
                   </td>
-                  <td className="py-1 pr-3 text-slate-500">{p.countsInDirectBilling ? "oui" : "non"}</td>
+                  <td className="py-1 pr-3 text-slate-500">
+                    {p.countsInDirectBilling ? t("billing.yes") : t("billing.no")}
+                  </td>
                   <td className="py-1 text-right">
                     <button
                       onClick={() => deleteMutation.mutate(p.id)}
                       className="text-slate-400 hover:text-red-600"
                     >
-                      Supprimer
+                      {t("common.delete")}
                     </button>
                   </td>
                 </tr>
@@ -286,6 +285,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
 }
 
 function InvoiceSection({ site }: { site: Site }) {
+  const { t, locale } = useI18n();
   const siteId = site.id;
   // Billing is retrospective: you invoice a period once it has finished, so
   // the useful default is the previous one rather than the current, partial
@@ -339,7 +339,7 @@ function InvoiceSection({ site }: { site: Site }) {
   return (
     <div className="print-invoices space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4 print:hidden">
-        <Field label="Période">
+        <Field label={t("common.period")}>
           <select
             className="input w-36"
             value={kind}
@@ -347,7 +347,7 @@ function InvoiceSection({ site }: { site: Site }) {
           >
             {PERIOD_ORDER.map((k) => (
               <option key={k} value={k}>
-                {PERIOD_LABELS[k]}
+                {t(PERIOD_LABELS[k])}
               </option>
             ))}
           </select>
@@ -355,7 +355,7 @@ function InvoiceSection({ site }: { site: Site }) {
 
         {kind === "custom" ? (
           <>
-            <Field label="Du">
+            <Field label={t("common.from")}>
               <input
                 type="date"
                 className="input"
@@ -363,7 +363,7 @@ function InvoiceSection({ site }: { site: Site }) {
                 onChange={(e) => setCustomFrom(e.target.value)}
               />
             </Field>
-            <Field label="Au">
+            <Field label={t("common.to")}>
               <input
                 type="date"
                 className="input"
@@ -376,24 +376,24 @@ function InvoiceSection({ site }: { site: Site }) {
               disabled={customFrom > customTo}
               className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              Générer les factures
+              {t("billing.generate")}
             </button>
           </>
         ) : (
           <div className="flex items-center gap-1 pb-0.5">
             <button
               onClick={() => setOffset(offset - 1)}
-              aria-label="Période précédente"
+              aria-label={t("billing.prevPeriod")}
               className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               ‹
             </button>
             <span className="min-w-36 text-center text-sm font-medium text-slate-900">
-              {billingPeriodLabel(kind, offset)}
+              {billingPeriodLabel(kind, offset, locale)}
             </span>
             <button
               onClick={() => setOffset(offset + 1)}
-              aria-label="Période suivante"
+              aria-label={t("billing.nextPeriod")}
               className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               ›
@@ -408,9 +408,9 @@ function InvoiceSection({ site }: { site: Site }) {
                 the fixed positions bill before the energy exists. Say so, so
                 that missing consumption doesn't read as a fault. */}
             {range.from > todayLocal() ? (
-              <span className="ml-2 text-amber-700">· période à venir</span>
+              <span className="ml-2 text-amber-700">{t("billing.futurePeriod")}</span>
             ) : range.to > todayLocal() ? (
-              <span className="ml-2 text-amber-700">· période en cours</span>
+              <span className="ml-2 text-amber-700">{t("billing.currentPeriod")}</span>
             ) : null}
           </span>
         )}
@@ -420,14 +420,17 @@ function InvoiceSection({ site }: { site: Site }) {
             onClick={() => window.print()}
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            Imprimer / enregistrer en PDF
+            {t("billing.print")}
           </button>
         )}
         {result && (
           <span className="pb-2 text-sm text-slate-500">
-            {result.days} jours · RCP de {result.participantCount} participants
+            {t("billing.summary", { days: result.days, participants: result.participantCount })}
             {result.localRateChf != null &&
-              ` · énergie locale ${(result.localRateChf * 100).toFixed(2)} ct./kWh`}
+              t("billing.localRate", {
+                rate: (result.localRateChf * 100).toFixed(2),
+                cents: t("billing.centsPerKwh"),
+              })}
           </span>
         )}
       </div>
@@ -460,6 +463,7 @@ function InvoiceDocument({
   operator?: Party;
   party?: Party;
 }) {
+  const t = useT();
   const grouped = CATEGORY_ORDER.map((category) => ({
     category,
     lines: invoice.lines.filter((l) => l.category === category),
@@ -471,20 +475,28 @@ function InvoiceDocument({
         <header className="mb-4 border-b pb-3">
           <h2 className="text-lg font-semibold text-slate-900">{invoice.partyName}</h2>
           {invoice.partyReference && (
-            <p className="text-sm text-slate-600">N° de participant {invoice.partyReference}</p>
+            <p className="text-sm text-slate-600">
+              {t("invoice.participantNo", { reference: invoice.partyReference })}
+            </p>
           )}
           <p className="text-sm text-slate-500">
-            Facturation du {invoice.from} au {invoice.to} · {invoice.days} jours · RCP de{" "}
-            {invoice.participantCount} participants
+            {t("invoice.header", {
+              from: localDate(invoice.from),
+              to: localDate(invoice.to),
+              days: invoice.days,
+              participants: invoice.participantCount,
+            })}
           </p>
         </header>
 
         {grouped.map(({ category, lines }) => (
           <div key={category} className="mb-4">
-            <h3 className="mb-1 text-sm font-semibold text-slate-900">{CATEGORY_LABELS[category]}</h3>
+            <h3 className="mb-1 text-sm font-semibold text-slate-900">
+              {t(CATEGORY_LABELS[category])}
+            </h3>
             <LineTable lines={lines} />
             <div className="flex justify-between border-t pt-1 text-sm font-medium">
-              <span>Sous-total</span>
+              <span>{t("invoice.subtotal")}</span>
               <span className="tabular-nums">
                 {chf(lines.reduce((s, l) => s + l.amountChf, 0))}
               </span>
@@ -493,13 +505,14 @@ function InvoiceDocument({
         ))}
 
         <div className="flex justify-between border-t-2 border-slate-900 pt-2 text-base font-semibold">
-          <span>Montant à payer</span>
+          <span>{t("invoice.amountDue")}</span>
           <span className="tabular-nums">CHF {chf(invoice.totalChf)}</span>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Soutirage du réseau {invoice.gridKwh.toFixed(1)} kWh · consommation issue de la
-          production locale {invoice.localKwh.toFixed(1)} kWh. Montants TVA incluse (TVA du
-          fournisseur répercutée, aucune TVA supplémentaire).
+          {t("invoice.footnote", {
+            grid: invoice.gridKwh.toFixed(1),
+            local: invoice.localKwh.toFixed(1),
+          })}
         </p>
       </section>
 
@@ -511,43 +524,42 @@ function InvoiceDocument({
         <section className="print-body rounded-lg border bg-white p-6 print:border-0">
         <header className="mb-4 border-b pb-3">
           <h2 className="text-lg font-semibold text-slate-900">
-            Votre avantage dans le RCP — {invoice.partyName}
-            {invoice.partyReference ? ` (${invoice.partyReference})` : ""}
+            {t("invoice.benefitTitle", {
+              name:
+                invoice.partyName +
+                (invoice.partyReference ? ` (${invoice.partyReference})` : ""),
+            })}
           </h2>
-          <p className="text-sm text-slate-500">
-            Ce que vous auriez payé si vous étiez approvisionné directement par le gestionnaire de
-            réseau.
-          </p>
+          <p className="text-sm text-slate-500">{t("invoice.benefitIntro")}</p>
         </header>
 
-        <h3 className="mb-1 text-sm font-semibold text-slate-900">
-          Approvisionnement direct (comparaison)
-        </h3>
+        <h3 className="mb-1 text-sm font-semibold text-slate-900">{t("invoice.directSupply")}</h3>
         <LineTable lines={invoice.comparison.lines} />
         <div className="flex justify-between border-t pt-1 text-sm font-medium">
-          <span>Total approvisionnement direct</span>
+          <span>{t("invoice.directSupplyTotal")}</span>
           <span className="tabular-nums">{chf(invoice.comparison.totalChf)}</span>
         </div>
 
         <dl className="mt-5 space-y-1 text-sm">
           <div className="flex justify-between">
-            <dt className="text-slate-600">Directement par le gestionnaire de réseau</dt>
+            <dt className="text-slate-600">{t("invoice.directly")}</dt>
             <dd className="tabular-nums">CHF {chf(invoice.comparison.totalChf)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-slate-600">Votre facture RCP</dt>
+            <dt className="text-slate-600">{t("invoice.yourRcpBill")}</dt>
             <dd className="tabular-nums">CHF {chf(invoice.totalChf)}</dd>
           </div>
           <div className="flex justify-between border-t-2 border-slate-900 pt-2 text-base font-semibold">
-            <dt>Votre avantage</dt>
+            <dt>{t("invoice.yourBenefit")}</dt>
             <dd className="tabular-nums">CHF {chf(invoice.comparison.savingChf)}</dd>
           </div>
         </dl>
 
         <p className="mt-4 text-xs text-slate-500">
-          L'avantage a deux origines : les tarifs de base du raccordement sont répartis dans le RCP
-          entre {invoice.participantCount} participants au lieu d'être facturés individuellement, et{" "}
-          {invoice.localKwh.toFixed(1)} kWh provenaient de la production locale plutôt que du réseau.
+          {t("invoice.benefitNote", {
+            participants: invoice.participantCount,
+            local: invoice.localKwh.toFixed(1),
+          })}
         </p>
       </section>
 
@@ -567,14 +579,15 @@ function InvoiceDocument({
 }
 
 function LineTable({ lines }: { lines: InvoiceLine[] }) {
+  const t = useT();
   return (
     <table className="w-full text-sm">
       <thead className="text-left text-xs text-slate-500">
         <tr>
-          <th className="py-1 font-medium">Position</th>
-          <th className="py-1 text-right font-medium">Quantité</th>
-          <th className="py-1 text-right font-medium">Prix</th>
-          <th className="py-1 text-right font-medium">Montant CHF</th>
+          <th className="py-1 font-medium">{t("billing.position")}</th>
+          <th className="py-1 text-right font-medium">{t("invoice.quantity")}</th>
+          <th className="py-1 text-right font-medium">{t("invoice.price")}</th>
+          <th className="py-1 text-right font-medium">{t("invoice.amountChf")}</th>
         </tr>
       </thead>
       <tbody>
@@ -586,12 +599,12 @@ function LineTable({ lines }: { lines: InvoiceLine[] }) {
             <td className="py-1 text-right tabular-nums text-slate-600">
               {l.quantityUnit === "kWh"
                 ? `${l.quantity.toFixed(1)} kWh`
-                : `${l.quantity} jours`}
+                : t("invoice.days", { count: l.quantity })}
             </td>
             <td className="py-1 text-right tabular-nums text-slate-600">
               {l.quantityUnit === "kWh"
-                ? `${(l.unitRateChf * 100).toFixed(2)} ct.`
-                : `${(l.unitRateChf * 365).toFixed(2)} CHF/an`}
+                ? `${(l.unitRateChf * 100).toFixed(2)} ${t("billing.cents")}`
+                : `${(l.unitRateChf * 365).toFixed(2)} ${t("billing.perYear")}`}
             </td>
             <td className="py-1 text-right tabular-nums text-slate-900">{chf(l.amountChf)}</td>
           </tr>

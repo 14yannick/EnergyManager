@@ -34,6 +34,9 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
 - **Role-based access** via Cloudflare Access — admin, read-only, and a
   participant role scoped to a single neighbour's own consumption and invoice.
   Off by default; see [Access control](#access-control)
+- **French, German and English**, switched from the header and remembered per
+  browser. A new browser starts in its own language when we speak it, French
+  otherwise; see [Language](#language)
 
 ## VZEV billing (phase 2, in progress)
 
@@ -47,6 +50,32 @@ grid operator. Invoices print to PDF from the browser.
 
 The billing UI is in **French**, unlike the rest of the app: it is the one screen a
 participant actually reads, and the participants here are French-speaking.
+
+## Language
+
+The interface is available in French, German and English, switched from the
+buttons in the header. The choice is remembered in the browser, so it is
+per-device rather than per-account; a browser with no stored choice starts in
+its own language when that is one of the three, and in French otherwise.
+
+The catalogues live in [`apps/web/src/i18n`](apps/web/src/i18n). `en.ts`
+defines what keys exist; `fr.ts` and `de.ts` are typed against it, so a key
+added to one and not the others fails the build — a half-translated string
+cannot reach a page. Invoices follow the same switch, including the QR-bill's
+own headings, so a printed document is in one language throughout.
+
+The German billing wording follows a real BKW electricity bill — *Energie*,
+*Netznutzung*, *Messung*, *Abgaben & Leistungen* as the sections,
+*Zwischentotal* and *Zu bezahlender Betrag* for the sums, *Bezug* / *Preis* /
+*Betrag in CHF* as the line columns, and *Rp.* for cents. A participant
+reading their RCP invoice therefore meets the same terms as on the bill it
+replaces.
+
+Two things deliberately do not follow it. Dates and amounts stay in Swiss form
+(DD.MM.YYYY, 24-hour) in both languages, because that is what a bill printed
+here has to look like. And text that is stored rather than displayed — a cost
+item's label, a tariff period's name — is data entered by the user, so it
+stays as typed. Errors returned by the API are also still English.
 
 ## Access control
 

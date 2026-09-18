@@ -8,10 +8,12 @@ import {
 } from "@energy-manager/shared";
 import type { PartyRole } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 
 export function ReadingsImportPage() {
   const { site } = useDefaultSite();
+  const t = useT();
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<ReadingImportMode>("delta");
@@ -27,19 +29,13 @@ export function ReadingsImportPage() {
     },
   });
 
-  if (!site) return <p className="text-slate-500">Loading…</p>;
+  if (!site) return <p className="text-slate-500">{t("common.loading")}</p>;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Import readings</h1>
-        <p className="text-sm text-slate-500">
-          CSV columns: <code>timestamp, metric_kind, party, value_kwh</code> — one row per
-          timestamp+metric. <code>metric_kind</code> is one of production, export_local,
-          export_grid, import_grid, battery_charge, battery_discharge, consumption.{" "}
-          <code>party</code> is required (a neighbour's name) when metric_kind is consumption,
-          and must be blank otherwise. Re-importing overlapping rows overwrites them.
-        </p>
+        <h1 className="text-xl font-semibold text-slate-900">{t("readings.title")}</h1>
+        <p className="max-w-4xl text-sm text-slate-500">{t("readings.csvNote")}</p>
       </div>
 
       <div className="space-y-4 rounded-lg border bg-white p-4">
@@ -50,7 +46,7 @@ export function ReadingsImportPage() {
               checked={mode === "delta"}
               onChange={() => setMode("delta")}
             />
-            Delta — values are already per-interval kWh
+            {t("readings.modeDelta")}
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -58,7 +54,7 @@ export function ReadingsImportPage() {
               checked={mode === "cumulative"}
               onChange={() => setMode("cumulative")}
             />
-            Cumulative — values are running meter totals, per metric+party
+            {t("readings.modeCumulative")}
           </label>
         </div>
 
@@ -74,7 +70,7 @@ export function ReadingsImportPage() {
           disabled={!file || importMutation.isPending}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {importMutation.isPending ? "Importing…" : "Import"}
+          {importMutation.isPending ? t("readings.importing") : t("readings.import")}
         </button>
       </div>
 
@@ -82,21 +78,24 @@ export function ReadingsImportPage() {
         <div className="space-y-3 rounded-lg border bg-white p-4">
           <div className="flex gap-6 text-sm">
             <span>
-              <span className="font-semibold text-slate-900">{result.inserted}</span> inserted
+              <span className="font-semibold text-slate-900">{result.inserted}</span>{" "}
+              {t("settings.inserted")}
             </span>
             <span>
-              <span className="font-semibold text-slate-900">{result.updated}</span> updated
+              <span className="font-semibold text-slate-900">{result.updated}</span>{" "}
+              {t("settings.updated")}
             </span>
             <span>
-              <span className="font-semibold text-slate-900">{result.skipped}</span> skipped
+              <span className="font-semibold text-slate-900">{result.skipped}</span>{" "}
+              {t("readings.skipped")}
             </span>
           </div>
           {result.errors.length > 0 && (
             <table className="w-full text-sm">
               <thead className="text-left text-slate-500">
                 <tr>
-                  <th className="py-1 pr-4">Row</th>
-                  <th className="py-1">Message</th>
+                  <th className="py-1 pr-4">{t("readings.row")}</th>
+                  <th className="py-1">{t("readings.message")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,19 +118,19 @@ export function ReadingsImportPage() {
   );
 }
 
-const METRIC_LABELS: Record<IntervalMetricKind, string> = {
-  production: "Production (PV, AC share)",
-  inverter_ac: "Inverter AC output (PV + battery)",
-  pv_dc: "PV yield (DC)",
-  battery_discharge_ac: "Battery discharge (AC share)",
-  export_local: "Export — local",
-  export_grid: "Export — grid",
-  import_grid: "Import — grid",
-  battery_charge: "Battery charge",
-  battery_discharge: "Battery discharge",
-  consumption: "Consumption (per party)",
-  consumption_own: "Own consumption (household load)",
-  consumption_grid: "Grid draw (per party)",
+const METRIC_LABELS: Record<IntervalMetricKind, MessageKey> = {
+  production: "readings.metric.production",
+  inverter_ac: "readings.metric.inverterAc",
+  pv_dc: "readings.metric.pvDc",
+  battery_discharge_ac: "readings.metric.batteryDischargeAc",
+  export_local: "readings.metric.exportLocal",
+  export_grid: "readings.metric.exportGrid",
+  import_grid: "readings.metric.importGrid",
+  battery_charge: "readings.metric.batteryCharge",
+  battery_discharge: "readings.metric.batteryDischarge",
+  consumption: "readings.metric.consumption",
+  consumption_own: "readings.metric.consumptionOwn",
+  consumption_grid: "readings.metric.consumptionGrid",
 };
 
 const ALL_METRIC_KINDS = intervalMetricKindSchema.options;
@@ -143,6 +142,7 @@ function isoDaysAgo(days: number): string {
 }
 
 function ExportSection({ siteId }: { siteId: string }) {
+  const t = useT();
   const [from, setFrom] = useState(() => isoDaysAgo(365));
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [kinds, setKinds] = useState<IntervalMetricKind[]>([...ALL_METRIC_KINDS]);
@@ -156,45 +156,42 @@ function ExportSection({ siteId }: { siteId: string }) {
   return (
     <div className="space-y-4 rounded-lg border bg-white p-4">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Export</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Raw readings as an Excel file — one row per timestamp+metric, dates in Europe/Zurich
-          (the UTC timestamp is kept in the last column).
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("readings.export")}</h2>
+        <p className="mt-1 text-xs text-slate-500">{t("readings.exportNote")}</p>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          From
+          {t("common.from")}
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input" />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          To
+          {t("common.to")}
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input" />
         </label>
       </div>
 
       <div>
         <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-slate-600">Metrics</span>
+          <span className="text-xs font-medium text-slate-600">{t("readings.metrics")}</span>
           <button
             onClick={() => setKinds([...ALL_METRIC_KINDS])}
             className="text-xs text-slate-500 underline hover:text-slate-900"
           >
-            all
+            {t("readings.all")}
           </button>
           <button
             onClick={() => setKinds([])}
             className="text-xs text-slate-500 underline hover:text-slate-900"
           >
-            none
+            {t("readings.none")}
           </button>
         </div>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
           {ALL_METRIC_KINDS.map((kind) => (
             <label key={kind} className="flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={kinds.includes(kind)} onChange={() => toggle(kind)} />
-              {METRIC_LABELS[kind]}
+              {t(METRIC_LABELS[kind])}
             </label>
           ))}
         </div>
@@ -205,16 +202,16 @@ function ExportSection({ siteId }: { siteId: string }) {
           href={api.readings.exportUrl(siteId, from, to, kinds)}
           className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
         >
-          Download .xlsx
+          {t("readings.download")}
         </a>
       ) : (
         <span className="inline-block cursor-not-allowed rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white opacity-50">
-          Download .xlsx
+          {t("readings.download")}
         </span>
       )}
-      {!rangeValid && <p className="text-sm text-red-600">"To" must be on or after "From".</p>}
+      {!rangeValid && <p className="text-sm text-red-600">{t("settings.rangeInvalid")}</p>}
       {rangeValid && kinds.length === 0 && (
-        <p className="text-sm text-red-600">Select at least one metric.</p>
+        <p className="text-sm text-red-600">{t("readings.pickMetric")}</p>
       )}
     </div>
   );
@@ -239,13 +236,15 @@ const EMPTY_PARTY = {
  * Why each role exists, in the order somebody picks from. `rcp_party` first
  * because it is what almost every row is.
  */
-const ROLE_OPTIONS: Array<{ role: PartyRole; label: string; hint: string }> = [
-  { role: "rcp_party", label: "RCP party", hint: "A member: consumes, is invoiced, counts towards the shared costs" },
-  { role: "rcp_admin", label: "RCP admin", hint: "Runs the app and is a member — billed like any other" },
-  { role: "rcp_admin_only", label: "RCP admin only", hint: "Runs the app without being part of the RCP: never invoiced, never counted" },
-  { role: "viewer", label: "Viewer", hint: "Read-only sight of everything, consuming nothing" },
+const ROLE_OPTIONS: Array<{ role: PartyRole; label: MessageKey; hint: MessageKey }> = [
+  { role: "rcp_party", label: "parties.role.party", hint: "parties.role.partyHint" },
+  { role: "rcp_admin", label: "parties.role.admin", hint: "parties.role.adminHint" },
+  { role: "rcp_admin_only", label: "parties.role.adminOnly", hint: "parties.role.adminOnlyHint" },
+  { role: "viewer", label: "parties.role.viewer", hint: "parties.role.viewerHint" },
 ];
-const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((o) => [o.role, o.label])) as Record<PartyRole, string>;
+const ROLE_LABEL = Object.fromEntries(
+  ROLE_OPTIONS.map((o) => [o.role, o.label]),
+) as Record<PartyRole, MessageKey>;
 
 /** One address per line, or comma-separated — whichever the user finds natural. */
 function parseEmails(raw: string): string[] {
@@ -256,6 +255,7 @@ function parseEmails(raw: string): string[] {
 }
 
 function PartiesSection({ siteId }: { siteId: string }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState({ ...EMPTY_PARTY });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -311,17 +311,8 @@ function PartiesSection({ siteId }: { siteId: string }) {
   return (
     <div className="space-y-4 rounded-lg border bg-white p-4">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">Participants</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          The neighbours sharing your grid connection. Their consumption is billed separately and
-          they count towards the pool size. New names in an imported CSV are added here
-          automatically, without a reference or email — fill those in afterwards. The postal
-          address is what the QR-bill prints as the payer; an invoice still works without it, just
-          with an empty box for them to complete. Give yourself the RCP admin role and add your
-          IBAN — that is the account the QR-bill is payable to, and it still bills you for what you
-          consumed. Only &ldquo;RCP admin only&rdquo; and &ldquo;Viewer&rdquo; sit outside the
-          RCP: never invoiced, never counted towards the shared costs.
-        </p>
+        <h2 className="text-sm font-medium text-slate-700">{t("parties.title")}</h2>
+        <p className="mt-1 max-w-4xl text-xs text-slate-500">{t("parties.note")}</p>
       </div>
 
       <form
@@ -332,7 +323,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
         className="flex flex-wrap items-end gap-3"
       >
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Participant no.
+          {t("parties.number")}
           <input
             type="text"
             className="input w-32"
@@ -342,7 +333,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Name
+          {t("parties.name")}
           <input
             type="text"
             className="input w-56"
@@ -351,7 +342,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Street
+          {t("parties.street")}
           <input
             type="text"
             className="input w-48"
@@ -360,7 +351,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          No.
+          {t("parties.buildingNo")}
           <input
             type="text"
             className="input w-16"
@@ -369,7 +360,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Postcode
+          {t("parties.postcode")}
           <input
             type="text"
             className="input w-20"
@@ -378,7 +369,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Town
+          {t("parties.town")}
           <input
             type="text"
             className="input w-40"
@@ -387,7 +378,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Emails (one per line or comma-separated)
+          {t("parties.emails")}
           <textarea
             rows={2}
             className="input w-80"
@@ -396,7 +387,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          IBAN (operator only)
+          {t("parties.iban")}
           <input
             type="text"
             className="input w-56"
@@ -405,15 +396,15 @@ function PartiesSection({ siteId }: { siteId: string }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Role
+          {t("parties.role")}
           <select
             className="input w-40"
             value={draft.role}
             onChange={(e) => setDraft({ ...draft, role: e.target.value as PartyRole })}
           >
             {ROLE_OPTIONS.map((o) => (
-              <option key={o.role} value={o.role} title={o.hint}>
-                {o.label}
+              <option key={o.role} value={o.role} title={t(o.hint)}>
+                {t(o.label)}
               </option>
             ))}
           </select>
@@ -423,7 +414,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           disabled={createMutation.isPending || draft.name.trim() === ""}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          Add participant
+          {t("parties.addParticipant")}
         </button>
       </form>
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -431,11 +422,11 @@ function PartiesSection({ siteId }: { siteId: string }) {
       <table className="w-full text-sm">
         <thead className="text-left text-slate-500">
           <tr>
-            <th className="py-1 pr-3 font-medium">No.</th>
-            <th className="py-1 pr-3 font-medium">Name</th>
-            <th className="py-1 pr-3 font-medium">Address</th>
-            <th className="py-1 pr-3 font-medium">Emails</th>
-            <th className="py-1 pr-3 font-medium">Role / IBAN</th>
+            <th className="py-1 pr-3 font-medium">{t("parties.numberShort")}</th>
+            <th className="py-1 pr-3 font-medium">{t("parties.name")}</th>
+            <th className="py-1 pr-3 font-medium">{t("parties.address")}</th>
+            <th className="py-1 pr-3 font-medium">{t("parties.emailsShort")}</th>
+            <th className="py-1 pr-3 font-medium">{t("parties.roleIban")}</th>
             <th className="py-1" />
           </tr>
         </thead>
@@ -471,25 +462,25 @@ function PartiesSection({ siteId }: { siteId: string }) {
                     <div className="flex flex-wrap gap-1">
                       <input
                         className="input w-36"
-                        placeholder="Street"
+                        placeholder={t("parties.street")}
                         value={edit.address}
                         onChange={(e) => setEdit({ ...edit, address: e.target.value })}
                       />
                       <input
                         className="input w-14"
-                        placeholder="No."
+                        placeholder={t("parties.buildingNo")}
                         value={edit.buildingNumber}
                         onChange={(e) => setEdit({ ...edit, buildingNumber: e.target.value })}
                       />
                       <input
                         className="input w-20"
-                        placeholder="NPA"
+                        placeholder={t("parties.postcode")}
                         value={edit.zip}
                         onChange={(e) => setEdit({ ...edit, zip: e.target.value })}
                       />
                       <input
                         className="input w-32"
-                        placeholder="Town"
+                        placeholder={t("parties.town")}
                         value={edit.city}
                         onChange={(e) => setEdit({ ...edit, city: e.target.value })}
                       />
@@ -501,7 +492,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
                       {[p.zip, p.city].filter(Boolean).join(" ")}
                     </span>
                   ) : (
-                    <span className="text-slate-400">no address</span>
+                    <span className="text-slate-400">{t("parties.noAddress")}</span>
                   )}
                 </td>
                 <td className="py-2 pr-3">
@@ -521,7 +512,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
                       ))}
                     </ul>
                   ) : (
-                    <span className="text-slate-400">no email</span>
+                    <span className="text-slate-400">{t("parties.noEmail")}</span>
                   )}
                 </td>
                 <td className="py-2 pr-3">
@@ -533,8 +524,8 @@ function PartiesSection({ siteId }: { siteId: string }) {
                         onChange={(e) => setEdit({ ...edit, role: e.target.value as PartyRole })}
                       >
                         {ROLE_OPTIONS.map((o) => (
-                          <option key={o.role} value={o.role} title={o.hint}>
-                            {o.label}
+                          <option key={o.role} value={o.role} title={t(o.hint)}>
+                            {t(o.label)}
                           </option>
                         ))}
                       </select>
@@ -547,10 +538,10 @@ function PartiesSection({ siteId }: { siteId: string }) {
                     </div>
                   ) : (
                     <span className={p.role === "rcp_party" ? "text-slate-400" : "text-slate-900"}>
-                      {ROLE_LABEL[p.role]}
+                      {t(ROLE_LABEL[p.role])}
                       {p.role === "rcp_admin" || p.role === "rcp_admin_only" ? (
                         <span className="ml-2 font-mono text-xs text-slate-500">
-                          {p.iban ?? "no IBAN"}
+                          {p.iban ?? t("parties.noIban")}
                         </span>
                       ) : null}
                     </span>
@@ -564,10 +555,10 @@ function PartiesSection({ siteId }: { siteId: string }) {
                         disabled={updateMutation.isPending || edit.name.trim() === ""}
                         className="mr-3 font-medium text-slate-900 disabled:opacity-50"
                       >
-                        Save
+                        {t("common.save")}
                       </button>
                       <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-slate-700">
-                        Cancel
+                        {t("common.cancel")}
                       </button>
                     </>
                   ) : (
@@ -590,13 +581,13 @@ function PartiesSection({ siteId }: { siteId: string }) {
                         }}
                         className="mr-3 text-slate-500 hover:text-slate-900"
                       >
-                        Edit
+                        {t("common.edit")}
                       </button>
                       <button
                         onClick={() => deleteMutation.mutate(p.id)}
                         className="text-slate-400 hover:text-red-600"
                       >
-                        Delete
+                        {t("common.delete")}
                       </button>
                     </>
                   )}
@@ -607,7 +598,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           {parties.length === 0 && (
             <tr>
               <td colSpan={4} className="py-6 text-center text-slate-400">
-                No participants yet.
+                {t("parties.empty")}
               </td>
             </tr>
           )}

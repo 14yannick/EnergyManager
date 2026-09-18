@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
+import { useI18n, useT } from "./i18n/context";
 import { useSession, type SessionState } from "./lib/useIdentity";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TariffPeriodsPage } from "./pages/TariffPeriodsPage";
@@ -39,6 +40,7 @@ function logoutHref(): string {
  * the link would only 404 at the edge, so nothing is shown.
  */
 function SessionBadge({ session }: { session: SessionState }) {
+  const t = useT();
   if (session.kind === "loading" || session.kind === "none") return null;
 
   const email = session.kind === "active" ? session.identity.email : session.email;
@@ -46,11 +48,11 @@ function SessionBadge({ session }: { session: SessionState }) {
     session.kind === "active"
       ? session.identity.role === "participant" && session.identity.partyName
         ? session.identity.partyName
-        : session.identity.role
-      : "no access";
+        : t(`role.${session.identity.role}`)
+      : t("session.noAccess");
 
   return (
-    <div className="ml-auto flex items-center gap-3 text-sm">
+    <div className="flex items-center gap-3 text-sm">
       <span className="hidden text-slate-500 sm:inline">
         {email}
         <span
@@ -67,8 +69,38 @@ function SessionBadge({ session }: { session: SessionState }) {
         href={logoutHref()}
         className="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
       >
-        Sign out
+        {t("session.signOut")}
       </a>
+    </div>
+  );
+}
+
+/**
+ * The language switch. Buttons rather than a dropdown: with three choices a
+ * select hides the alternatives behind a click, and the whole point of this
+ * control is that the other languages are one tap away.
+ */
+function LanguageSwitch() {
+  const { locale, setLocale, t } = useI18n();
+  return (
+    <div
+      className="flex overflow-hidden rounded-md border border-slate-300 text-xs"
+      aria-label={t("session.language")}
+    >
+      {(["fr", "de", "en"] as const).map((code) => (
+        <button
+          key={code}
+          onClick={() => setLocale(code)}
+          aria-pressed={locale === code}
+          className={`px-2 py-1 font-medium uppercase ${
+            locale === code
+              ? "bg-slate-900 text-white"
+              : "bg-white text-slate-500 hover:bg-slate-50"
+          } ${code === "de" ? "border-x border-slate-300" : ""}`}
+        >
+          {code}
+        </button>
+      ))}
     </div>
   );
 }
@@ -81,34 +113,25 @@ function SessionBadge({ session }: { session: SessionState }) {
  * happened, and what to do about it.
  */
 function NoAccess({ email, status }: { email: string | null; status: number }) {
+  const t = useT();
   return (
     <div className="mx-auto max-w-xl rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">
-      <h1 className="text-base font-semibold">No access</h1>
+      <h1 className="text-base font-semibold">{t("noAccess.title")}</h1>
       {status === 403 ? (
         <>
           <p className="mt-2">
-            {email ? (
-              <>
-                You are signed in as <span className="font-medium">{email}</span>, but that address
-                is not set up in EnergyManager.
-              </>
-            ) : (
-              "Your address is not set up in EnergyManager."
-            )}
+            {email ? t("noAccess.knownAs", { email }) : t("noAccess.unknown")}
           </p>
-          <p className="mt-2">
-            Ask the administrator to add it to your participant entry, then reload this page. If you
-            meant to use another account, sign out first.
-          </p>
+          <p className="mt-2">{t("noAccess.askAdmin")}</p>
         </>
       ) : (
-        <p className="mt-2">Your session was not recognised. Sign out and sign in again.</p>
+        <p className="mt-2">{t("noAccess.unrecognised")}</p>
       )}
       <a
         href={logoutHref()}
         className="mt-4 inline-block rounded-md border border-amber-400 bg-white px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-100"
       >
-        Sign out
+        {t("session.signOut")}
       </a>
     </div>
   );
@@ -116,6 +139,7 @@ function NoAccess({ email, status }: { email: string | null; status: number }) {
 
 export function App() {
   const session = useSession();
+  const t = useT();
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -123,30 +147,33 @@ export function App() {
           and a nav bar on a document that goes to a neighbour is noise. */}
       <header className="border-b bg-white print:hidden">
         <div className="mx-auto flex max-w-[1600px] items-center gap-4 px-4 py-3 lg:px-8">
-          <span className="text-lg font-semibold text-slate-900">EnergyManager</span>
+          <span className="text-lg font-semibold text-slate-900">{t("app.name")}</span>
           {/* Hidden for a rejected session: none of it leads anywhere, and it
               crowds out the one control that does. */}
           <nav className={`flex gap-1 ${session.kind === "rejected" ? "hidden" : ""}`}>
             <NavLink to="/" end className={navLinkClass}>
-              Dashboard
+              {t("nav.dashboard")}
             </NavLink>
             <NavLink to="/tariff-periods" className={navLinkClass}>
-              Tariff periods
+              {t("nav.tariffs")}
             </NavLink>
             <NavLink to="/calculation" className={navLinkClass}>
-              Calculation detail
+              {t("nav.calculation")}
             </NavLink>
             <NavLink to="/readings" className={navLinkClass}>
-              Import readings
+              {t("nav.readings")}
             </NavLink>
             <NavLink to="/settings" className={navLinkClass}>
-              Settings
+              {t("nav.settings")}
             </NavLink>
             <NavLink to="/billing" className={navLinkClass}>
-              Facturation
+              {t("nav.billing")}
             </NavLink>
           </nav>
-          <SessionBadge session={session} />
+          <div className="ml-auto flex items-center gap-3">
+            <LanguageSwitch />
+            <SessionBadge session={session} />
+          </div>
         </div>
       </header>
 
