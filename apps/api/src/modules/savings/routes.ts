@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { savingsQuerySchema } from "@energy-manager/shared";
-import { getDailySavings, getSavingsSummary } from "./service.js";
+import { savingsDayQuerySchema, savingsQuerySchema } from "@energy-manager/shared";
+import { getDailySavings, getSavingsDay, getSavingsSummary } from "./service.js";
 
 export async function savingsRoutes(app: FastifyInstance) {
   // `granularity=monthly` returns one row per calendar month instead of per
@@ -15,6 +15,20 @@ export async function savingsRoutes(app: FastifyInstance) {
       }
       const { from, to, granularity } = parsed.data;
       return getDailySavings(req.params.siteId, from, to, granularity);
+    },
+  );
+
+  // One day at metering-interval resolution: the totals plus the intervals
+  // they were summed from, so an average rate on the day view can be expanded
+  // into the slots that produced it.
+  app.get<{ Params: { siteId: string }; Querystring: Record<string, string> }>(
+    "/api/sites/:siteId/savings/day",
+    async (req, reply) => {
+      const parsed = savingsDayQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "invalid_query", issues: parsed.error.issues });
+      }
+      return getSavingsDay(req.params.siteId, parsed.data.date);
     },
   );
 

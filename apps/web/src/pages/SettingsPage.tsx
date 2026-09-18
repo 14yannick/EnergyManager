@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCanEdit } from "../lib/useIdentity";
 
 // Only site-level flows are pullable from Home Assistant: per-party
 // consumption needs a party attached, which a single statistic can't express.
@@ -32,6 +33,11 @@ function daysAgo(n: number) {
 
 export function SettingsPage() {
   const { site } = useDefaultSite();
+  // Everything on this page is an admin-only write in the API's policy table,
+  // so the whole page reads rather than edits for anyone else. The controls
+  // are left visible on purpose: a viewer being shown the current
+  // configuration is useful, being shown buttons that 403 is not.
+  const { canEdit, isKnown } = useCanEdit();
   const statusQuery = useQuery({ queryKey: ["ha-status"], queryFn: api.homeAssistant.status });
 
   if (!site) return <p className="text-slate-500">Loading…</p>;
@@ -47,9 +53,17 @@ export function SettingsPage() {
         </p>
       </div>
 
-      <ProductionStartSection site={site} />
+      {/* Only once the role is actually known, so an admin never sees this
+          flash by while `/api/me` is still in flight. */}
+      {isKnown && !canEdit && (
+        <p className="rounded-lg border border-slate-300 bg-slate-100 p-4 text-sm text-slate-600">
+          Read-only — changing these settings is reserved to the RCP administrator.
+        </p>
+      )}
 
-      <InvestmentSection siteId={site.id} />
+      <ProductionStartSection site={site} canEdit={canEdit} />
+
+      <InvestmentSection siteId={site.id} canEdit={canEdit} />
 
       <div>
         <h2 className="text-sm font-medium text-slate-700">Home Assistant</h2>
@@ -75,15 +89,15 @@ export function SettingsPage() {
               ? `Syncing automatically every ${status.syncIntervalMinutes} minutes.`
               : "Automatic sync is disabled."}
           </div>
-          <MappingSection siteId={site.id} />
-          <SyncSection siteId={site.id} />
+          <MappingSection siteId={site.id} canEdit={canEdit} />
+          <SyncSection siteId={site.id} canEdit={canEdit} />
         </>
       )}
     </div>
   );
 }
 
-function MappingSection({ siteId }: { siteId: string }) {
+function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -156,7 +170,7 @@ function MappingSection({ siteId }: { siteId: string }) {
                   <select
                     className="input w-full max-w-md"
                     value={current?.statisticId ?? ""}
-                    disabled={statsQuery.isLoading || setMutation.isPending}
+                    disabled={!canEdit || statsQuery.isLoading || setMutation.isPending}
                     onChange={(e) => {
                       const statisticId = e.target.value;
                       if (statisticId === "") {
@@ -195,7 +209,7 @@ function MappingSection({ siteId }: { siteId: string }) {
   );
 }
 
-function SyncSection({ siteId }: { siteId: string }) {
+function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
   const [granularity, setGranularity] = useState<"quarter_hour" | "hour">("quarter_hour");
   const [useRange, setUseRange] = useState(false);
   const [from, setFrom] = useState(() => daysAgo(7));
@@ -242,7 +256,8 @@ function SyncSection({ siteId }: { siteId: string }) {
               <button
                 key={value}
                 onClick={() => setGranularity(value)}
-                className={`px-3 py-1.5 ${
+                disabled={!canEdit}
+                className={`px-3 py-1.5 disabled:opacity-50 ${
                   granularity === value ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
@@ -253,7 +268,12 @@ function SyncSection({ siteId }: { siteId: string }) {
         </div>
 
         <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
-          <input type="checkbox" checked={useRange} onChange={(e) => setUseRange(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={useRange}
+            disabled={!canEdit}
+            onChange={(e) => setUseRange(e.target.checked)}
+          />
           Specific date range
         </label>
 
@@ -261,18 +281,30 @@ function SyncSection({ siteId }: { siteId: string }) {
           <>
             <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
               From
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input" />
+              <input
+                type="date"
+                value={from}
+                disabled={!canEdit}
+                onChange={(e) => setFrom(e.target.value)}
+                className="input"
+              />
             </label>
             <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
               To
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input" />
+              <input
+                type="date"
+                value={to}
+                disabled={!canEdit}
+                onChange={(e) => setTo(e.target.value)}
+                className="input"
+              />
             </label>
           </>
         )}
 
         <button
           onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending || !rangeValid}
+          disabled={!canEdit || syncMutation.isPending || !rangeValid}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {syncMutation.isPending ? "Syncing…" : "Sync now"}
@@ -328,7 +360,7 @@ function SyncSection({ siteId }: { siteId: string }) {
  * separately) editing here would be ambiguous, so the field goes read-only and
  * points at the full page instead.
  */
-function InvestmentSection({ siteId }: { siteId: string }) {
+function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -369,7 +401,9 @@ function InvestmentSection({ siteId }: { siteId: string }) {
   function rowFor(category: "battery" | "solar") {
     const matching = items.filter((i) => i.category === category);
     const total = matching.reduce((sum, i) => sum + i.amountChf, 0);
-    return { matching, total, editable: matching.length <= 1 };
+    // Two different reasons to show a total instead of a field, kept apart so
+    // the explanation underneath matches the actual one.
+    return { matching, total, editable: canEdit && matching.length <= 1, split: matching.length > 1 };
   }
 
   const battery = rowFor("battery");
@@ -411,9 +445,11 @@ function InvestmentSection({ siteId }: { siteId: string }) {
             ) : (
               <>
                 <p className="mt-1 text-lg text-slate-700">CHF {row.total.toFixed(2)}</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  {row.matching.length} separate items — shown as a total, not editable here
-                </p>
+                {row.split && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    {row.matching.length} separate items — shown as a total, not editable here
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -439,7 +475,7 @@ function InvestmentSection({ siteId }: { siteId: string }) {
  * recorded production — shown here as the placeholder so the fallback is
  * visible rather than implied.
  */
-function ProductionStartSection({ site }: { site: Site }) {
+function ProductionStartSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -475,6 +511,7 @@ function ProductionStartSection({ site }: { site: Site }) {
           <input
             type="date"
             className="input"
+            disabled={!canEdit}
             max={new Date().toISOString().slice(0, 10)}
             value={site.productionStartDate ?? firstProduction ?? ""}
             onChange={(e) =>
@@ -494,6 +531,7 @@ function ProductionStartSection({ site }: { site: Site }) {
             step="0.1"
             min="0"
             max="90"
+            disabled={!canEdit}
             className="input w-28"
             defaultValue={(site.batteryConversionLoss * 100).toFixed(1)}
             onBlur={(e) => {
@@ -509,7 +547,7 @@ function ProductionStartSection({ site }: { site: Site }) {
             reduced by this before being charged against the battery.
           </span>
         </label>
-        {site.productionStartDate != null && (
+        {canEdit && site.productionStartDate != null && (
           <button
             type="button"
             onClick={() => save.mutate({ productionStartDate: null })}

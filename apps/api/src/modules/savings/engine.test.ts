@@ -7,6 +7,7 @@ import {
   aggregateDailyToYearly,
   aggregateIntervalsToDaily,
   buildCumulativeSeries,
+  chargeAcEquivalentKwh,
   computeBatteryRevenue,
   computeDirectUseKwh,
   computeSavingsFromInputs,
@@ -821,6 +822,17 @@ describe("computeBatteryRevenue — conversion loss on charging", () => {
     const high = computeBatteryRevenue({ ...base, batteryConversionLoss: 0.2 });
     expect(high.chargingCostChf).toBeLessThan(low.chargingCostChf);
     expect(high.batteryRevenueChf).toBeGreaterThan(low.batteryRevenueChf);
+  });
+
+  it("exposes the exact quantity the cost was priced on", () => {
+    // The day view prints this kWh beside a rate and a total, and expands it
+    // into the intervals behind it. kWh x rate has to equal CHF exactly, or
+    // an expanded list would not add up to the line above it.
+    for (const loss of [0, 0.05, 0.1, 0.2]) {
+      const r = computeBatteryRevenue({ ...base, batteryConversionLoss: loss });
+      const acKwh = chargeAcEquivalentKwh(base.batteryChargeKwh, loss);
+      expect(acKwh * base.sellRateChfPerKwh).toBeCloseTo(r.chargingCostChf, 12);
+    }
   });
 
   it("zero loss is the old behaviour — the full DC charge is priced", () => {

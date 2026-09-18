@@ -76,6 +76,21 @@ export interface SavingsInputs {
 /** Fraction of battery charge lost to conversion when no site value is given. */
 export const DEFAULT_BATTERY_CONVERSION_LOSS = 0.1;
 
+/**
+ * Charge measured DC, expressed as the AC export it displaced.
+ *
+ * Charging is metered on the DC side but everything priced is AC, so the
+ * export forgone is the charge less what conversion would have taken anyway.
+ * Exported because the day view shows this quantity next to the rate applied
+ * to it, and recomputing it there would let the two drift apart.
+ */
+export function chargeAcEquivalentKwh(
+  batteryChargeKwh: number,
+  conversionLoss: number = DEFAULT_BATTERY_CONVERSION_LOSS,
+): number {
+  return batteryChargeKwh * (1 - conversionLoss);
+}
+
 export interface BatteryRevenueInputs {
   producedKwh: number;
   /** Fraction (0-1). Falls back to DEFAULT_BATTERY_CONVERSION_LOSS. */
@@ -132,10 +147,8 @@ export function computeBatteryRevenue(inputs: BatteryRevenueInputs): BatteryReve
   const dischargeExportedKwh = Math.min(unexplainedExportKwh, batteryDischargeKwh);
   const dischargeConsumedKwh = batteryDischargeKwh - dischargeExportedKwh;
 
-  // Charging is metered DC; the export it displaced would have been AC, so the
-  // forgone revenue is the charge less what conversion would have taken anyway.
-  const chargeAcEquivalentKwh = batteryChargeKwh * (1 - conversionLoss);
-  const chargingCostChf = sellRateChfPerKwh != null ? chargeAcEquivalentKwh * sellRateChfPerKwh : 0;
+  const chargeAcKwh = chargeAcEquivalentKwh(batteryChargeKwh, conversionLoss);
+  const chargingCostChf = sellRateChfPerKwh != null ? chargeAcKwh * sellRateChfPerKwh : 0;
   const dischargeConsumedValueChf =
     purchaseRateChfPerKwh != null ? dischargeConsumedKwh * purchaseRateChfPerKwh : 0;
   const dischargeExportedValueChf =

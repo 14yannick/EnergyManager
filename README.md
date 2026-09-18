@@ -23,8 +23,11 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
   export, battery, neighbour sales) at hourly/daily/monthly/yearly resolution, in CHF,
   kWh or both; KPIs; and simple payback + breakeven computed three ways — with battery,
   without battery (counterfactual), and battery-only
-- **Calculation detail** page listing every metric behind the revenue figure per period,
-  exportable as CSV
+- **Calculation detail** page showing one day at a time: where production went (direct
+  use, the parties, the grid) and what the battery cost and earned, each line carrying
+  the energy-weighted average rate it was priced at. Any line expands into the metering
+  intervals behind it, so an average can be traced to the slots that produced it. The
+  full engine output over a range, and its CSV export, is folded away underneath
 - **Settings** holding the Home Assistant connection and entity mapping, investment
   costs (battery vs. solar, subsidies, tax reductions), the production start date, and
   the battery's round-trip conversion loss
@@ -72,6 +75,13 @@ Three roles, resolved from the verified address:
 | `viewer` | Everything, read only — no writes anywhere. |
 | `participant` | Only their own consumption and invoice, plus site-level community totals (PV produced, size of the local pool). Never another participant's figures, never your production, battery, export, tariffs or investment data. |
 
+The API is the enforcement point — every route is denied by default and listed
+explicitly in `apps/api/src/auth/policy.ts`. The web app follows it where a
+page would otherwise offer a control that can only fail: **Settings** renders
+read-only for anyone who is not an admin, since every write on it (production
+start, battery loss, investment, Home Assistant mapping and sync) is
+admin-only.
+
 Addresses are matched in that order, and the first match wins:
 
 1. `AUTH_ADMIN_EMAILS` on the api container
@@ -80,6 +90,12 @@ Addresses are matched in that order, and the first match wins:
    there is nothing extra to maintain. The party's own role decides what it
    grants
 4. anything else gets a 403
+
+An address Cloudflare authenticated but none of those three recognise gets a
+403 from every endpoint, including `/api/me`. The app shows it who it is
+signed in as and a sign-out button, rather than a dashboard full of failed
+requests — otherwise somebody added to Access but not yet to a party is stuck
+in an account they can neither use nor leave.
 
 The environment lists are consulted first so that adding yourself as a
 participant to preview their view cannot demote you. Granting from the parties

@@ -328,6 +328,44 @@ export interface DailySavings {
   noBatteryDirectExportRevenueChf: number;
 }
 
+/**
+ * One metering interval, priced — the grain every average on the day view is
+ * built from.
+ *
+ * It is a `DailySavings` because that is literally what it is: the engine
+ * prices a single interval and a whole day with the same function, and the
+ * daily row is these summed. Carrying the same shape means the detail behind
+ * an average and the figure it rolls up to can never be computed two
+ * different ways.
+ */
+export interface SavingsSlot extends DailySavings {
+  /** ISO instant the interval starts at. `date` is only hour-resolution. */
+  ts: string;
+  /**
+   * Battery charge after conversion loss: the AC export it actually
+   * displaced, and so the quantity the feed-in rate is applied to.
+   */
+  batteryChargeAcKwh: number;
+}
+
+/** What one party drew from the local pool on a day, and what it is worth. */
+export interface SavingsDayParty {
+  partyId: string;
+  name: string;
+  kwh: number;
+  /** Priced interval by interval, so a rate that moved during the day is respected. */
+  chf: number;
+}
+
+/** A single day, its totals, and the intervals they were summed from. */
+export interface SavingsDayDetail {
+  date: string;
+  totals: DailySavings | null;
+  slots: SavingsSlot[];
+  /** The per-party split of `totals.neighborConsumptionKwh`. */
+  parties: SavingsDayParty[];
+}
+
 export interface SavingsSummary {
   from: string;
   to: string;

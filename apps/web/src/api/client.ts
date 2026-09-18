@@ -18,6 +18,7 @@ import type {
   Party,
   PartyInput,
   ReadingsImportResult,
+  SavingsDayDetail,
   SavingsSummary,
   SavingsQuery,
   Site,
@@ -29,6 +30,26 @@ import type {
   TariffSurchargeInput,
 } from "@energy-manager/shared";
 
+/**
+ * A failed request, with the status kept alongside the message.
+ *
+ * Most callers only ever show `.message`, so it stays an `Error` and reads
+ * the same as before. The status is here for the few places that must tell
+ * *why* a call failed — chiefly 401/403, which mean the session is the
+ * problem rather than the data.
+ */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    /** The caller's own address, when the API names it in a rejection. */
+    readonly email: string | null = null,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -36,7 +57,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.message ?? body.error ?? `Request failed: ${res.status}`);
+    throw new ApiError(
+      body.message ?? body.error ?? `Request failed: ${res.status}`,
+      res.status,
+      typeof body.email === "string" ? body.email : null,
+    );
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -121,6 +146,8 @@ export const api = {
       request<SavingsSummary>(
         `/sites/${siteId}/savings/summary?from=${from}&to=${to}${granularity ? `&granularity=${granularity}` : ""}`,
       ),
+    day: (siteId: string, date: string) =>
+      request<SavingsDayDetail>(`/sites/${siteId}/savings/day?date=${date}`),
     cumulative: (siteId: string, from: string, to: string, granularity?: SavingsQuery["granularity"]) =>
       request<CumulativeSavingsPoint[]>(
         `/sites/${siteId}/savings/cumulative?from=${from}&to=${to}${granularity ? `&granularity=${granularity}` : ""}`,

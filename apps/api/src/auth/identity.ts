@@ -15,7 +15,23 @@ export const ANONYMOUS_ADMIN: AuthIdentity = {
 };
 
 export class UnauthenticatedError extends Error {}
-export class UnknownUserError extends Error {}
+
+/**
+ * Cloudflare vouched for this address, but this app has no role for it.
+ *
+ * Carries the address because the caller needs it: they are signed in to
+ * something, and telling them which account that is turns a wall of failing
+ * requests into "you are here as X, sign out or ask to be added". It is their
+ * own verified address, so it reveals nothing they did not already send.
+ */
+export class UnknownUserError extends Error {
+  constructor(
+    message: string,
+    readonly email: string,
+  ) {
+    super(message);
+  }
+}
 
 /**
  * Map a verified address to a role.
@@ -64,6 +80,7 @@ export async function roleForEmail(
     rows.length === 0
       ? `${email} is not an admin, a viewer, or a participant`
       : `${email} is listed on more than one party`,
+    email,
   );
 }
 

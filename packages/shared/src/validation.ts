@@ -194,6 +194,10 @@ export const savingsQuerySchema = dateRangeQuerySchema.extend({
 });
 export type SavingsQuery = z.infer<typeof savingsQuerySchema>;
 
+/** One calendar day, broken down to the metering interval. */
+export const savingsDayQuerySchema = z.object({ date: isoDate });
+export type SavingsDayQuery = z.infer<typeof savingsDayQuerySchema>;
+
 export const dynamicTariffQuerySchema = dateRangeQuerySchema.extend({
   kind: tariffKindSchema.optional(),
 });

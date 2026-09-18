@@ -72,10 +72,11 @@ export function registerAuth(app: FastifyInstance) {
       }
       if (err instanceof UnknownUserError) {
         // Authenticated by Cloudflare but not known here. Log the address —
-        // it's how you find out somebody needs adding — but don't tell the
-        // caller which list they're missing from.
+        // it's how you find out somebody needs adding — and echo it back, so
+        // the app can show whose session this is and offer a way out of it.
+        // Which list they are missing from stays unsaid.
         req.log.warn({ err: err.message, url }, "rejected unknown user");
-        return reply.status(403).send({ error: "forbidden" });
+        return reply.status(403).send({ error: "forbidden", email: err.email });
       }
       throw err;
     }

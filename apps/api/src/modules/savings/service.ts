@@ -2,14 +2,23 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type {
   CumulativeSavingsPoint,
   DailySavings,
+  SavingsDayDetail,
+  SavingsDayParty,
+  SavingsSlot,
   SavingsSummary,
   SavingsQuery,
 } from "@energy-manager/shared";
-import { makeRateResolver, type ResolvedPeriod, type ResolvedRate } from "./rates.js";
+import {
+  makeRateResolver,
+  type RateResolver,
+  type ResolvedPeriod,
+  type ResolvedRate,
+} from "./rates.js";
 import { db } from "../../db/client.js";
 import {
   dynamicTariffRates,
   intervalMetrics,
+  parties,
   sites,
   tariffPeriods,
   tariffSurcharges,
@@ -23,6 +32,7 @@ import {
   aggregateDailyToYearly,
   aggregateIntervalsToDaily,
   aggregateIntervalsToHourly,
+  chargeAcEquivalentKwh,
   computeDirectUseKwh,
   computeSavingsFromInputs,
   summarizeHourlySavings,
@@ -33,12 +43,19 @@ import {
   summarizeYearlySavings,
 } from "./engine.js";
 
-export async function getDailySavings(
+/**
+ * Every metering interval in the range, priced.
+ *
+ * The one place readings and rates are loaded: `getDailySavings` rolls these
+ * up, and `getSavingsDay` hands them out as the detail behind a day's
+ * averages. Sharing the loader is what guarantees an expanded interval list
+ * adds up to the total printed above it.
+ */
+async function loadPricedSlots(
   siteId: string,
   from: string,
   to: string,
-  granularity: SavingsQuery["granularity"] = "daily",
-): Promise<DailySavings[]> {
+): Promise<{ slots: SavingsSlot[]; resolveRate: RateResolver }> {
   // Half-open [from, to] range in Europe/Zurich calendar days, converted to UTC
   // in SQL (DST-aware) — not naive `${from}T00:00:00Z`. A row stamped at
   // Zurich-local midnight on `from` (as every monthly/daily import is) lands at
@@ -130,7 +147,7 @@ export async function getDailySavings(
   const resolveRate = makeRateResolver(periods, dynamicRates, surcharges);
   const batteryConversionLoss = siteRows[0] ? toNumber(siteRows[0].loss) : undefined;
 
-  const intervalRows: DailySavings[] = readingRows.map((row) => {
+  const slots = readingRows.map((row) => {
     const instantIso = row.ts.toISOString();
     const producedKwh = toNumber(row.producedKwh);
     const batteryChargeKwh = toNumber(row.batteryChargeKwh);
@@ -139,7 +156,7 @@ export async function getDailySavings(
     const exportLocalKwh = toNumber(row.exportLocalKwh);
     const neighborConsumptionKwh = toNumber(row.neighborConsumptionKwh);
 
-    return computeSavingsFromInputs({
+    const priced = computeSavingsFromInputs({
       date: row.date,
       batteryConversionLoss,
       producedKwh,
@@ -153,7 +170,34 @@ export async function getDailySavings(
       sellRateChfPerKwh: resolveRate("feed_in", instantIso),
       neighborSellRateChfPerKwh: resolveRate("neighbor_sell", instantIso),
     });
+    return {
+      ...priced,
+      ts: instantIso,
+      batteryChargeAcKwh: chargeAcEquivalentKwh(batteryChargeKwh, batteryConversionLoss),
+    };
   });
+
+  return { slots, resolveRate };
+}
+
+/**
+ * Drop the per-interval-only fields before aggregating. `ts` describes one
+ * instant and `batteryChargeAcKwh` is not in the engine's summable list, so
+ * either one surviving into a period row would carry the first interval's
+ * value while claiming to describe the whole period.
+ */
+function toDailySavings({ ts: _ts, batteryChargeAcKwh: _ac, ...row }: SavingsSlot): DailySavings {
+  return row;
+}
+
+export async function getDailySavings(
+  siteId: string,
+  from: string,
+  to: string,
+  granularity: SavingsQuery["granularity"] = "daily",
+): Promise<DailySavings[]> {
+  const { slots } = await loadPricedSlots(siteId, from, to);
+  const intervalRows = slots.map(toDailySavings);
 
   if (granularity === "hourly") return aggregateIntervalsToHourly(intervalRows);
 
@@ -163,6 +207,73 @@ export async function getDailySavings(
   if (granularity === "yearly") return aggregateDailyToYearly(daily);
   if (granularity === "overall") return aggregateDailyToOverall(daily);
   return daily;
+}
+
+/**
+ * One day's totals with the intervals behind them.
+ *
+ * `totals` is null for a day with no readings at all, which the day view
+ * shows as "nothing recorded" rather than a page of zeros that look like a
+ * day the system produced nothing.
+ */
+export async function getSavingsDay(siteId: string, date: string): Promise<SavingsDayDetail> {
+  const { slots, resolveRate } = await loadPricedSlots(siteId, date, date);
+  const daily = aggregateIntervalsToDaily(slots.map(toDailySavings));
+  const parties = await loadDayParties(siteId, date, resolveRate);
+  return { date, totals: daily[0] ?? null, slots, parties };
+}
+
+/**
+ * Who drew what from the local pool, priced per interval.
+ *
+ * Kept as its own query rather than widening the pivot above: that one groups
+ * by instant alone, and adding the party would multiply every site-level
+ * metric by the number of parties. Summed here, so the figures still tie back
+ * to `totals.neighborConsumptionKwh`.
+ */
+async function loadDayParties(
+  siteId: string,
+  date: string,
+  resolveRate: RateResolver,
+): Promise<SavingsDayParty[]> {
+  const fromBound = sql`(${date}::date AT TIME ZONE 'Europe/Zurich')`;
+  const toBoundExclusive = sql`((${date}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
+
+  const rows = await db
+    .select({
+      ts: intervalMetrics.ts,
+      partyId: intervalMetrics.partyId,
+      name: parties.name,
+      kwh: sql<string>`sum(${intervalMetrics.valueKwh})`,
+    })
+    .from(intervalMetrics)
+    .innerJoin(parties, eq(parties.id, intervalMetrics.partyId))
+    .where(
+      and(
+        eq(intervalMetrics.siteId, siteId),
+        eq(intervalMetrics.metricKind, "consumption"),
+        sql`${intervalMetrics.ts} >= ${fromBound}`,
+        sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
+      ),
+    )
+    .groupBy(intervalMetrics.ts, intervalMetrics.partyId, parties.name);
+
+  const byParty = new Map<string, SavingsDayParty>();
+  for (const row of rows) {
+    if (!row.partyId) continue;
+    const kwh = toNumber(row.kwh);
+    const rate = resolveRate("neighbor_sell", row.ts.toISOString());
+    const entry = byParty.get(row.partyId) ?? {
+      partyId: row.partyId,
+      name: row.name,
+      kwh: 0,
+      chf: 0,
+    };
+    entry.kwh += kwh;
+    entry.chf += rate != null ? kwh * rate : 0;
+    byParty.set(row.partyId, entry);
+  }
+  return [...byParty.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function getSavingsSummary(
