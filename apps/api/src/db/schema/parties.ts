@@ -1,6 +1,21 @@
-import { boolean, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { sites } from "./sites.js";
+
+/**
+ * `rcp_party`   — an ordinary member: consumes, is invoiced, counts towards
+ *                 how the shared fixed costs divide. The default.
+ * `rcp_admin`   — runs the app *and* is a member, so billed exactly like one.
+ * `rcp_admin_only` — runs the app without being part of the RCP: no invoice,
+ *                 and excluded from the participant count.
+ * `viewer`      — read-only sight of everything, consuming nothing.
+ */
+export const partyRoleEnum = pgEnum("party_role", [
+  "rcp_party",
+  "rcp_admin",
+  "rcp_admin_only",
+  "viewer",
+]);
 
 // An external consumption-tracked entity (a neighbour in a VZEV-style
 // setup). The homeowner's own consumption stays derived (produced -
@@ -39,18 +54,21 @@ export const parties = pgTable(
     city: text("city"),
     country: text("country").notNull().default("CH"),
     /**
-     * Marks the party that operates the RCP — the owner, who bills everyone
-     * else. They are a party like any other because they consume from the
-     * same connection; the flag only says who is on the creditor side of an
-     * invoice.
+     * What this party is to the RCP. One column rather than a flag each,
+     * because the four are mutually exclusive and a row that is two of them
+     * at once has no meaning.
      *
-     * At most one per site, enforced by a partial unique index below rather
-     * than by application code, so two operators can't exist even briefly.
+     * Administering the RCP and being billed by it are independent: the owner
+     * usually consumes from the same connection, pays a share of the fixed
+     * costs and imports from the grid like anyone else, so `rcp_admin` is
+     * billed. `rcp_admin_only` covers the case where whoever runs the app is
+     * not a member — a managing agent, say. `viewer` is a holder for an
+     * address, granting read-only sight of everything and consuming nothing.
      */
-    isOperator: boolean("is_operator").notNull().default(false),
+    role: partyRoleEnum("role").notNull().default("rcp_party"),
     /**
-     * Account the QR-bill is payable to. Only meaningful on the operator; a
-     * participant's own IBAN is none of this app's business.
+     * Account the QR-bill is payable to. Only meaningful on the party that
+     * administers the RCP; anyone else's IBAN is none of this app's business.
      */
     iban: text("iban"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -58,8 +76,11 @@ export const parties = pgTable(
   },
   (table) => [
     uniqueIndex("parties_site_name_idx").on(table.siteId, table.name),
-    uniqueIndex("parties_one_operator_idx")
+    // One administrator per site. Which of the two admin roles it is decides
+    // whether they are also billed, but there is only ever one of them, and
+    // they are the QR-bill's payee.
+    uniqueIndex("parties_one_admin_idx")
       .on(table.siteId)
-      .where(sql`${table.isOperator}`),
+      .where(sql`${table.role} in ('rcp_admin', 'rcp_admin_only')`),
   ],
 );

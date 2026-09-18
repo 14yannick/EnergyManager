@@ -3,7 +3,9 @@ import type {
   GridTariffPosition,
   InvoiceLine,
   ParticipantInvoice,
+  PartyRole,
 } from "@energy-manager/shared";
+import { ADMIN_PARTY_ROLES, BILLED_PARTY_ROLES } from "@energy-manager/shared";
 
 /**
  * Pure invoice arithmetic — no DB, no network (same split as savings/engine.ts).
@@ -59,6 +61,32 @@ function sortPositions(positions: GridTariffPosition[]): GridTariffPosition[] {
  * position the VZEV exists to create), then the grid provider's positions
  * spread according to each one's allocation.
  */
+/** Parties that consume from the connection, so are invoiced and counted. */
+export function isBilledParty<T extends { role: PartyRole }>(party: T): boolean {
+  return BILLED_PARTY_ROLES.includes(party.role);
+}
+
+/**
+ * Who shares the connection, for dividing `pool_shared` positions.
+ *
+ * Households only: `rcp_admin_only` and `viewer` consume nothing and must not
+ * dilute the division. An `rcp_admin` does consume, so is counted like any
+ * member — the owner normally pays a share of the fixed costs and imports
+ * from the grid like everyone else.
+ *
+ * The `+ 1` applies only when no party administers the RCP at all: the owner
+ * still exists and still consumes, they just haven't been entered yet, which
+ * is how every site looked before parties could carry a role. Once an admin
+ * party exists, its own role says whether to count it, and adding the
+ * constant as well would count the same household twice — that bug reached 5
+ * for 4 people and under-charged everybody.
+ */
+export function participantCountOf(parties: ReadonlyArray<{ role: PartyRole }>): number {
+  const billed = parties.filter(isBilledParty).length;
+  const administered = parties.some((p) => ADMIN_PARTY_ROLES.includes(p.role));
+  return administered ? billed : billed + 1;
+}
+
 export function buildInvoiceLines(inputs: InvoiceInputs): InvoiceLine[] {
   const { days, participantCount, usage, localRateChf } = inputs;
   const lines: InvoiceLine[] = [];

@@ -1,6 +1,7 @@
+import type { PartyRole } from "@energy-manager/shared";
 import { describe, expect, it } from "vitest";
 import type { GridTariffPosition } from "@energy-manager/shared";
-import { buildParticipantInvoice, inclusiveDays, type InvoiceInputs } from "./engine.js";
+import { buildParticipantInvoice, inclusiveDays, isBilledParty, participantCountOf, type InvoiceInputs } from "./engine.js";
 
 // The 2026 tariff as the provider bills it, gross (VAT passed through).
 const G = 1.081;
@@ -134,5 +135,61 @@ describe("per_kwh_total allocation", () => {
     const inv = buildParticipantInvoice(inputs({ positions: [...positions, communeLevy] }));
     const line = inv.comparison.lines.find((l) => l.label === "Redevance communale")!;
     expect(line.quantity).toBe(3000);
+  });
+});
+
+describe("participantCountOf", () => {
+  const p = (role: PartyRole) => ({ role });
+
+  it("bills and counts an admin who is also a member", () => {
+    // The ordinary case: whoever runs the RCP lives on the connection too,
+    // pays a share of the fixed costs and imports from the grid like anyone
+    // else. Three neighbours plus that owner is four households.
+    expect(
+      participantCountOf([p("rcp_party"), p("rcp_party"), p("rcp_party"), p("rcp_admin")]),
+    ).toBe(4);
+  });
+
+  it("leaves out an admin who is not part of the RCP", () => {
+    // A managing agent runs the app without consuming anything, so the
+    // shared costs divide between the three who do.
+    expect(
+      participantCountOf([p("rcp_party"), p("rcp_party"), p("rcp_party"), p("rcp_admin_only")]),
+    ).toBe(3);
+  });
+
+  it("ignores viewers, who consume nothing", () => {
+    expect(
+      participantCountOf([p("rcp_party"), p("rcp_party"), p("rcp_admin"), p("viewer")]),
+    ).toBe(3);
+  });
+
+  it("assumes an unlisted owner only while no party administers the site", () => {
+    // How every site looked before parties carried a role: the owner
+    // consumes but hasn't been entered, so they are added back.
+    expect(participantCountOf([p("rcp_party"), p("rcp_party"), p("rcp_party")])).toBe(4);
+    // Once one is entered, its own role decides. Adding the constant as well
+    // would count that household twice — the regression that reached 5 for
+    // four people and under-charged everybody.
+    expect(
+      participantCountOf([p("rcp_party"), p("rcp_party"), p("rcp_party"), p("rcp_admin")]),
+    ).toBe(4);
+  });
+
+  it("never divides by zero", () => {
+    // A site with nobody billable still has to survive a pool_shared
+    // position rather than produce Infinity.
+    expect(participantCountOf([])).toBe(1);
+    expect(participantCountOf([p("viewer")])).toBe(1);
+    expect(participantCountOf([p("rcp_admin_only"), p("viewer")])).toBe(0);
+  });
+});
+
+describe("isBilledParty", () => {
+  it("bills members and member-admins, not observers", () => {
+    expect(isBilledParty({ role: "rcp_party" })).toBe(true);
+    expect(isBilledParty({ role: "rcp_admin" })).toBe(true);
+    expect(isBilledParty({ role: "rcp_admin_only" })).toBe(false);
+    expect(isBilledParty({ role: "viewer" })).toBe(false);
   });
 });

@@ -325,7 +325,9 @@ function InvoiceSection({ site }: { site: Site }) {
   });
   const parties: Party[] = partiesQuery.data ?? [];
   const partyById = new Map(parties.map((p) => [p.id, p]));
-  const operator = parties.find((p) => p.isOperator);
+  // Whoever administers the RCP is the QR-bill's payee, whether or not they
+  // are also billed by it.
+  const operator = parties.find((p) => p.role === "rcp_admin" || p.role === "rcp_admin_only");
 
   const invoicesQuery = useQuery({
     queryKey: ["billing-invoices", siteId, range?.from, range?.to],
@@ -552,9 +554,13 @@ function InvoiceDocument({
       {/* The payment part shares this sheet with the comparison and is pinned
           to its bottom edge, where the tear line is.
 
-          Skipped on the operator's own invoice — a slip payable from and to
-          the same account is meaningless. */}
-      {!party?.isOperator && <QrBill operator={operator} invoice={invoice} party={party} />}
+          Skipped on the administrator's own invoice — a slip payable from and
+          to the same account is meaningless. An `rcp_admin` still receives the
+          invoice itself: they owe their share, they just settle it without a
+          payment slip. */}
+      {!(operator && party && operator.id === party.id) && (
+        <QrBill operator={operator} invoice={invoice} party={party} />
+      )}
       </div>
     </>
   );

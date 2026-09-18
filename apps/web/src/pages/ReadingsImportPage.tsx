@@ -6,6 +6,7 @@ import {
   type ReadingImportMode,
   type ReadingsImportResult,
 } from "@energy-manager/shared";
+import type { PartyRole } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useDefaultSite } from "../lib/useDefaultSite";
 
@@ -230,9 +231,21 @@ const EMPTY_PARTY = {
   city: "",
   // The operator is the party that bills the others; their IBAN is what the
   // QR-bill is payable to.
-  isOperator: false,
+  role: "rcp_party" as PartyRole,
   iban: "",
 };
+
+/**
+ * Why each role exists, in the order somebody picks from. `rcp_party` first
+ * because it is what almost every row is.
+ */
+const ROLE_OPTIONS: Array<{ role: PartyRole; label: string; hint: string }> = [
+  { role: "rcp_party", label: "RCP party", hint: "A member: consumes, is invoiced, counts towards the shared costs" },
+  { role: "rcp_admin", label: "RCP admin", hint: "Runs the app and is a member — billed like any other" },
+  { role: "rcp_admin_only", label: "RCP admin only", hint: "Runs the app without being part of the RCP: never invoiced, never counted" },
+  { role: "viewer", label: "Viewer", hint: "Read-only sight of everything, consuming nothing" },
+];
+const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((o) => [o.role, o.label])) as Record<PartyRole, string>;
 
 /** One address per line, or comma-separated — whichever the user finds natural. */
 function parseEmails(raw: string): string[] {
@@ -266,7 +279,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
     buildingNumber: v.buildingNumber.trim(),
     zip: v.zip.trim(),
     city: v.city.trim(),
-    isOperator: v.isOperator,
+    role: v.role,
     iban: v.iban.trim(),
   });
 
@@ -304,8 +317,10 @@ function PartiesSection({ siteId }: { siteId: string }) {
           they count towards the pool size. New names in an imported CSV are added here
           automatically, without a reference or email — fill those in afterwards. The postal
           address is what the QR-bill prints as the payer; an invoice still works without it, just
-          with an empty box for them to complete. Mark yourself as the RCP operator and add your
-          IBAN — that is the account the QR-bill is payable to.
+          with an empty box for them to complete. Give yourself the RCP admin role and add your
+          IBAN — that is the account the QR-bill is payable to, and it still bills you for what you
+          consumed. Only &ldquo;RCP admin only&rdquo; and &ldquo;Viewer&rdquo; sit outside the
+          RCP: never invoiced, never counted towards the shared costs.
         </p>
       </div>
 
@@ -389,13 +404,19 @@ function PartiesSection({ siteId }: { siteId: string }) {
             onChange={(e) => setDraft({ ...draft, iban: e.target.value })}
           />
         </label>
-        <label className="flex items-center gap-2 pb-2 text-xs font-medium text-slate-600">
-          <input
-            type="checkbox"
-            checked={draft.isOperator}
-            onChange={(e) => setDraft({ ...draft, isOperator: e.target.checked })}
-          />
-          RCP operator
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Role
+          <select
+            className="input w-40"
+            value={draft.role}
+            onChange={(e) => setDraft({ ...draft, role: e.target.value as PartyRole })}
+          >
+            {ROLE_OPTIONS.map((o) => (
+              <option key={o.role} value={o.role} title={o.hint}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </label>
         <button
           type="submit"
@@ -506,14 +527,17 @@ function PartiesSection({ siteId }: { siteId: string }) {
                 <td className="py-2 pr-3">
                   {isEditing ? (
                     <div className="flex flex-col gap-1">
-                      <label className="flex items-center gap-2 text-xs text-slate-600">
-                        <input
-                          type="checkbox"
-                          checked={edit.isOperator}
-                          onChange={(e) => setEdit({ ...edit, isOperator: e.target.checked })}
-                        />
-                        RCP operator
-                      </label>
+                      <select
+                        className="input w-40"
+                        value={edit.role}
+                        onChange={(e) => setEdit({ ...edit, role: e.target.value as PartyRole })}
+                      >
+                        {ROLE_OPTIONS.map((o) => (
+                          <option key={o.role} value={o.role} title={o.hint}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         className="input w-52"
                         placeholder="IBAN"
@@ -521,15 +545,15 @@ function PartiesSection({ siteId }: { siteId: string }) {
                         onChange={(e) => setEdit({ ...edit, iban: e.target.value })}
                       />
                     </div>
-                  ) : p.isOperator ? (
-                    <span className="text-slate-900">
-                      operator
-                      <span className="ml-2 font-mono text-xs text-slate-500">
-                        {p.iban ?? "no IBAN"}
-                      </span>
-                    </span>
                   ) : (
-                    <span className="text-slate-400">participant</span>
+                    <span className={p.role === "rcp_party" ? "text-slate-400" : "text-slate-900"}>
+                      {ROLE_LABEL[p.role]}
+                      {p.role === "rcp_admin" || p.role === "rcp_admin_only" ? (
+                        <span className="ml-2 font-mono text-xs text-slate-500">
+                          {p.iban ?? "no IBAN"}
+                        </span>
+                      ) : null}
+                    </span>
                   )}
                 </td>
                 <td className="py-2 text-right whitespace-nowrap">
@@ -560,7 +584,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
                             buildingNumber: p.buildingNumber ?? "",
                             zip: p.zip ?? "",
                             city: p.city ?? "",
-                            isOperator: p.isOperator,
+                            role: p.role,
                             iban: p.iban ?? "",
                           });
                         }}

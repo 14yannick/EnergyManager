@@ -144,9 +144,9 @@ export const partyInputSchema = z.object({
   zip: optionalWhenBlank(z.string().trim().max(16)).nullable(),
   city: optionalWhenBlank(z.string().trim().max(35)).nullable(),
   country: optionalWhenBlank(z.string().trim().length(2).toUpperCase()),
-  /** Marks this party as the RCP operator; the DB permits only one per site. */
-  isOperator: z.boolean().optional(),
-  /** Payable-to account for the QR-bill. Only read for the operator. */
+  /** See PartyRole. The DB permits only one admin party per site. */
+  role: z.enum(["rcp_party", "rcp_admin", "rcp_admin_only", "viewer"]).optional(),
+  /** Payable-to account for the QR-bill. Only read for an admin party. */
   iban: optionalWhenBlank(ibanish).nullable(),
 });
 export type PartyInput = z.infer<typeof partyInputSchema>;

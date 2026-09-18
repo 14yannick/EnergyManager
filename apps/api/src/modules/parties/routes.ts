@@ -17,10 +17,10 @@ export async function partyRoutes(app: FastifyInstance) {
       const created = await createParty(req.params.siteId, parsed.data);
       return reply.status(201).send(created);
     } catch (err) {
-      if (violatedConstraint(err, "parties_one_operator_idx")) {
+      if (violatedConstraint(err, "parties_one_admin_idx")) {
         return reply.status(409).send({
-          error: "operator_exists",
-          message: "Another party is already the RCP operator. Clear that flag first.",
+          error: "admin_exists",
+          message: "Another party already administers the RCP. Change that one first.",
         });
       }
       if (isUniqueViolation(err)) {
@@ -40,10 +40,10 @@ export async function partyRoutes(app: FastifyInstance) {
       if (!updated) return reply.status(404).send({ error: "not_found" });
       return updated;
     } catch (err) {
-      if (violatedConstraint(err, "parties_one_operator_idx")) {
+      if (violatedConstraint(err, "parties_one_admin_idx")) {
         return reply.status(409).send({
-          error: "operator_exists",
-          message: "Another party is already the RCP operator. Clear that flag first.",
+          error: "admin_exists",
+          message: "Another party already administers the RCP. Change that one first.",
         });
       }
       if (isUniqueViolation(err)) {

@@ -141,6 +141,20 @@
       "when": 1789678093201,
       "tag": "0019_dapper_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789712930589,
+      "tag": "0020_mysterious_albert_cleary",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789712953485,
+      "tag": "0021_sticky_bromley",
+      "breakpoints": true
     }
   ]
 }

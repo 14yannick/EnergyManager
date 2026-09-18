@@ -8,7 +8,13 @@ import { findRateForInstant } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { gridTariffPositions, intervalMetrics, parties, tariffPeriods } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
-import { buildParticipantInvoice, inclusiveDays, type ParticipantUsage } from "./engine.js";
+import {
+  buildParticipantInvoice,
+  inclusiveDays,
+  isBilledParty,
+  participantCountOf,
+  type ParticipantUsage,
+} from "./engine.js";
 
 type Row = typeof gridTariffPositions.$inferSelect;
 
@@ -189,18 +195,11 @@ export async function runInvoices(
     usageByParty.set(row.partyId, entry);
   }
 
-  // The operator shares the connection and so counts towards how `pool_shared`
-  // positions divide, but is never invoiced — you don't bill yourself.
-  //
-  // Historically the operator was not a party at all and this was
-  // `participants.length + 1`. Now that they can be one (flagged
-  // `isOperator`), adding the constant as well would count them twice and
-  // under-charge everyone. Fall back to the old `+ 1` only while no party
-  // carries the flag, so an install that hasn't been updated bills the same
-  // as before.
-  const operator = participants.find((p) => p.isOperator);
-  const billable = participants.filter((p) => !p.isOperator);
-  const participantCount = participants.length + (operator ? 0 : 1);
+  // An `rcp_admin` is invoiced like anyone else — running the RCP does not
+  // exempt you from paying for what you consumed. Only `rcp_admin_only` and
+  // `viewer` are left out, of invoices and of the count alike.
+  const billable = participants.filter(isBilledParty);
+  const participantCount = participantCountOf(participants);
 
   const invoices = billable.map((party) => {
     const usage = usageByParty.get(party.id) ?? { grid: 0, local: 0 };

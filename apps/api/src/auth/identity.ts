@@ -37,13 +37,24 @@ export async function roleForEmail(
   // `parties.emails` is a text[]; compare case-insensitively against each
   // element rather than the array as a whole.
   const rows = await db
-    .select({ id: parties.id, name: parties.name, siteId: parties.siteId })
+    .select({ id: parties.id, name: parties.name, siteId: parties.siteId, role: parties.role })
     .from(parties)
     .where(sql`exists (select 1 from unnest(${parties.emails}) as e where lower(e) = ${email})`)
     .limit(2);
 
   if (rows.length === 1) {
     const row = rows[0]!;
+    // Both admin roles grant full access; they differ only in whether the
+    // party is billed, which is a billing question and not an access one.
+    if (row.role === "rcp_admin" || row.role === "rcp_admin_only") {
+      return { role: "admin", partyId: null, partyName: null, siteId: null };
+    }
+    // A viewer and an admin are deliberately left unscoped: both see the
+    // whole site, so carrying a partyId would invite a handler to narrow
+    // their view to their own row.
+    if (row.role === "viewer") {
+      return { role: "viewer", partyId: null, partyName: null, siteId: null };
+    }
     return { role: "participant", partyId: row.id, partyName: row.name, siteId: row.siteId };
   }
   // Zero matches: authenticated by Cloudflare but unknown to this app.

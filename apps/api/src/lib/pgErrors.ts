@@ -33,10 +33,14 @@ function constraintOf(err: unknown): string | undefined {
 }
 
 /**
- * Which unique index a violation came from, so a route can tell "that name is
- * taken" from "there is already an operator" — two conditions that otherwise
- * arrive as the same SQLSTATE and would report the wrong message.
+ * Whether a named constraint is the one that rejected the write.
+ *
+ * Matched on the constraint name alone rather than on SQLSTATE: a route needs
+ * to tell "that name is taken" from "there is already an operator", which
+ * share a code, and it should answer for a check constraint the same way it
+ * answers for a unique index. A name identifies the rule; the code only says
+ * what kind of rule it was.
  */
 export function violatedConstraint(err: unknown, name: string): boolean {
-  return isUniqueViolation(err) && constraintOf(err) === name;
+  return constraintOf(err) === name;
 }

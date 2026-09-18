@@ -106,6 +106,27 @@ export type ReadingImportMode = "delta" | "cumulative";
  * setup). The homeowner's own consumption stays derived, so there's no
  * "owner" party.
  */
+/**
+ * What a party is to the RCP.
+ *
+ * Administering and being billed are independent, which is why there are two
+ * admin values: the owner normally consumes from the same connection, pays a
+ * share of the fixed costs and imports from the grid like everyone else
+ * (`rcp_admin`), but whoever runs the app might instead be outside the RCP
+ * altogether (`rcp_admin_only`) — a managing agent, say.
+ *
+ * `rcp_admin_only` and `viewer` are excluded from invoicing and from the
+ * participant count that divides the shared fixed costs; `rcp_admin` and
+ * `rcp_party` are billed alike.
+ */
+export type PartyRole = "rcp_party" | "rcp_admin" | "rcp_admin_only" | "viewer";
+
+/** Roles that consume from the connection, so are billed and counted. */
+export const BILLED_PARTY_ROLES: readonly PartyRole[] = ["rcp_party", "rcp_admin"];
+
+/** Roles that administer the app. At most one party per site holds one. */
+export const ADMIN_PARTY_ROLES: readonly PartyRole[] = ["rcp_admin", "rcp_admin_only"];
+
 export interface Party {
   id: string;
   siteId: string;
@@ -120,13 +141,9 @@ export interface Party {
   zip: string | null;
   city: string | null;
   country: string;
-  /**
-   * True for the party that runs the RCP and issues the invoices. At most one
-   * per site. They are still a party, because they consume from the same
-   * connection — the flag only places them on the creditor side.
-   */
-  isOperator: boolean;
-  /** Account the QR-bill is payable to. Only meaningful on the operator. */
+  /** What this party is to the RCP. See `PartyRole`. */
+  role: PartyRole;
+  /** Account the QR-bill is payable to. Only meaningful on an admin party. */
   iban: string | null;
   createdAt: string;
   updatedAt: string;

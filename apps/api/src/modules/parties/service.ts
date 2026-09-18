@@ -17,7 +17,7 @@ function toDomain(row: Row): Party {
     zip: row.zip,
     city: row.city,
     country: row.country,
-    isOperator: row.isOperator,
+    role: row.role,
     iban: row.iban,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -42,7 +42,7 @@ export async function createParty(siteId: string, input: PartyInput): Promise<Pa
       zip: input.zip ?? null,
       city: input.city ?? null,
       ...(input.country ? { country: input.country } : {}),
-      ...(input.isOperator !== undefined ? { isOperator: input.isOperator } : {}),
+      ...(input.role !== undefined ? { role: input.role } : {}),
       iban: input.iban ?? null,
     })
     .returning();
@@ -61,7 +61,7 @@ export async function updateParty(id: string, input: PartyInput): Promise<Party 
       zip: input.zip ?? null,
       city: input.city ?? null,
       ...(input.country ? { country: input.country } : {}),
-      ...(input.isOperator !== undefined ? { isOperator: input.isOperator } : {}),
+      ...(input.role !== undefined ? { role: input.role } : {}),
       iban: input.iban ?? null,
       updatedAt: new Date(),
     })

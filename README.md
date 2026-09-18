@@ -72,11 +72,45 @@ Three roles, resolved from the verified address:
 | `viewer` | Everything, read only — no writes anywhere. |
 | `participant` | Only their own consumption and invoice, plus site-level community totals (PV produced, size of the local pool). Never another participant's figures, never your production, battery, export, tariffs or investment data. |
 
-A participant is anyone whose address appears in a party's `emails` — the same
-list the invoices go to, so there is nothing extra to maintain. The admin and
-viewer lists win over the parties table, so adding yourself as a participant to
-preview their view cannot demote you. An authenticated address that matches
-none of the three gets a 403.
+Addresses are matched in that order, and the first match wins:
+
+1. `AUTH_ADMIN_EMAILS` on the api container
+2. `AUTH_VIEWER_EMAILS` on the api container
+3. an address on a party's `emails` — the same list the invoices go to, so
+   there is nothing extra to maintain. The party's own role decides what it
+   grants
+4. anything else gets a 403
+
+The environment lists are consulted first so that adding yourself as a
+participant to preview their view cannot demote you. Granting from the parties
+table needs no container restart, which is the easier path for a demo.
+
+An address listed on two parties is refused rather than guessed, since "their
+own data" then has no single answer.
+
+### Party roles
+
+Each party carries one of four roles. Administering the RCP and being billed
+by it are independent, which is why there are two admin values: the owner
+normally consumes from the same connection, pays a share of the fixed costs
+and imports from the grid like anybody else, but whoever runs the app might
+instead sit outside the RCP entirely.
+
+| Role | App access | Invoiced | Counts towards shared costs |
+|---|---|---|---|
+| `rcp_party` *(default)* | participant — own figures only | yes | yes |
+| `rcp_admin` | admin | yes | yes |
+| `rcp_admin_only` | admin | no | no |
+| `viewer` | viewer — reads everything | no | no |
+
+At most one party per site may hold an admin role, enforced by a partial
+unique index; that party is also the QR-bill's payee. An `rcp_admin` still
+receives their own invoice — running the RCP does not exempt you from paying
+for what you consumed — but it carries no payment slip, since a slip payable
+from and to the same account is meaningless.
+
+The participant count adds one for an unlisted owner only while no party holds
+an admin role, which is how every site looked before parties carried one.
 
 Two properties are enforced structurally rather than by review:
 
