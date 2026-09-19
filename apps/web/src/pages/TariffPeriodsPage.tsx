@@ -180,63 +180,66 @@ export function TariffPeriodsPage() {
         </p>
       )}
 
-      <table className="w-full overflow-hidden rounded-lg border bg-white text-sm">
-        <thead className="bg-slate-100 text-left text-slate-600">
-          <tr>
-            <th className="px-3 py-2">{t("tariff.kind")}</th>
-            <th className="px-3 py-2">{t("tariff.start")}</th>
-            <th className="px-3 py-2">{t("tariff.end")}</th>
-            <th className="px-3 py-2">{t("tariff.pricedBy")}</th>
-            <th className="px-3 py-2">{t("tariff.rate")}</th>
-            <th className="px-3 py-2">{t("tariff.label")}</th>
-            <th className="px-3 py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {periodsQuery.data?.map((p) => (
-            <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50" : "border-t"}>
-              <td className="px-3 py-2">{t(KIND_LABELS[p.kind])}</td>
-              <td className="px-3 py-2">{formatLocal(p.startTs)}</td>
-              <td className="px-3 py-2">{formatLocal(p.endTs)}</td>
-              <td className="px-3 py-2">{t(PRICING_MODE_LABELS[p.pricingMode])}</td>
-              <td className="px-3 py-2">
-                {p.rateChfPerKwh == null ? (
-                  <span className="text-slate-400">{t("tariff.fromFeed")}</span>
-                ) : (
-                  <>
-                    {p.rateChfPerKwh.toFixed(5)}
-                    {p.pricingMode === "dynamic" && (
-                      <span className="ml-1 text-xs text-slate-400">{t("tariff.fallback")}</span>
-                    )}
-                  </>
-                )}
-              </td>
-              <td className="px-3 py-2">{p.label ?? "—"}</td>
-              <td className="px-3 py-2 text-right">
-                <button
-                  onClick={() => startEditing(p)}
-                  className="mr-3 text-slate-400 hover:text-slate-900"
-                >
-                  {t("common.edit")}
-                </button>
-                <button
-                  onClick={() => deleteMutation.mutate(p.id)}
-                  className="text-slate-400 hover:text-red-600"
-                >
-                  {t("common.delete")}
-                </button>
-              </td>
-            </tr>
-          ))}
-          {periodsQuery.data?.length === 0 && (
+      {/* Scrolls on a narrow screen instead of widening the page. */}
+      <div className="overflow-x-auto">
+        <table className="w-full overflow-hidden rounded-lg border bg-white text-sm">
+          <thead className="bg-slate-100 text-left text-slate-600">
             <tr>
-              <td colSpan={7} className="px-3 py-6 text-center text-slate-400">
-                {t("tariff.emptyPeriods")}
-              </td>
+              <th className="px-3 py-2">{t("tariff.kind")}</th>
+              <th className="px-3 py-2">{t("tariff.start")}</th>
+              <th className="px-3 py-2">{t("tariff.end")}</th>
+              <th className="px-3 py-2">{t("tariff.pricedBy")}</th>
+              <th className="px-3 py-2">{t("tariff.rate")}</th>
+              <th className="px-3 py-2">{t("tariff.label")}</th>
+              <th className="px-3 py-2" />
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {periodsQuery.data?.map((p) => (
+              <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50" : "border-t"}>
+                <td className="px-3 py-2">{t(KIND_LABELS[p.kind])}</td>
+                <td className="px-3 py-2">{formatLocal(p.startTs)}</td>
+                <td className="px-3 py-2">{formatLocal(p.endTs)}</td>
+                <td className="px-3 py-2">{t(PRICING_MODE_LABELS[p.pricingMode])}</td>
+                <td className="px-3 py-2">
+                  {p.rateChfPerKwh == null ? (
+                    <span className="text-slate-400">{t("tariff.fromFeed")}</span>
+                  ) : (
+                    <>
+                      {p.rateChfPerKwh.toFixed(5)}
+                      {p.pricingMode === "dynamic" && (
+                        <span className="ml-1 text-xs text-slate-400">{t("tariff.fallback")}</span>
+                      )}
+                    </>
+                  )}
+                </td>
+                <td className="px-3 py-2">{p.label ?? "—"}</td>
+                <td className="px-3 py-2 text-right">
+                  <button
+                    onClick={() => startEditing(p)}
+                    className="mr-3 text-slate-400 hover:text-slate-900"
+                  >
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    onClick={() => deleteMutation.mutate(p.id)}
+                    className="text-slate-400 hover:text-red-600"
+                  >
+                    {t("common.delete")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {periodsQuery.data?.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-center text-slate-400">
+                  {t("tariff.emptyPeriods")}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <DynamicTariffStatus siteId={site.id} />
 
@@ -452,50 +455,53 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
         </p>
       )}
 
-      <table className="w-full overflow-hidden rounded-lg border text-sm">
-        <thead className="bg-slate-100 text-left text-slate-600">
-          <tr>
-            <th className="px-3 py-2">{t("tariff.kind")}</th>
-            <th className="px-3 py-2">{t("tariff.start")}</th>
-            <th className="px-3 py-2">{t("tariff.end")}</th>
-            <th className="px-3 py-2">{t("tariff.rate")}</th>
-            <th className="px-3 py-2">{t("tariff.label")}</th>
-            <th className="px-3 py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {surchargesQuery.data?.map((s) => (
-            <tr key={s.id} className={editingId === s.id ? "border-t bg-amber-50" : "border-t"}>
-              <td className="px-3 py-2">{t(KIND_LABELS[s.kind])}</td>
-              <td className="px-3 py-2">{formatLocal(s.startTs)}</td>
-              <td className="px-3 py-2">{formatLocal(s.endTs)}</td>
-              <td className="px-3 py-2">{s.rateChfPerKwh.toFixed(5)}</td>
-              <td className="px-3 py-2">{s.label}</td>
-              <td className="px-3 py-2 text-right">
-                <button
-                  onClick={() => startEditing(s)}
-                  className="mr-3 text-slate-400 hover:text-slate-900"
-                >
-                  {t("common.edit")}
-                </button>
-                <button
-                  onClick={() => deleteMutation.mutate(s.id)}
-                  className="text-slate-400 hover:text-red-600"
-                >
-                  {t("common.delete")}
-                </button>
-              </td>
-            </tr>
-          ))}
-          {surchargesQuery.data?.length === 0 && (
+      {/* Scrolls on a narrow screen instead of widening the page. */}
+      <div className="overflow-x-auto">
+        <table className="w-full overflow-hidden rounded-lg border text-sm">
+          <thead className="bg-slate-100 text-left text-slate-600">
             <tr>
-              <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
-                {t("tariff.emptySurcharges")}
-              </td>
+              <th className="px-3 py-2">{t("tariff.kind")}</th>
+              <th className="px-3 py-2">{t("tariff.start")}</th>
+              <th className="px-3 py-2">{t("tariff.end")}</th>
+              <th className="px-3 py-2">{t("tariff.rate")}</th>
+              <th className="px-3 py-2">{t("tariff.label")}</th>
+              <th className="px-3 py-2" />
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {surchargesQuery.data?.map((s) => (
+              <tr key={s.id} className={editingId === s.id ? "border-t bg-amber-50" : "border-t"}>
+                <td className="px-3 py-2">{t(KIND_LABELS[s.kind])}</td>
+                <td className="px-3 py-2">{formatLocal(s.startTs)}</td>
+                <td className="px-3 py-2">{formatLocal(s.endTs)}</td>
+                <td className="px-3 py-2">{s.rateChfPerKwh.toFixed(5)}</td>
+                <td className="px-3 py-2">{s.label}</td>
+                <td className="px-3 py-2 text-right">
+                  <button
+                    onClick={() => startEditing(s)}
+                    className="mr-3 text-slate-400 hover:text-slate-900"
+                  >
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    onClick={() => deleteMutation.mutate(s.id)}
+                    className="text-slate-400 hover:text-red-600"
+                  >
+                    {t("common.delete")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {surchargesQuery.data?.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                  {t("tariff.emptySurcharges")}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -510,7 +516,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+    <label className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
       {label}
       {children}
       {hint && <span className="max-w-56 font-normal text-slate-400">{hint}</span>}

@@ -172,7 +172,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
         </Field>
         <Field label={t("billing.allocation")}>
           <select
-            className="input"
+            className="input max-w-full"
             value={draft.allocation}
             onChange={(e) => setDraft({ ...draft, allocation: e.target.value as BillingAllocation })}
           >
@@ -241,43 +241,46 @@ function PositionsSection({ siteId }: { siteId: string }) {
               {t("billing.positionCount", { count: group.items.length })}
             </span>
           </h3>
-          <table className="w-full text-sm">
-            <thead className="text-left text-slate-500">
-              <tr>
-                <th className="py-1 pr-3 font-medium">{t("billing.category")}</th>
-                <th className="py-1 pr-3 font-medium">{t("billing.position")}</th>
-                <th className="py-1 pr-3 font-medium">{t("billing.allocation")}</th>
-                <th className="py-1 pr-3 text-right font-medium">{t("billing.rate")}</th>
-                <th className="py-1 pr-3 font-medium">{t("billing.withoutRcp")}</th>
-                <th className="py-1" />
-              </tr>
-            </thead>
-            <tbody>
-              {group.items.map((p) => (
-                <tr key={p.id} className="border-t">
-                  <td className="py-1 pr-3 text-slate-500">{t(CATEGORY_LABELS[p.category])}</td>
-                  <td className="py-1 pr-3 text-slate-900">{p.label}</td>
-                  <td className="py-1 pr-3 text-slate-500">{t(ALLOCATION_LABELS[p.allocation])}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums">
-                    {p.allocation === "per_kwh"
-                      ? `${(p.rateChf * 100).toFixed(2)} ${t("billing.centsPerKwh")}`
-                      : `${chf(p.rateChf)} ${t("billing.perYear")}`}
-                  </td>
-                  <td className="py-1 pr-3 text-slate-500">
-                    {p.countsInDirectBilling ? t("billing.yes") : t("billing.no")}
-                  </td>
-                  <td className="py-1 text-right">
-                    <button
-                      onClick={() => deleteMutation.mutate(p.id)}
-                      className="text-slate-400 hover:text-red-600"
-                    >
-                      {t("common.delete")}
-                    </button>
-                  </td>
+          {/* Scrolls on a narrow screen instead of widening the page. */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-500">
+                <tr>
+                  <th className="py-1 pr-3 font-medium">{t("billing.category")}</th>
+                  <th className="py-1 pr-3 font-medium">{t("billing.position")}</th>
+                  <th className="py-1 pr-3 font-medium">{t("billing.allocation")}</th>
+                  <th className="py-1 pr-3 text-right font-medium">{t("billing.rate")}</th>
+                  <th className="py-1 pr-3 font-medium">{t("billing.withoutRcp")}</th>
+                  <th className="py-1" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {group.items.map((p) => (
+                  <tr key={p.id} className="border-t">
+                    <td className="py-1 pr-3 text-slate-500">{t(CATEGORY_LABELS[p.category])}</td>
+                    <td className="py-1 pr-3 text-slate-900">{p.label}</td>
+                    <td className="py-1 pr-3 text-slate-500">{t(ALLOCATION_LABELS[p.allocation])}</td>
+                    <td className="py-1 pr-3 text-right tabular-nums">
+                      {p.allocation === "per_kwh"
+                        ? `${(p.rateChf * 100).toFixed(2)} ${t("billing.centsPerKwh")}`
+                        : `${chf(p.rateChf)} ${t("billing.perYear")}`}
+                    </td>
+                    <td className="py-1 pr-3 text-slate-500">
+                      {p.countsInDirectBilling ? t("billing.yes") : t("billing.no")}
+                    </td>
+                    <td className="py-1 text-right">
+                      <button
+                        onClick={() => deleteMutation.mutate(p.id)}
+                        className="text-slate-400 hover:text-red-600"
+                      >
+                        {t("common.delete")}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ))}
     </div>
@@ -581,42 +584,46 @@ function InvoiceDocument({
 function LineTable({ lines }: { lines: InvoiceLine[] }) {
   const t = useT();
   return (
-    <table className="w-full text-sm">
-      <thead className="text-left text-xs text-slate-500">
-        <tr>
-          <th className="py-1 font-medium">{t("billing.position")}</th>
-          <th className="py-1 text-right font-medium">{t("invoice.quantity")}</th>
-          <th className="py-1 text-right font-medium">{t("invoice.price")}</th>
-          <th className="py-1 text-right font-medium">{t("invoice.amountChf")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {/* Energy and grid usage both have a position called "Tarif de base",
-            so the label alone is not unique — the section disambiguates. */}
-        {lines.map((l) => (
-          <tr key={`${l.category}|${l.label}`} className="border-t">
-            <td className="py-1 pr-3 text-slate-900">{l.label}</td>
-            <td className="py-1 text-right tabular-nums text-slate-600">
-              {l.quantityUnit === "kWh"
-                ? `${l.quantity.toFixed(1)} kWh`
-                : t("invoice.days", { count: l.quantity })}
-            </td>
-            <td className="py-1 text-right tabular-nums text-slate-600">
-              {l.quantityUnit === "kWh"
-                ? `${(l.unitRateChf * 100).toFixed(2)} ${t("billing.cents")}`
-                : `${(l.unitRateChf * 365).toFixed(2)} ${t("billing.perYear")}`}
-            </td>
-            <td className="py-1 text-right tabular-nums text-slate-900">{chf(l.amountChf)}</td>
+    // Scrolls on a phone; `print:overflow-visible` so a printed sheet can
+    // never clip a line, whatever the paper size turns out to be.
+    <div className="overflow-x-auto print:overflow-visible">
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs text-slate-500">
+          <tr>
+            <th className="py-1 font-medium">{t("billing.position")}</th>
+            <th className="py-1 text-right font-medium">{t("invoice.quantity")}</th>
+            <th className="py-1 text-right font-medium">{t("invoice.price")}</th>
+            <th className="py-1 text-right font-medium">{t("invoice.amountChf")}</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {/* Energy and grid usage both have a position called "Tarif de base",
+              so the label alone is not unique — the section disambiguates. */}
+          {lines.map((l) => (
+            <tr key={`${l.category}|${l.label}`} className="border-t">
+              <td className="py-1 pr-3 text-slate-900">{l.label}</td>
+              <td className="py-1 text-right tabular-nums text-slate-600">
+                {l.quantityUnit === "kWh"
+                  ? `${l.quantity.toFixed(1)} kWh`
+                  : t("invoice.days", { count: l.quantity })}
+              </td>
+              <td className="py-1 text-right tabular-nums text-slate-600">
+                {l.quantityUnit === "kWh"
+                  ? `${(l.unitRateChf * 100).toFixed(2)} ${t("billing.cents")}`
+                  : `${(l.unitRateChf * 365).toFixed(2)} ${t("billing.perYear")}`}
+              </td>
+              <td className="py-1 text-right tabular-nums text-slate-900">{chf(l.amountChf)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+    <label className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
       {label}
       {children}
     </label>

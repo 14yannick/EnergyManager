@@ -6,7 +6,7 @@
   .input {
     /* A disabled field must read as disabled: the browser default only dims
        the text, which is nearly invisible against this border. */
-    @apply rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-slate-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500;
+    @apply max-w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-slate-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500;
   }
 }
 

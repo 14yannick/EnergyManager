@@ -310,6 +310,7 @@ function Block({
         <h2 className="text-sm font-medium text-slate-700">{t(title)}</h2>
         <p className="text-xs text-slate-500">{t(subtitle)}</p>
       </div>
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="text-xs text-slate-500">
           <tr>
@@ -339,8 +340,15 @@ function Block({
                       {!expandable && <span className="w-3" />}
                       {t(line.label)}
                     </span>
+                    {/* Hidden on a phone: squeezed into the width left over
+                        by four numeric columns the prose wrapped one word to a
+                        line and pushed the figures off the screen. It is the
+                        figures somebody checks on a phone; the explanation is
+                        there on any wider screen. */}
                     {line.note && (
-                      <span className="block pl-[1.125rem] text-xs text-slate-500">{t(line.note)}</span>
+                      <span className="hidden pl-[1.125rem] text-xs text-slate-500 sm:block">
+                        {t(line.note)}
+                      </span>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-700">
@@ -373,6 +381,7 @@ function Block({
           })}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }

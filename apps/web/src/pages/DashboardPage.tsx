@@ -339,7 +339,7 @@ export function DashboardPage() {
           <h1 className="text-xl font-semibold text-slate-900">{t("dash.title")}</h1>
           <p className="max-w-2xl text-sm text-slate-500">{t("dash.intro")}</p>
         </div>
-        <div className="flex flex-wrap items-end gap-3 text-sm">
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-3 text-sm">
           <RangeControls
             range={{ from, to }}
             onRange={(r, nextGranularity, anchor) => {
@@ -358,9 +358,11 @@ export function DashboardPage() {
             dataRange={dataRange}
             bounds={bounds}
           />
-          <div className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          <div className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
             {t("dash.view")}
-            <div className="flex overflow-hidden rounded-md border border-slate-300">
+            {/* Scrolls rather than widening the page: six granularities do not
+                fit across a phone, and there is no shorter honest wording. */}
+            <div className="flex max-w-full overflow-x-auto rounded-md border border-slate-300">
               {(["hourly", "daily", "monthly", "quarterly", "yearly", "overall"] as const).map((g) => (
                 <button
                   key={g}
@@ -370,7 +372,7 @@ export function DashboardPage() {
                     setFrom(snapped.from);
                     setTo(snapped.to);
                   }}
-                  className={`px-3 py-1.5 capitalize ${
+                  className={`shrink-0 whitespace-nowrap px-3 py-1.5 capitalize ${
                     granularity === g ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
@@ -897,7 +899,7 @@ function RevenueBreakdownChart({
 
       <div className="rounded-lg border bg-white p-4">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex overflow-hidden rounded-md border border-slate-300 text-sm">
+          <div className="flex max-w-full overflow-x-auto rounded-md border border-slate-300 text-sm">
             {(
               [
                 ["chf", "CHF"],
@@ -908,7 +910,7 @@ function RevenueBreakdownChart({
               <button
                 key={value}
                 onClick={() => setUnit(value)}
-                className={`px-3 py-1 ${
+                className={`shrink-0 whitespace-nowrap px-3 py-1 ${
                   unit === value ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
@@ -1147,7 +1149,7 @@ function RangeControls({
   })();
 
   return (
-    <div className="flex flex-wrap items-end gap-3 text-sm">
+    <div className="flex min-w-0 max-w-full flex-wrap items-end gap-3 text-sm">
       <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
         {t("common.period")}
         <select className="input w-36" value={preset} onChange={(e) => applyPreset(e.target.value)}>

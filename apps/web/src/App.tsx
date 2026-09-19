@@ -9,7 +9,9 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { BillingPage } from "./pages/BillingPage";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `px-3 py-2 rounded-md text-sm font-medium ${
+  // `shrink-0` and `whitespace-nowrap`: the nav scrolls sideways on a phone
+  // rather than squashing six labels into two lines each.
+  `shrink-0 whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium ${
     isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
   }`;
 
@@ -52,22 +54,26 @@ function SessionBadge({ session }: { session: SessionState }) {
       : t("session.noAccess");
 
   return (
-    <div className="flex items-center gap-3 text-sm">
-      <span className="hidden text-slate-500 sm:inline">
+    <div className="flex min-w-0 items-center gap-2 text-sm sm:gap-3">
+      {/* The address only appears where there is genuinely room for it beside
+          the nav; below that the role chip alone says who you are. Both
+          truncate, so neither a long address nor a long party name can push
+          the sign-out button off the screen. */}
+      <span className="hidden max-w-64 truncate align-middle text-slate-500 2xl:inline-block">
         {email}
-        <span
-          className={`ml-2 rounded px-1.5 py-0.5 text-xs ${
-            session.kind === "active"
-              ? "bg-slate-100 text-slate-600"
-              : "bg-amber-100 text-amber-900"
-          }`}
-        >
-          {label}
-        </span>
+      </span>
+      <span
+        className={`hidden max-w-40 shrink truncate rounded px-1.5 py-0.5 text-xs sm:inline-block ${
+          session.kind === "active"
+            ? "bg-slate-100 text-slate-600"
+            : "bg-amber-100 text-amber-900"
+        }`}
+      >
+        {label}
       </span>
       <a
         href={logoutHref()}
-        className="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
+        className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
       >
         {t("session.signOut")}
       </a>
@@ -146,11 +152,23 @@ export function App() {
       {/* Kept out of print: the billing page prints participant invoices,
           and a nav bar on a document that goes to a neighbour is noise. */}
       <header className="border-b bg-white print:hidden">
-        <div className="mx-auto flex max-w-[1600px] items-center gap-4 px-4 py-3 lg:px-8">
+        {/* Wraps below `xl`: the six links plus the language switch and the
+            session badge need about 1100px, so letting them try on anything
+            narrower pushed the sign-out button off the side of the screen and
+            gave every page a horizontal scrollbar. */}
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 lg:px-8 xl:flex-nowrap">
           <span className="text-lg font-semibold text-slate-900">{t("app.name")}</span>
           {/* Hidden for a rejected session: none of it leads anywhere, and it
-              crowds out the one control that does. */}
-          <nav className={`flex gap-1 ${session.kind === "rejected" ? "hidden" : ""}`}>
+              crowds out the one control that does.
+
+              `order-last w-full` puts it on its own line under the brand until
+              there is room beside it; `overflow-x-auto` keeps the overflow
+              inside the bar instead of widening the page. */}
+          <nav
+            className={`order-last flex w-full gap-1 overflow-x-auto xl:order-none xl:w-auto xl:overflow-x-visible ${
+              session.kind === "rejected" ? "hidden" : ""
+            }`}
+          >
             <NavLink to="/" end className={navLinkClass}>
               {t("nav.dashboard")}
             </NavLink>
@@ -170,7 +188,7 @@ export function App() {
               {t("nav.billing")}
             </NavLink>
           </nav>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
             <LanguageSwitch />
             <SessionBadge session={session} />
           </div>
