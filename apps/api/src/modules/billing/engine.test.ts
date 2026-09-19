@@ -1,7 +1,7 @@
 import type { PartyRole } from "@energy-manager/shared";
 import { describe, expect, it } from "vitest";
 import type { GridTariffPosition } from "@energy-manager/shared";
-import { buildParticipantInvoice, inclusiveDays, isBilledParty, participantCountOf, type InvoiceInputs } from "./engine.js";
+import { buildParticipantInvoice, consumptionCosts, inclusiveDays, isBilledParty, participantCountOf, type InvoiceInputs } from "./engine.js";
 
 // The 2026 tariff as the provider bills it, gross (VAT passed through).
 const G = 1.081;
@@ -191,5 +191,22 @@ describe("isBilledParty", () => {
     expect(isBilledParty({ role: "rcp_admin" })).toBe(true);
     expect(isBilledParty({ role: "rcp_admin_only" })).toBe(false);
     expect(isBilledParty({ role: "viewer" })).toBe(false);
+  });
+});
+
+describe("consumptionCosts", () => {
+  it("is the invoice before rounding, and its saving the comparison's", () => {
+    const inv = buildParticipantInvoice(inputs());
+    const costs = consumptionCosts(inputs());
+    // Each line rounds by at most half a centime.
+    expect(Math.abs(costs.rcpChf - inv.totalChf)).toBeLessThanOrEqual(0.005 * inv.lines.length + 1e-9);
+    expect(Math.abs(costs.directChf - inv.comparison.totalChf)).toBeLessThanOrEqual(
+      0.005 * inv.comparison.lines.length + 1e-9,
+    );
+    expect(costs.localEnergyChf).toBeCloseTo(2000 * 0.14, 9);
+  });
+
+  it("charges nothing for local energy when no neighbour rate is set", () => {
+    expect(consumptionCosts(inputs({ localRateChf: null })).localEnergyChf).toBe(0);
   });
 });

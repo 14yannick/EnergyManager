@@ -16,6 +16,7 @@ import type {
   HaSyncResult,
   IntervalMetricKind,
   Party,
+  PartyConsumption,
   PartyInput,
   ReadingsImportResult,
   SavingsDayDetail,
@@ -218,5 +219,16 @@ export const api = {
     update: (id: string, input: PartyInput) =>
       request<Party>(`/parties/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
     remove: (id: string) => request<void>(`/parties/${id}`, { method: "DELETE" }),
+    /** One party's consumption split by source, and what it cost. A participant may only ask for their own. */
+    consumption: (
+      siteId: string,
+      partyId: string,
+      from: string,
+      to: string,
+      granularity: SavingsQuery["granularity"],
+    ) =>
+      request<PartyConsumption>(
+        `/sites/${siteId}/parties/${partyId}/consumption?from=${from}&to=${to}&granularity=${granularity}`,
+      ),
   },
 };

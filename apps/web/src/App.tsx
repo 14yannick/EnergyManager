@@ -7,10 +7,11 @@ import { CalculationDetailPage } from "./pages/CalculationDetailPage";
 import { ReadingsImportPage } from "./pages/ReadingsImportPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { BillingPage } from "./pages/BillingPage";
+import { PartyDashboardPage } from "./pages/PartyDashboardPage";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   // `shrink-0` and `whitespace-nowrap`: the nav scrolls sideways on a phone
-  // rather than squashing six labels into two lines each.
+  // rather than squashing seven labels into two lines each.
   `shrink-0 whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium ${
     isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
   }`;
@@ -146,13 +147,16 @@ function NoAccess({ email, status }: { email: string | null; status: number }) {
 export function App() {
   const session = useSession();
   const t = useT();
+  // A participant sees their own consumption and nothing else: every other
+  // page reads site-wide data the API refuses them.
+  const participant = session.kind === "active" && session.identity.role === "participant";
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Kept out of print: the billing page prints participant invoices,
           and a nav bar on a document that goes to a neighbour is noise. */}
       <header className="border-b bg-white print:hidden">
-        {/* Wraps below `xl`: the six links plus the language switch and the
+        {/* Wraps below `xl`: the seven links plus the language switch and the
             session badge need about 1100px, so letting them try on anything
             narrower pushed the sign-out button off the side of the screen and
             gave every page a horizontal scrollbar. */}
@@ -169,24 +173,35 @@ export function App() {
               session.kind === "rejected" ? "hidden" : ""
             }`}
           >
-            <NavLink to="/" end className={navLinkClass}>
-              {t("nav.dashboard")}
-            </NavLink>
-            <NavLink to="/tariff-periods" className={navLinkClass}>
-              {t("nav.tariffs")}
-            </NavLink>
-            <NavLink to="/calculation" className={navLinkClass}>
-              {t("nav.calculation")}
-            </NavLink>
-            <NavLink to="/readings" className={navLinkClass}>
-              {t("nav.readings")}
-            </NavLink>
-            <NavLink to="/settings" className={navLinkClass}>
-              {t("nav.settings")}
-            </NavLink>
-            <NavLink to="/billing" className={navLinkClass}>
-              {t("nav.billing")}
-            </NavLink>
+            {participant ? (
+              <NavLink to="/" end className={navLinkClass}>
+                {t("nav.consumption")}
+              </NavLink>
+            ) : (
+              <>
+                <NavLink to="/" end className={navLinkClass}>
+                  {t("nav.dashboard")}
+                </NavLink>
+                <NavLink to="/consumption" className={navLinkClass}>
+                  {t("nav.consumption")}
+                </NavLink>
+                <NavLink to="/tariff-periods" className={navLinkClass}>
+                  {t("nav.tariffs")}
+                </NavLink>
+                <NavLink to="/calculation" className={navLinkClass}>
+                  {t("nav.calculation")}
+                </NavLink>
+                <NavLink to="/readings" className={navLinkClass}>
+                  {t("nav.readings")}
+                </NavLink>
+                <NavLink to="/settings" className={navLinkClass}>
+                  {t("nav.settings")}
+                </NavLink>
+                <NavLink to="/billing" className={navLinkClass}>
+                  {t("nav.billing")}
+                </NavLink>
+              </>
+            )}
           </nav>
           <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
             <LanguageSwitch />
@@ -198,9 +213,15 @@ export function App() {
       <main className="mx-auto max-w-[1600px] px-4 py-6 lg:px-8">
         {session.kind === "rejected" ? (
           <NoAccess email={session.email} status={session.status} />
+        ) : participant ? (
+          <Routes>
+            <Route path="/" element={<PartyDashboardPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         ) : (
           <Routes>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/consumption" element={<PartyDashboardPage />} />
             <Route path="/tariff-periods" element={<TariffPeriodsPage />} />
             <Route path="/calculation" element={<CalculationDetailPage />} />
             {/* Investment costs moved into Settings; keep old links working. */}

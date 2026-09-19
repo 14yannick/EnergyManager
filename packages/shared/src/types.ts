@@ -444,3 +444,50 @@ export interface CommunitySummary {
   /** How many participants the pool was shared between. */
   participantCount: number;
 }
+
+/**
+ * Why some of a party's consumption could not be priced: no grid-tariff
+ * position was valid on a day in the range, or no neighbour-sale rate covered
+ * it. Codes rather than sentences, so the page can say it in the reader's
+ * language.
+ */
+export type PartyConsumptionWarning = "no_positions" | "no_local_rate";
+
+/** One period of a party's consumption, and what it cost. */
+export interface PartyConsumptionPeriod {
+  /** Same keys as the savings series: "YYYY-MM-DD", "YYYY-MM", "YYYY-Q3", "YYYY", "YYYY-MM-DDTHH" or "overall". */
+  date: string;
+  /** Taken from the site's own production. */
+  localKwh: number;
+  /** Drawn from the grid through the shared connection. */
+  gridKwh: number;
+  /** What the party pays through the RCP — the invoice for this period. */
+  rcpCostChf: number;
+  /** Of that, the local energy at the agreed neighbour rate. */
+  localEnergyChf: number;
+  /**
+   * Of that, the standing charges (per-day positions), pro rata to the days in
+   * the period. What is left — `rcpCostChf - localEnergyChf - rcpFixedChf` —
+   * is the grid energy and every per-kWh levy.
+   */
+  rcpFixedChf: number;
+  /** The same consumption billed by the grid provider on its own connection. */
+  directCostChf: number;
+  /** Of that, the standing charges, each borne in full rather than shared. */
+  directFixedChf: number;
+  /** `directCostChf - rcpCostChf`. */
+  savedChf: number;
+}
+
+export interface PartyConsumption {
+  partyId: string;
+  partyName: string;
+  from: string;
+  to: string;
+  /** First and last day this party has any readings at all, whatever the range. */
+  dataFrom: string | null;
+  dataTo: string | null;
+  totals: Omit<PartyConsumptionPeriod, "date">;
+  periods: PartyConsumptionPeriod[];
+  warnings: PartyConsumptionWarning[];
+}

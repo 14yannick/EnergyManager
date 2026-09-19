@@ -12,12 +12,28 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { SavingsQuery } from "@energy-manager/shared";
 import { api } from "../api/client";
-import { useT, type MessageKey, type Translate } from "../i18n/context";
+import { useT, type Translate } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
-
-type Granularity = NonNullable<SavingsQuery["granularity"]>;
+import { PeriodControls } from "../components/PeriodControls";
+import { StatCard } from "../components/StatCard";
+import {
+  INITIAL_GRANULARITY,
+  MAX_HOURLY_DAYS,
+  PERIODS_PER_YEAR,
+  PERIOD_UNIT,
+  PERIOD_UNITS,
+  initialRange,
+  axisTick,
+  clampRange,
+  inclusiveDays,
+  periodKeys,
+  periodLabel,
+  ticksThroughZero,
+  latestDay,
+  type DataRange,
+  type Granularity,
+} from "../lib/periods";
 
 /** The revenue chart can be read as money or as the energy behind it. */
 /**
@@ -29,39 +45,6 @@ type Granularity = NonNullable<SavingsQuery["granularity"]>;
 type RevenueUnit = "chf" | "both" | "kwh";
 /** Which unit the stacked bars are drawn in. */
 const barUnit = (u: RevenueUnit): "chf" | "kwh" => (u === "kwh" ? "kwh" : "chf");
-
-/**
- * Axis ticks scaled to the range. A fixed 0 decimals reads "-0 0 0 1 1" on an
- * hourly chart where the whole range is under a franc.
- */
-/**
- * Ticks stepped from zero outwards, so zero is always one of them.
- *
- * Recharts' own choice is driven by the domain ends and happily skips zero —
- * on a charging day it produced -0.41, -0.06, 0.29, 0.96, leaving the axis with
- * no mark at the line the bars are measured from.
- */
-function ticksThroughZero(domain: [number, number] | undefined): number[] | undefined {
-  if (!domain) return undefined;
-  const [min, max] = domain;
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return undefined;
-  const raw = (max - min) / 5;
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const n = raw / mag;
-  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
-  const out: number[] = [];
-  // Walk out from zero in both directions, so zero is a tick by construction.
-  for (let v = 0; v >= min - step / 2; v -= step) out.unshift(Number(v.toPrecision(12)));
-  for (let v = step; v <= max + step / 2; v += step) out.push(Number(v.toPrecision(12)));
-  return out;
-}
-
-const axisTick = (v: number) => {
-  // Plain "0", not "0.00": it is the baseline, not a measured value.
-  if (v === 0) return "0";
-  const m = Math.abs(v);
-  return m >= 100 ? v.toFixed(0) : m >= 10 ? v.toFixed(1) : v.toFixed(2);
-};
 
 const formatRevenue = (value: number, unit: RevenueUnit) =>
   barUnit(unit) === "chf" ? `CHF ${value.toFixed(2)}` : `${value.toFixed(1)} kWh`;
@@ -79,218 +62,10 @@ const seriesNames = (unit: RevenueUnit, t: Translate) => ({
   neighbor: barUnit(unit) === "chf" ? t("dash.flow.neighborSale") : t("dash.flow.neighborSupply"),
 });
 
-const PERIOD_UNIT: Record<Granularity, MessageKey> = {
-  hourly: "dash.unit.hour",
-  daily: "dash.unit.day",
-  monthly: "dash.unit.month",
-  quarterly: "dash.unit.quarter",
-  yearly: "dash.unit.year",
-  overall: "dash.unit.period",
-};
-
-/** The same words in the plural, for "annualised at 12 months a year". */
-const PERIOD_UNITS: Record<Granularity, MessageKey> = {
-  hourly: "dash.units.hour",
-  daily: "dash.units.day",
-  monthly: "dash.units.month",
-  quarterly: "dash.units.quarter",
-  yearly: "dash.units.year",
-  overall: "dash.units.period",
-};
-
-const GRANULARITY_LABEL: Record<Granularity, MessageKey> = {
-  hourly: "dash.g.hourly",
-  daily: "dash.g.daily",
-  monthly: "dash.g.monthly",
-  quarterly: "dash.g.quarterly",
-  yearly: "dash.g.yearly",
-  overall: "dash.g.overall",
-};
-
-/** How many of each period fall in a year — what payback is annualised by. */
-/**
- * What the dashboard opens on: the current quarter, viewed by month. Shared by
- * the initial range and the preset dropdown so the two always agree — a range
- * that silently reads "Custom…" on first load is just confusing.
- */
-const INITIAL_PRESET = "this_quarter";
-const INITIAL_GRANULARITY: Granularity = "monthly";
-
-const PERIODS_PER_YEAR: Record<Granularity, number> = {
-  hourly: 8760,
-  daily: 365,
-  monthly: 12,
-  quarterly: 4,
-  yearly: 1,
-  overall: 1,
-};
-
-/** The single period the "overall" view collapses the whole range into. */
-const OVERALL_KEY = "overall";
-
-const inclusiveDays = (from: string, to: string) =>
-  Math.max(
-    Math.round(
-      (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000,
-    ) + 1,
-    1,
-  );
-
-
-/* ---------------------------------------------------------------- range ---
- * Dates are handled as plain YYYY-MM-DD strings and stepped in UTC, so a DST
- * boundary can never shift a month or year edge by a day.
- */
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-const todayIso = () => iso(new Date());
-const startOfMonth = (d: string) => `${d.slice(0, 7)}-01`;
-const endOfMonth = (d: string) => {
-  const [y, m] = d.split("-").map(Number);
-  return iso(new Date(Date.UTC(y!, m!, 0))); // day 0 of the next month
-};
-const quarterOf = (d: string) => Math.floor((Number(d.slice(5, 7)) - 1) / 3) + 1;
-const quarterKeyOf = (d: string) => `${d.slice(0, 4)}-Q${quarterOf(d)}`;
-const startOfQuarter = (d: string) => `${d.slice(0, 4)}-${String((quarterOf(d) - 1) * 3 + 1).padStart(2, "0")}-01`;
-const endOfQuarter = (d: string) => endOfMonth(`${d.slice(0, 4)}-${String(quarterOf(d) * 3).padStart(2, "0")}-01`);
-/** "2026-Q1" -> the first day of that quarter. */
-const quarterKeyToDate = (key: string) =>
-  `${key.slice(0, 4)}-${String((Number(key.slice(6)) - 1) * 3 + 1).padStart(2, "0")}-01`;
-const startOfYear = (d: string) => `${d.slice(0, 4)}-01-01`;
-const endOfYear = (d: string) => `${d.slice(0, 4)}-12-31`;
-const addMonths = (d: string, n: number) => {
-  const [y, m] = d.split("-").map(Number);
-  return iso(new Date(Date.UTC(y!, m! - 1 + n, 1)));
-};
-
-/**
- * A monthly or yearly view can only really answer for whole periods — a range
- * ending mid-month shows a short bar that reads as a collapse in output rather
- * than as a partial period. Snapping the range to whole periods when the view
- * changes removes that trap.
- */
-/** At most this many days of hourly detail — 7 days is already 168 bars. */
-const MAX_HOURLY_DAYS = 7;
-
-/**
- * `anchor` is the edge the user just set, which must not move. Switching *to*
- * hourly anchors the end, zooming into the recent part of the range. Typing a
- * start date anchors the start, so the window slides to where you asked rather
- * than snapping back — which made the field look broken.
- */
-function snapRange(
-  range: { from: string; to: string },
-  granularity: Granularity,
-  anchor: "from" | "to" = "to",
-) {
-  if (granularity === "hourly") {
-    const span = (a: string, b: string) =>
-      (new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 86400000 + 1;
-    if (span(range.from, range.to) <= MAX_HOURLY_DAYS) return range;
-    const shift = (d: string, days: number) => {
-      const t = new Date(`${d}T00:00:00Z`);
-      t.setUTCDate(t.getUTCDate() + days);
-      return t.toISOString().slice(0, 10);
-    };
-    return anchor === "from"
-      ? { from: range.from, to: shift(range.from, MAX_HOURLY_DAYS - 1) }
-      : { from: shift(range.to, -(MAX_HOURLY_DAYS - 1)), to: range.to };
-  }
-  if (granularity === "monthly") {
-    return { from: startOfMonth(range.from), to: endOfMonth(range.to) };
-  }
-  if (granularity === "quarterly") {
-    return { from: startOfQuarter(range.from), to: endOfQuarter(range.to) };
-  }
-  if (granularity === "yearly") {
-    return { from: startOfYear(range.from), to: endOfYear(range.to) };
-  }
-  return range; // daily and overall take the range exactly as given
-}
-
-interface DataRange {
-  from: string | null;
-  to: string | null;
-  /** First day with recorded production; the fallback production start date. */
-  firstProduction?: string | null;
-}
-
-/**
- * Payback divides investment cost by average savings per period, so the range
- * it is measured over has to be a range the system was actually running in.
- * Days before production started contribute nothing but still count as
- * periods, dragging the average down and overstating payback; days in the
- * future contribute nothing and do the same.
- *
- * Clamping here, where from/to are set, rather than on each input means no
- * path can bypass it — presets, the custom date fields and the granularity
- * snapping all funnel through this.
- */
-function clampRange(
-  r: { from: string; to: string },
-  bounds: { min: string | null; max: string },
-): { from: string; to: string } {
-  const from = bounds.min && r.from < bounds.min ? bounds.min : r.from;
-  const to = r.to > bounds.max ? bounds.max : r.to;
-  // A range clamped from both ends can invert (e.g. a preset entirely in the
-  // future); collapse it to a single day rather than emit from > to.
-  return from > to ? { from: to, to } : { from, to };
-}
-
-const RANGE_PRESETS: Array<{
-  id: string;
-  label: MessageKey;
-  resolve: (data: DataRange) => { from: string; to: string };
-  /** Switches the view too — a 24-hour range is meaningless as a single bar. */
-  granularity?: Granularity;
-}> = [
-  { id: "last_24_hours", label: "dash.preset.last24h", granularity: "hourly", resolve: () => {
-      const d = new Date();
-      d.setDate(d.getDate() - 1);
-      return { from: iso(d), to: todayIso() };
-    } },
-  { id: "last_7_days", label: "dash.preset.last7d", resolve: () => {
-      const d = new Date();
-      d.setDate(d.getDate() - 6);
-      return { from: iso(d), to: todayIso() };
-    } },
-  { id: "last_30_days", label: "dash.preset.last30d", resolve: () => {
-      const d = new Date();
-      d.setDate(d.getDate() - 29);
-      return { from: iso(d), to: todayIso() };
-    } },
-  { id: "this_month", label: "dash.preset.thisMonth", resolve: () => ({
-      from: startOfMonth(todayIso()), to: endOfMonth(todayIso()) }) },
-  { id: "last_3_months", label: "dash.preset.last3m", resolve: () => ({
-      from: startOfMonth(addMonths(todayIso(), -2)), to: endOfMonth(todayIso()) }) },
-  { id: "this_quarter", label: "dash.preset.thisQuarter", resolve: () => ({
-      from: startOfQuarter(todayIso()), to: endOfQuarter(todayIso()) }) },
-  { id: "last_quarter", label: "dash.preset.lastQuarter", resolve: () => {
-      const prev = addMonths(startOfQuarter(todayIso()), -1); // any day in the previous quarter
-      return { from: startOfQuarter(prev), to: endOfQuarter(prev) };
-    } },
-  { id: "last_12_months", label: "dash.preset.last12m", resolve: () => ({
-      from: startOfMonth(addMonths(todayIso(), -11)), to: endOfMonth(todayIso()) }) },
-  { id: "this_year", label: "dash.preset.thisYear", resolve: () => ({
-      from: startOfYear(todayIso()), to: endOfYear(todayIso()) }) },
-  { id: "last_year", label: "dash.preset.lastYear", resolve: () => {
-      const y = String(new Date().getFullYear() - 1);
-      return { from: `${y}-01-01`, to: `${y}-12-31` };
-    } },
-  { id: "all", label: "dash.preset.all", resolve: (data) => ({
-      from: data.from ?? startOfYear(todayIso()), to: data.to ?? todayIso() }) },
-];
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function DashboardPage() {
   const { site } = useDefaultSite();
   const t = useT();
-  const initial = useMemo(
-    () => RANGE_PRESETS.find((p) => p.id === INITIAL_PRESET)!.resolve({ from: null, to: null }),
-    [],
-  );
+  const initial = useMemo(initialRange, []);
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [granularity, setGranularity] = useState<Granularity>(INITIAL_GRANULARITY);
@@ -311,7 +86,7 @@ export function DashboardPage() {
   const dataRange: DataRange = rangeQuery.data ?? { from: null, to: null, firstProduction: null };
   // Stated start date wins; otherwise the first day production was recorded.
   const productionStart = site?.productionStartDate ?? dataRange.firstProduction ?? null;
-  const bounds = { min: productionStart, max: today() };
+  const bounds = { min: productionStart, max: latestDay(dataRange.to) };
 
   // The bounds arrive with the range query, after the initial default range is
   // already in state, so the first render can hold a range that starts before
@@ -340,47 +115,17 @@ export function DashboardPage() {
           <p className="max-w-2xl text-sm text-slate-500">{t("dash.intro")}</p>
         </div>
         <div className="flex min-w-0 max-w-full flex-wrap items-end gap-3 text-sm">
-          <RangeControls
+          <PeriodControls
             range={{ from, to }}
-            onRange={(r, nextGranularity, anchor) => {
-              if (nextGranularity) setGranularity(nextGranularity);
-              const g = nextGranularity ?? granularity;
-              // Clamp *before* snapping, then again after. Snapping first lets a
-              // preset that runs into the future — "This month" on the 15th —
-              // anchor the hourly window to a month end that is then clamped
-              // back to today, inverting the range and collapsing it to one day.
-              // Snapping can also push past today (month ends), hence the second.
-              const c = clampRange(snapRange(clampRange(r, bounds), g, anchor), bounds);
-              setFrom(c.from);
-              setTo(c.to);
-            }}
             granularity={granularity}
+            onChange={(r, g) => {
+              setGranularity(g);
+              setFrom(r.from);
+              setTo(r.to);
+            }}
             dataRange={dataRange}
             bounds={bounds}
           />
-          <div className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("dash.view")}
-            {/* Scrolls rather than widening the page: six granularities do not
-                fit across a phone, and there is no shorter honest wording. */}
-            <div className="flex max-w-full overflow-x-auto rounded-md border border-slate-300">
-              {(["hourly", "daily", "monthly", "quarterly", "yearly", "overall"] as const).map((g) => (
-                <button
-                  key={g}
-                  onClick={() => {
-                    setGranularity(g);
-                    const snapped = clampRange(snapRange(clampRange({ from, to }, bounds), g), bounds);
-                    setFrom(snapped.from);
-                    setTo(snapped.to);
-                  }}
-                  className={`shrink-0 whitespace-nowrap px-3 py-1.5 capitalize ${
-                    granularity === g ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {t(GRANULARITY_LABEL[g])}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -543,64 +288,6 @@ interface RevenuePeriod extends RevenueFlows {
    * cancelling to nothing.
    */
   batteryChargingChf: number;
-}
-
-function pad2(n: number): string {
-  return n.toString().padStart(2, "0");
-}
-
-/**
- * Every period in [from, to], whether or not it has data, so the axis stays a
- * continuous timeline — a day with no readings should read as a gap in the
- * series, not close the gap by butting its neighbours together.
- */
-function periodKeys(from: string, to: string, granularity: Granularity): string[] {
-  const keys: string[] = [];
-  if (granularity === "overall") return [OVERALL_KEY];
-  if (granularity === "yearly") {
-    for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) keys.push(String(y));
-    return keys;
-  }
-  if (granularity === "quarterly") {
-    for (let d = startOfQuarter(from); d <= to; d = addMonths(d, 3)) keys.push(quarterKeyOf(d));
-    return keys;
-  }
-  if (granularity === "monthly") {
-    const [fy, fm] = from.split("-").map(Number);
-    const [ty, tm] = to.split("-").map(Number);
-    for (let y = fy!, m = fm!; y < ty! || (y === ty! && m <= tm!); m === 12 ? ((y += 1), (m = 1)) : (m += 1)) {
-      keys.push(`${y}-${pad2(m)}`);
-    }
-    return keys;
-  }
-  if (granularity === "hourly") {
-    // 00..23 per local day. On the two DST days this is imperfect and
-    // deliberately so: the spring-forward 02h key simply has no data and
-    // renders empty, and the autumn 02h key holds both passes summed, which is
-    // what the hour key means once the clock repeats.
-    for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
-      const day = d.toISOString().slice(0, 10);
-      for (let h = 0; h < 24; h++) keys.push(`${day}T${pad2(h)}`);
-    }
-    return keys;
-  }
-  // Plain YYYY-MM-DD, so stepping in UTC can't be shifted by a DST boundary.
-  for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
-    keys.push(d.toISOString().slice(0, 10));
-  }
-  return keys;
-}
-
-function periodLabel(key: string, granularity: Granularity, totalLabel: string): string {
-  if (granularity === "overall") return totalLabel;
-  if (granularity === "quarterly") return `${key.slice(5)} ${key.slice(0, 4)}`;
-  if (granularity === "hourly") {
-    // "YYYY-MM-DDTHH" -> "14.09 08h"
-    return `${key.slice(8, 10)}.${key.slice(5, 7)} ${key.slice(11, 13)}h`;
-  }
-  const [y, m, d] = key.split("-");
-  if (granularity === "yearly") return y!;
-  return granularity === "monthly" ? `${m}.${y}` : `${d}.${m}`;
 }
 
 interface RevenueTooltipEntry {
@@ -814,7 +501,6 @@ function RevenueBreakdownChart({
     (sum, d) => sum + d.consumption + d.direct + d.battery + d.neighbor,
     0,
   );
-
 
   // A year of daily bars is ~365 labels in the width of a dozen: thin them to
   // roughly a dozen ticks so they stay readable, and label every month.
@@ -1089,226 +775,6 @@ function RevenueBreakdownChart({
         </div>
       </div>
     </section>
-  );
-}
-
-
-
-/**
- * Presets carry the common cases; the custom inputs match the granularity, so
- * a monthly view is picked in months rather than fighting a day calendar for
- * the 1st and the 31st.
- */
-function RangeControls({
-  range,
-  onRange,
-  granularity,
-  dataRange,
-  bounds,
-}: {
-  range: { from: string; to: string };
-  onRange: (r: { from: string; to: string }, granularity?: Granularity, anchor?: "from" | "to") => void;
-  granularity: Granularity;
-  dataRange: DataRange;
-  bounds: { min: string | null; max: string };
-}) {
-  const t = useT();
-  const [preset, setPreset] = useState(INITIAL_PRESET);
-
-  const applyPreset = (id: string) => {
-    setPreset(id);
-    const found = RANGE_PRESETS.find((p) => p.id === id);
-    if (!found) return;
-    // Hand over the raw range: the caller clamps it to the available data
-    // before snapping, which matters for presets that run into the future.
-    // Snapping here instead anchored the hourly window to a month end that was
-    // then clamped back to today, collapsing the range to a single day.
-    onRange(found.resolve(dataRange), found.granularity);
-  };
-  const setCustom = (next: { from: string; to: string }, anchor: "from" | "to" = "to") => {
-    setPreset("custom");
-    onRange(next, undefined, anchor);
-  };
-
-  const quarters = (() => {
-    const first = startOfQuarter(dataRange.from ?? todayIso());
-    const last = endOfQuarter(dataRange.to ?? todayIso());
-    const keys: string[] = [];
-    for (let d = first; d <= last; d = addMonths(d, 3)) keys.push(quarterKeyOf(d));
-    // A preset can land outside the stored data; keep the selection listable.
-    for (const k of [quarterKeyOf(range.from), quarterKeyOf(range.to)]) {
-      if (!keys.includes(k)) keys.push(k);
-    }
-    return keys.sort();
-  })();
-
-  const years = (() => {
-    const first = Number((dataRange.from ?? todayIso()).slice(0, 4));
-    const last = Number((dataRange.to ?? todayIso()).slice(0, 4));
-    return Array.from({ length: Math.max(last - first + 1, 1) }, (_, i) => String(first + i));
-  })();
-
-  return (
-    <div className="flex min-w-0 max-w-full flex-wrap items-end gap-3 text-sm">
-      <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-        {t("common.period")}
-        <select className="input w-36" value={preset} onChange={(e) => applyPreset(e.target.value)}>
-          {RANGE_PRESETS.map((p) => (
-            <option key={p.id} value={p.id}>
-              {t(p.label)}
-            </option>
-          ))}
-          <option value="custom">{t("dash.preset.custom")}</option>
-        </select>
-      </label>
-
-      {(granularity === "hourly" || granularity === "daily" || granularity === "overall") && (
-        <>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("common.from")}
-            <input
-              type="date"
-              className="input w-36"
-              value={range.from}
-              min={bounds.min ?? undefined}
-              max={range.to}
-              onChange={(e) => setCustom({ ...range, from: e.target.value }, "from")}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("common.to")}
-            <input
-              type="date"
-              className="input w-36"
-              value={range.to}
-              min={range.from}
-              max={bounds.max}
-              onChange={(e) => setCustom({ ...range, to: e.target.value })}
-            />
-          </label>
-        </>
-      )}
-
-      {granularity === "monthly" && (
-        <>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("common.from")}
-            <input
-              type="month"
-              className="input w-36"
-              value={range.from.slice(0, 7)}
-              onChange={(e) => setCustom({ ...range, from: `${e.target.value}-01` })}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("common.to")}
-            <input
-              type="month"
-              className="input w-36"
-              value={range.to.slice(0, 7)}
-              onChange={(e) => setCustom({ ...range, to: endOfMonth(`${e.target.value}-01`) })}
-            />
-          </label>
-        </>
-      )}
-
-      {granularity === "quarterly" && (
-        <>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("common.from")}
-            <select
-              className="input w-36"
-              value={quarterKeyOf(range.from)}
-              onChange={(e) =>
-                setCustom({ ...range, from: startOfQuarter(quarterKeyToDate(e.target.value)) })
-              }
-            >
-              {quarters.map((q) => (
-                <option key={q} value={q}>
-                  {`${q.slice(5)} ${q.slice(0, 4)}`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("common.to")}
-            <select
-              className="input w-36"
-              value={quarterKeyOf(range.to)}
-              onChange={(e) =>
-                setCustom({ ...range, to: endOfQuarter(quarterKeyToDate(e.target.value)) })
-              }
-            >
-              {quarters.map((q) => (
-                <option key={q} value={q}>
-                  {`${q.slice(5)} ${q.slice(0, 4)}`}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      )}
-
-      {granularity === "yearly" && (
-        <>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("common.from")}
-            <select
-              className="input w-36"
-              value={range.from.slice(0, 4)}
-              onChange={(e) => setCustom({ ...range, from: `${e.target.value}-01-01` })}
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("common.to")}
-            <select
-              className="input w-36"
-              value={range.to.slice(0, 4)}
-              onChange={(e) => setCustom({ ...range, to: `${e.target.value}-12-31` })}
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      )}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  sub,
-  hint,
-}: {
-  label: string;
-  value?: number;
-  sub?: string;
-  /** One line saying what the figure actually measures, for the cards whose
-   * names alone don't separate them (battery savings vs battery revenue). */
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-lg border bg-white p-4">
-      <p className="text-xs font-medium text-slate-500" title={hint}>
-        {label}
-      </p>
-      <p className="mt-1 text-2xl font-semibold text-slate-900">
-        {value != null ? `CHF ${value.toFixed(2)}` : "—"}
-      </p>
-      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
-      {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
-    </div>
   );
 }
 

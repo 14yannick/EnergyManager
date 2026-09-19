@@ -63,6 +63,8 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   "/api/sites/:siteId/billing/invoices": { GET: PARTICIPANT_READ },
 
   "/api/sites/:siteId/community/summary": { GET: PARTICIPANT_READ },
+  // A participant only for their own party — see consumption/routes.
+  "/api/sites/:siteId/parties/:partyId/consumption": { GET: PARTICIPANT_READ },
 };
 
 /**
