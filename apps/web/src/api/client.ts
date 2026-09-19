@@ -16,6 +16,7 @@ import type {
   HaSyncResult,
   IntervalMetricKind,
   Party,
+  NeighbourSales,
   PartyConsumption,
   PartyInput,
   ReadingsImportResult,
@@ -149,6 +150,9 @@ export const api = {
       ),
     day: (siteId: string, date: string) =>
       request<SavingsDayDetail>(`/sites/${siteId}/savings/day?date=${date}`),
+    /** Per participant: what selling to them earned, against exporting instead. */
+    neighbours: (siteId: string, from: string, to: string) =>
+      request<NeighbourSales>(`/sites/${siteId}/savings/neighbours?from=${from}&to=${to}`),
     cumulative: (siteId: string, from: string, to: string, granularity?: SavingsQuery["granularity"]) =>
       request<CumulativeSavingsPoint[]>(
         `/sites/${siteId}/savings/cumulative?from=${from}&to=${to}${granularity ? `&granularity=${granularity}` : ""}`,

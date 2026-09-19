@@ -53,6 +53,13 @@ export const tariffSurchargeInputSchema = z
   .refine((v) => v.endTs > v.startTs, {
     message: "endTs must be after startTs",
     path: ["endTs"],
+  })
+  // The neighbour-sale rate is the price agreed with the participants, and it
+  // is what their invoice charges. A surcharge on it would change the site's
+  // revenue figures without changing the bill, so it is refused outright.
+  .refine((v) => v.kind !== "neighbor_sell", {
+    message: "The neighbour-sale rate is the agreed price; surcharges do not apply to it",
+    path: ["kind"],
   });
 export type TariffSurchargeInput = z.infer<typeof tariffSurchargeInputSchema>;
 

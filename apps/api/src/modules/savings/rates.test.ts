@@ -97,3 +97,36 @@ describe("makeRateResolver — the period decides which source prices it", () =>
     expect(resolve("neighbor_sell", "2026-10-01T10:00:00.000Z")).toBeNull();
   });
 });
+
+describe("makeRateResolver — what a surcharge applies to", () => {
+  const NEIGHBOUR: ResolvedPeriod = {
+    kind: "neighbor_sell",
+    startTs: "2026-01-01T00:00:00.000Z",
+    endTs: "2028-01-01T00:00:00.000Z",
+    pricingMode: "flat",
+    rateChfPerKwh: 0.14,
+  };
+  // A Herkunftsnachweis for all of it, a Mindestvergütungsprämie for Q4 only.
+  const feedInExtras: ResolvedRate[] = [
+    { kind: "feed_in", startTs: "2026-06-30T22:00:00.000Z", endTs: "2099-01-01T00:00:00.000Z", rateChfPerKwh: 0.02 },
+    { kind: "feed_in", startTs: "2026-09-30T22:00:00.000Z", endTs: "2026-12-31T23:00:00.000Z", rateChfPerKwh: 0.015 },
+  ];
+
+  it("adds each feed-in surcharge only while its own dates cover the instant", () => {
+    const resolve = makeRateResolver([Q3, Q4_DYNAMIC], dynamicRates, feedInExtras);
+    // Q3: certificate only.
+    expect(resolve("feed_in", "2026-08-01T10:00:00.000Z")).toBeCloseTo(0.085 + 0.02, 10);
+    // Q4, on top of the day-ahead price: certificate and premium.
+    expect(resolve("feed_in", "2026-10-01T10:00:00.000Z")).toBeCloseTo(0.179 + 0.02 + 0.015, 10);
+  });
+
+  it("leaves the agreed neighbour price exactly as agreed, whatever surcharge exists", () => {
+    // Stored before the form refused them: still never added.
+    const stray: ResolvedRate[] = [
+      { kind: "neighbor_sell", startTs: "2026-01-01T00:00:00.000Z", endTs: "2028-01-01T00:00:00.000Z", rateChfPerKwh: 0.05 },
+      ...feedInExtras,
+    ];
+    const resolve = makeRateResolver([NEIGHBOUR], [], stray);
+    expect(resolve("neighbor_sell", "2026-10-01T10:00:00.000Z")).toBe(0.14);
+  });
+});

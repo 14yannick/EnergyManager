@@ -1,6 +1,7 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type {
   CumulativeSavingsPoint,
+  NeighbourSales,
   DailySavings,
   SavingsDayDetail,
   SavingsDayParty,
@@ -24,6 +25,7 @@ import {
   tariffSurcharges,
 } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
+import { priceNeighbourSales } from "./neighbourSales.js";
 import { getCostItemsSummary } from "../costItems/service.js";
 import {
   aggregateDailyToMonthly,
@@ -34,6 +36,7 @@ import {
   aggregateIntervalsToHourly,
   chargeAcEquivalentKwh,
   computeDirectUseKwh,
+  energyLeftHouseKwh,
   computeSavingsFromInputs,
   summarizeHourlySavings,
   summarizeMonthlySavings,
@@ -44,73 +47,12 @@ import {
 } from "./engine.js";
 
 /**
- * Every metering interval in the range, priced.
- *
- * The one place readings and rates are loaded: `getDailySavings` rolls these
- * up, and `getSavingsDay` hands them out as the detail behind a day's
- * averages. Sharing the loader is what guarantees an expanded interval list
- * adds up to the total printed above it.
+ * Every rate that can apply inside the bounds: tariff periods, the day-ahead
+ * feed, and surcharges on top. One loader, so the site's revenue and the
+ * per-participant breakdown can never price the same interval differently.
  */
-async function loadPricedSlots(
-  siteId: string,
-  from: string,
-  to: string,
-): Promise<{ slots: SavingsSlot[]; resolveRate: RateResolver }> {
-  // Half-open [from, to] range in Europe/Zurich calendar days, converted to UTC
-  // in SQL (DST-aware) — not naive `${from}T00:00:00Z`. A row stamped at
-  // Zurich-local midnight on `from` (as every monthly/daily import is) lands at
-  // the *previous* UTC day whenever Zurich is ahead of UTC (CEST, or CET for a
-  // few morning hours), so a naive UTC bound silently dropped that whole day —
-  // most visibly a query scoped to a single calendar month (e.g. the revenue
-  // chart), which lost its first day's data for every CEST month.
-  const fromBound = sql`(${from}::date AT TIME ZONE 'Europe/Zurich')`;
-  const toBoundExclusive = sql`((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
-
-  // interval_metrics stores one row per (site, ts, metric) instead of fixed
-  // columns; pivot it back into the wide per-interval shape the engine
-  // expects via conditional aggregation, so engine.ts needs no changes.
-  // exportedKwh deliberately comes only from export_grid, not export_local —
-  // locally-shared-to-neighbours energy doesn't feed savings math yet (needs
-  // a real per-neighbour allocation model first).
-  const [siteRows, readingRows, flatRows, dynamicRows, surchargeRows] = await Promise.all([
-    db.select({ loss: sites.batteryConversionLoss }).from(sites).where(eq(sites.id, siteId)),
-    db
-      .select({
-        ts: intervalMetrics.ts,
-        // Hour resolution: aggregateIntervalsToDaily slices this back to the
-        // date, aggregateIntervalsToHourly keeps the hour.
-        date: sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD"T"HH24')`,
-        producedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'production'), 0)`,
-        batteryChargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_charge'), 0)`,
-        // The AC share, not the DC counter: everything priced here is energy
-        // that actually reached the house or the grid. The DC figure is kept
-        // as its own metric for battery diagnostics.
-        batteryDischargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_discharge_ac'), 0)`,
-        exportedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_grid'), 0)`,
-        exportLocalKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_local'), 0)`,
-        // Summed across every party — the per-party split matters for billing,
-        // not for the site's revenue total.
-        neighborConsumptionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption'), 0)`,
-      })
-      .from(intervalMetrics)
-      .where(
-        and(
-          eq(intervalMetrics.siteId, siteId),
-          sql`${intervalMetrics.ts} >= ${fromBound}`,
-          sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
-          inArray(intervalMetrics.metricKind, [
-            "production",
-            "battery_charge",
-            "battery_discharge",
-            "battery_discharge_ac",
-            "export_grid",
-            "export_local",
-            "consumption",
-          ]),
-        ),
-      )
-      .groupBy(intervalMetrics.ts)
-      .orderBy(intervalMetrics.ts),
+async function loadRateResolver(siteId: string, fromBound: SQL, toBoundExclusive: SQL): Promise<RateResolver> {
+  const [flatRows, dynamicRows, surchargeRows] = await Promise.all([
     db.select().from(tariffPeriods).where(eq(tariffPeriods.siteId, siteId)),
     db
       .select()
@@ -144,7 +86,82 @@ async function loadPricedSlots(
     endTs: r.endTs.toISOString(),
     rateChfPerKwh: toNumber(r.rateChfPerKwh),
   }));
-  const resolveRate = makeRateResolver(periods, dynamicRates, surcharges);
+  return makeRateResolver(periods, dynamicRates, surcharges);
+}
+
+/**
+ * Every metering interval in the range, priced.
+ *
+ * The one place readings and rates are loaded: `getDailySavings` rolls these
+ * up, and `getSavingsDay` hands them out as the detail behind a day's
+ * averages. Sharing the loader is what guarantees an expanded interval list
+ * adds up to the total printed above it.
+ */
+async function loadPricedSlots(
+  siteId: string,
+  from: string,
+  to: string,
+): Promise<{ slots: SavingsSlot[]; resolveRate: RateResolver }> {
+  // Half-open [from, to] range in Europe/Zurich calendar days, converted to UTC
+  // in SQL (DST-aware) — not naive `${from}T00:00:00Z`. A row stamped at
+  // Zurich-local midnight on `from` (as every monthly/daily import is) lands at
+  // the *previous* UTC day whenever Zurich is ahead of UTC (CEST, or CET for a
+  // few morning hours), so a naive UTC bound silently dropped that whole day —
+  // most visibly a query scoped to a single calendar month (e.g. the revenue
+  // chart), which lost its first day's data for every CEST month.
+  const fromBound = sql`(${from}::date AT TIME ZONE 'Europe/Zurich')`;
+  const toBoundExclusive = sql`((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
+
+  // interval_metrics stores one row per (site, ts, metric) instead of fixed
+  // columns; pivot it back into the wide per-interval shape the engine
+  // expects via conditional aggregation, so engine.ts needs no changes.
+  // exportedKwh deliberately comes only from export_grid, not export_local —
+  // locally-shared-to-neighbours energy doesn't feed savings math yet (needs
+  // a real per-neighbour allocation model first).
+  const [siteRows, readingRows, resolveRate] = await Promise.all([
+    db.select({ loss: sites.batteryConversionLoss }).from(sites).where(eq(sites.id, siteId)),
+    db
+      .select({
+        ts: intervalMetrics.ts,
+        // Hour resolution: aggregateIntervalsToDaily slices this back to the
+        // date, aggregateIntervalsToHourly keeps the hour.
+        date: sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD"T"HH24')`,
+        producedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'production'), 0)`,
+        batteryChargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_charge'), 0)`,
+        // The AC share, not the DC counter: everything priced here is energy
+        // that actually reached the house or the grid. The DC figure is kept
+        // as its own metric for battery diagnostics.
+        batteryDischargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_discharge_ac'), 0)`,
+        exportedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_grid'), 0)`,
+        // Null, not 0, when the interval has no export_local reading at all —
+        // see energyLeftHouseKwh on why the two must not be confused.
+        exportLocalKwh: sql<string | null>`sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_local')`,
+        // Summed across every party — the per-party split matters for billing,
+        // not for the site's revenue total.
+        neighborConsumptionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption'), 0)`,
+      })
+      .from(intervalMetrics)
+      .where(
+        and(
+          eq(intervalMetrics.siteId, siteId),
+          sql`${intervalMetrics.ts} >= ${fromBound}`,
+          sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
+          inArray(intervalMetrics.metricKind, [
+            "production",
+            "battery_charge",
+            "battery_discharge",
+            "battery_discharge_ac",
+            "export_grid",
+            "export_local",
+            "consumption",
+          ]),
+        ),
+      )
+      .groupBy(intervalMetrics.ts)
+      .orderBy(intervalMetrics.ts),
+    loadRateResolver(siteId, fromBound, toBoundExclusive),
+  ]);
+
   const batteryConversionLoss = siteRows[0] ? toNumber(siteRows[0].loss) : undefined;
 
   const slots = readingRows.map((row) => {
@@ -153,14 +170,19 @@ async function loadPricedSlots(
     const batteryChargeKwh = toNumber(row.batteryChargeKwh);
     const batteryDischargeKwh = toNumber(row.batteryDischargeKwh);
     const exportedKwh = toNumber(row.exportedKwh);
-    const exportLocalKwh = toNumber(row.exportLocalKwh);
+    const exportLocalKwh = energyLeftHouseKwh(
+      exportedKwh,
+      row.exportLocalKwh == null ? null : toNumber(row.exportLocalKwh),
+    );
     const neighborConsumptionKwh = toNumber(row.neighborConsumptionKwh);
 
     const priced = computeSavingsFromInputs({
       date: row.date,
       batteryConversionLoss,
       producedKwh,
-      directUseKwh: computeDirectUseKwh({ producedKwh, exportedKwh }),
+      // Against everything that left the house, so energy sold to a
+      // participant is not also counted as used at home.
+      directUseKwh: computeDirectUseKwh({ producedKwh, exportedKwh: exportLocalKwh }),
       batteryChargeKwh,
       batteryDischargeKwh,
       exportedKwh,
@@ -303,4 +325,45 @@ export async function getSavingsSummary(
     return summarizeOverallSavings(aggregateDailyToOverall(dailyRows), costs, from, to);
   }
   return summarizeSavings(dailyRows, costs, from, to);
+}
+
+/**
+ * Each participant's draw from the local pool over a range, with what it
+ * earned and what exporting the same energy would have earned instead.
+ *
+ * Per interval and per party, for the same reason as `loadDayParties`: the
+ * site-level pivot groups by instant alone. Priced through the same resolver
+ * as the site's revenue, so the participants' revenue here adds up to the
+ * neighbour-sale revenue the dashboard charts.
+ */
+export async function getNeighbourSales(siteId: string, from: string, to: string): Promise<NeighbourSales> {
+  const fromBound = sql`(${from}::date AT TIME ZONE 'Europe/Zurich')`;
+  const toBoundExclusive = sql`((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
+
+  const [rows, resolveRate] = await Promise.all([
+    db
+      .select({
+        ts: intervalMetrics.ts,
+        partyId: intervalMetrics.partyId,
+        name: parties.name,
+        kwh: sql<string>`sum(${intervalMetrics.valueKwh})`,
+      })
+      .from(intervalMetrics)
+      .innerJoin(parties, eq(parties.id, intervalMetrics.partyId))
+      .where(
+        and(
+          eq(intervalMetrics.siteId, siteId),
+          eq(intervalMetrics.metricKind, "consumption"),
+          sql`${intervalMetrics.ts} >= ${fromBound}`,
+          sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
+        ),
+      )
+      .groupBy(intervalMetrics.ts, intervalMetrics.partyId, parties.name),
+    loadRateResolver(siteId, fromBound, toBoundExclusive),
+  ]);
+
+  const draws = rows.flatMap((r) =>
+    r.partyId ? [{ partyId: r.partyId, name: r.name, ts: r.ts.toISOString(), kwh: toNumber(r.kwh) }] : [],
+  );
+  return priceNeighbourSales(draws, resolveRate, { from, to });
 }

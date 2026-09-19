@@ -230,7 +230,7 @@ export const en = {
 
   "tariff.surcharges": "Surcharges",
   "tariff.surchargesNote":
-    "Additive per-kWh components stacked on top of a period's rate — e.g. a Herkunftsnachweis or Mindestvergütungsprämie on top of the feed-in rate. Unlike periods above, surcharges may overlap each other; every matching one is added to the base rate.",
+    "Additive per-kWh components stacked on top of a period's rate — e.g. a Herkunftsnachweis or Mindestvergütungsprämie on top of the feed-in rate, each applied only between its own start and end. Unlike periods above, surcharges may overlap each other; every matching one is added to the base rate. The neighbour-sale rate takes none: it is the price agreed with the participants.",
 
   // ---- Import readings ---------------------------------------------------
   "readings.title": "Import readings",
@@ -405,10 +405,21 @@ export const en = {
   "dash.units.period": "periods",
 
   "dash.kpi": "KPI",
+  "dash.soldPrice": "Average price per kWh sold",
+  "dash.soldPriceSub": "{kwh} kWh left the house · grid {grid} · participants {local}",
+  "dash.soldPriceHint": "Feed-in and participant revenue divided by the kWh paid for, each priced at its own quarter-hour",
+  "dash.soldUnpriced": "{kwh} kWh with no rate, left out",
+  "dash.neighbours": "Sales to participants",
+  "dash.neighboursNote": "What each participant paid for the solar energy they took, against what the same energy would have earned exported to the grid at the feed-in rate of that quarter-hour. The difference is what selling locally really gained.",
+  "dash.nb.participant": "Participant",
+  "dash.nb.revenue": "Sold to participant",
+  "dash.nb.export": "If exported",
+  "dash.nb.gain": "Real gain",
+  "dash.nb.gainPerKwh": "Gain per kWh",
+  "dash.nb.none": "No sales to participants in this range.",
+  "dash.nb.unpriced": "{kwh} kWh were sold when no feed-in or neighbour-sale rate was set: they count in the revenue, but are left out of the comparison.",
   "dash.withBatteryTotal": "Total savings — with battery",
   "dash.noBatteryTotal": "Total savings — no battery",
-  "dash.batteryOnly": "Battery-only savings",
-  "dash.batteryOnlyHint": "vs the same period with no battery — ignores round-trip loss",
   "dash.batteryRevenue": "Battery revenue",
   "dash.batteryRevenueHint": "discharge value less what charging cost — the truer figure",
   "dash.avgSuffix": "CHF {value}/{unit} avg",

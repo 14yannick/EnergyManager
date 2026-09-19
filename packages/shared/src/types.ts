@@ -359,6 +359,14 @@ export interface DailySavings {
   /** neighborConsumptionKwh priced at the neighbour-sale rate. */
   neighborSellRevenueChf: number;
   /**
+   * The share of `exportedKwh` / `neighborConsumptionKwh` that had a rate to
+   * price it. What an average price per kWh sold divides by: an interval with
+   * no rate earns nothing on paper, and counting its kWh would read as having
+   * sold them for free.
+   */
+  exportedPricedKwh: number;
+  neighborPricedKwh: number;
+  /**
    * Export revenue in the counterfactual where no battery exists: the PV that
    * charged it would have been exported, and the export that came out of it
    * never happens. Direct consumption and neighbour sales are unaffected, so
@@ -414,6 +422,21 @@ export interface SavingsSummary {
     batteryOnlyChf: number;
     batteryRevenueChf: number;
   };
+  /**
+   * Everything that left the house and was paid for: grid export at the
+   * feed-in rate, and energy sold to participants at the neighbour rate, each
+   * priced at its own interval. Only kWh that had a rate are counted.
+   */
+  sold: {
+    gridKwh: number;
+    gridChf: number;
+    neighbourKwh: number;
+    neighbourChf: number;
+    /** kWh that left the house in intervals with no rate: excluded from the price, named instead. */
+    unpricedKwh: number;
+  };
+  /** (gridChf + neighbourChf) / (gridKwh + neighbourKwh); null when nothing priced was sold. */
+  soldPricePerKwhChf: number | null;
   daysWithData: number;
   avgDaily: {
     withBatteryChf: number;
@@ -432,6 +455,40 @@ export interface SavingsSummary {
     withoutBatteryDate: string | null;
     batteryOnlyDate: string | null;
   };
+}
+
+/**
+ * What one participant's draw from the local pool earned, against what the
+ * same energy would have earned exported to the grid.
+ */
+export interface NeighbourSale {
+  partyId: string;
+  name: string;
+  /** Energy the participant took from local production. */
+  kwh: number;
+  /** Earned from them at the neighbour-sale rate — ties to the site's revenue chart. */
+  revenueChf: number;
+  /** The same kWh at the feed-in rate of each interval, surcharges included. */
+  exportValueChf: number;
+  /**
+   * Revenue less the export it replaced: what selling to them was really
+   * worth. Over compared intervals only, so while `unpricedKwh` is zero it is
+   * exactly `revenueChf - exportValueChf`.
+   */
+  gainChf: number;
+  /**
+   * kWh sold in intervals missing the neighbour or the feed-in rate, left out
+   * of the comparison so a known revenue is never set against an export worth
+   * "zero".
+   */
+  unpricedKwh: number;
+}
+
+export interface NeighbourSales {
+  from: string;
+  to: string;
+  parties: NeighbourSale[];
+  totals: Omit<NeighbourSale, "partyId" | "name">;
 }
 
 export interface CumulativeSavingsPoint {

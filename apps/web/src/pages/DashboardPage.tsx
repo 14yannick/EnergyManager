@@ -17,6 +17,7 @@ import { useT, type Translate } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { PeriodControls } from "../components/PeriodControls";
 import { StatCard } from "../components/StatCard";
+import { NeighbourSalesChart } from "../components/NeighbourSalesChart";
 import {
   INITIAL_GRANULARITY,
   MAX_HOURLY_DAYS,
@@ -75,6 +76,8 @@ export function DashboardPage() {
       ? t("dash.overallAvg", { days: inclusiveDays(from, to) })
       : null;
   /** "CHF 1.23/day avg", or the overall view's "over N days". */
+  /** CHF per kWh written in cents, as the provider's own bill does. */
+  const ct = (chfPerKwh: number) => `${(chfPerKwh * 100).toFixed(1)} ${t("billing.centsPerKwh")}`;
   const avgOf = (value: number | undefined) =>
     value == null ? undefined : (avgSuffix ?? t("dash.avgSuffix", { value: value.toFixed(2), unit }));
 
@@ -155,10 +158,23 @@ export function DashboardPage() {
           sub={avgOf(summary?.avgDaily.withoutBatteryChf)}
         />
         <StatCard
-          label={t("dash.batteryOnly")}
-          hint={t("dash.batteryOnlyHint")}
-          value={summary?.totals.batteryOnlyChf}
-          sub={avgOf(summary?.avgDaily.batteryOnlyChf)}
+          label={t("dash.soldPrice")}
+          hint={t("dash.soldPriceHint")}
+          value={summary?.soldPricePerKwhChf}
+          format={(v) => ct(v)}
+          sub={
+            summary
+              ? t("dash.soldPriceSub", {
+                  kwh: (summary.sold.gridKwh + summary.sold.neighbourKwh + summary.sold.unpricedKwh).toFixed(0),
+                  grid: summary.sold.gridKwh > 0 ? ct(summary.sold.gridChf / summary.sold.gridKwh) : "—",
+                  local:
+                    summary.sold.neighbourKwh > 0 ? ct(summary.sold.neighbourChf / summary.sold.neighbourKwh) : "—",
+                }) +
+                (summary.sold.unpricedKwh >= 0.5
+                  ? ` · ${t("dash.soldUnpriced", { kwh: summary.sold.unpricedKwh.toFixed(0) })}`
+                  : "")
+              : undefined
+          }
         />
         <StatCard
           label={t("dash.batteryRevenue")}
@@ -170,6 +186,8 @@ export function DashboardPage() {
       </section>
 
       <RevenueBreakdownChart siteId={site.id} from={from} to={to} granularity={granularity} />
+
+      <NeighbourSalesChart siteId={site.id} from={from} to={to} />
 
       <section className="space-y-3">
         <div>

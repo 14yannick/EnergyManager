@@ -233,7 +233,7 @@ export const fr: Record<keyof typeof en, string> = {
 
   "tariff.surcharges": "Suppléments",
   "tariff.surchargesNote":
-    "Composants additifs au kWh empilés sur le tarif d'une période — par exemple un Herkunftsnachweis ou une Mindestvergütungsprämie s'ajoutant au tarif de reprise. Contrairement aux périodes ci-dessus, les suppléments peuvent se chevaucher : tous ceux qui correspondent s'ajoutent au tarif de base.",
+    "Composants additifs au kWh empilés sur le tarif d'une période — par exemple un Herkunftsnachweis ou une Mindestvergütungsprämie s'ajoutant au tarif de reprise, chacun appliqué uniquement entre son début et sa fin. Contrairement aux périodes ci-dessus, les suppléments peuvent se chevaucher : tous ceux qui correspondent s'ajoutent au tarif de base. Le tarif de vente aux participants n'en reçoit aucun : c'est le prix convenu avec eux.",
 
   // ---- Import readings ---------------------------------------------------
   "readings.title": "Import des relevés",
@@ -413,11 +413,21 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.units.period": "périodes",
 
   "dash.kpi": "Indicateurs",
+  "dash.soldPrice": "Prix moyen par kWh vendu",
+  "dash.soldPriceSub": "{kwh} kWh sortis de la maison · réseau {grid} · participants {local}",
+  "dash.soldPriceHint": "Revenus de reprise et des participants divisés par les kWh rémunérés, chacun au tarif de son quart d'heure",
+  "dash.soldUnpriced": "{kwh} kWh sans tarif, non comptés",
+  "dash.neighbours": "Ventes aux participants",
+  "dash.neighboursNote": "Ce que chaque participant a payé pour l'énergie solaire prélevée, comparé à ce que cette même énergie aurait rapporté injectée dans le réseau au tarif de reprise du quart d'heure concerné. La différence est le gain réel de la vente locale.",
+  "dash.nb.participant": "Participant",
+  "dash.nb.revenue": "Vendu au participant",
+  "dash.nb.export": "Si injecté",
+  "dash.nb.gain": "Gain réel",
+  "dash.nb.gainPerKwh": "Gain par kWh",
+  "dash.nb.none": "Aucune vente aux participants sur cette période.",
+  "dash.nb.unpriced": "{kwh} kWh ont été vendus sans tarif de reprise ou de vente aux participants défini : ils comptent dans le revenu, mais pas dans la comparaison.",
   "dash.withBatteryTotal": "Économies totales — avec batterie",
   "dash.noBatteryTotal": "Économies totales — sans batterie",
-  "dash.batteryOnly": "Économies dues à la batterie",
-  "dash.batteryOnlyHint":
-    "par rapport à la même période sans batterie — ne tient pas compte des pertes de cycle",
   "dash.batteryRevenue": "Revenu de la batterie",
   "dash.batteryRevenueHint":
     "valeur de la décharge moins le coût de la charge — le chiffre le plus juste",

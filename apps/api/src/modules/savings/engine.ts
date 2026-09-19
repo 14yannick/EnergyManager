@@ -49,6 +49,24 @@ export function computeDirectUseKwh(
   return day.producedKwh - day.exportedKwh;
 }
 
+/**
+ * Everything that left the house in an interval: the `export_local` reading,
+ * or the grid export where an interval has none.
+ *
+ * Direct use has to subtract *this*, not grid export alone. Grid export is
+ * what is left once the participants have taken their share, so subtracting
+ * only that would count every kWh sold to a participant as consumed at home
+ * too — priced at the purchase rate on top of the neighbour rate it was sold
+ * at. Readings without participants carry the same value in both, so the
+ * choice only matters once somebody draws from the pool.
+ *
+ * The fallback is per interval: a missing `export_local` must not read as
+ * "nothing left the house", which would count every exported kWh as used.
+ */
+export function energyLeftHouseKwh(exportGridKwh: number, exportLocalKwh: number | null): number {
+  return exportLocalKwh ?? exportGridKwh;
+}
+
 
 export interface SavingsInputs {
   date: string;
@@ -61,9 +79,10 @@ export interface SavingsInputs {
   exportedKwh: number;
   /**
    * Total energy leaving the household (the inverter's own export figure).
-   * `exportedKwh` is what's left of it once neighbours take their share, so
-   * this is reported for visibility but never priced directly — pricing the
-   * same kWh here and as grid export would double-count it.
+   * `exportedKwh` is what's left of it once neighbours take their share. It
+   * is what direct use is measured against (see `energyLeftHouseKwh`), and is
+   * never priced itself: its two parts are, as grid export and as neighbour
+   * sales, and pricing the whole as well would count them twice.
    */
   exportLocalKwh: number;
   /** Energy consumed by neighbours (summed across parties) — this is what's sold at the neighbour rate. */
@@ -178,13 +197,21 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
   const selfConsumptionValueChf =
     purchaseRate != null ? (batteryDischargeKwh + directUseKwh) * purchaseRate : 0;
   const exportRevenueChf = sellRate != null ? exportedKwh * sellRate : 0;
-  const savingsWithBatteryChf = selfConsumptionValueChf + exportRevenueChf;
+  // Priced off what neighbours actually consumed, not off export_local: the
+  // latter is everything leaving the household, of which the grid share is
+  // already priced as export revenue.
+  const neighborSellRevenueChf = neighborSellRate != null ? neighborConsumptionKwh * neighborSellRate : 0;
+  // Every kWh the site produced ends up in exactly one of these: used at home
+  // (directly or through the battery), sold to a participant, or exported.
+  const savingsWithBatteryChf = selfConsumptionValueChf + exportRevenueChf + neighborSellRevenueChf;
 
   // Counterfactual: without a battery, energy that was discharged from it would
   // instead have been exported at the sell rate (it couldn't have been stored).
+  // Neighbour sales don't involve the battery, so they are the same in both.
   const savingsWithoutBatteryChf =
     (purchaseRate != null ? directUseKwh * purchaseRate : 0) +
-    (sellRate != null ? (batteryDischargeKwh + exportedKwh) * sellRate : 0);
+    (sellRate != null ? (batteryDischargeKwh + exportedKwh) * sellRate : 0) +
+    neighborSellRevenueChf;
 
   const batteryOnlySavingsChf = savingsWithBatteryChf - savingsWithoutBatteryChf;
   const revenue = computeBatteryRevenue({
@@ -208,11 +235,6 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
   // went through the battery first — together they make up
   // selfConsumptionValueChf, which keeps pricing both as one figure.
   const directConsumptionRevenueChf = purchaseRate != null ? directUseKwh * purchaseRate : 0;
-  // Priced off what neighbours actually consumed, not off export_local: the
-  // latter is everything leaving the household, of which the grid share is
-  // already priced as export revenue.
-  const neighborSellRevenueChf = neighborSellRate != null ? neighborConsumptionKwh * neighborSellRate : 0;
-
   // Counterfactual export revenue if the battery weren't there at all. The PV
   // that went into it would have gone to the grid instead (+ charged), and the
   // export that actually came *out* of it never happens (- dischargeExported).
@@ -240,6 +262,8 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
     directExportRevenueChf,
     directConsumptionRevenueChf,
     neighborSellRevenueChf,
+    exportedPricedKwh: sellRate != null ? exportedKwh : 0,
+    neighborPricedKwh: neighborSellRate != null ? neighborConsumptionKwh : 0,
     noBatteryDirectExportRevenueChf,
   };
 }
@@ -266,6 +290,8 @@ const SUMMABLE_FIELDS = [
   "directExportRevenueChf",
   "directConsumptionRevenueChf",
   "neighborSellRevenueChf",
+  "exportedPricedKwh",
+  "neighborPricedKwh",
   "noBatteryDirectExportRevenueChf",
 ] as const satisfies readonly (keyof DailySavings)[];
 
@@ -421,6 +447,25 @@ function summarizePeriodSavings(
     { withBatteryChf: 0, withoutBatteryChf: 0, batteryOnlyChf: 0, batteryRevenueChf: 0 },
   );
 
+  // What the energy leaving the house fetched, per kWh. Under a dynamic
+  // feed-in rate and a separate neighbour rate this swings a lot, and a
+  // weighted average over what was actually sold is the honest summary of it.
+  // Grid export excludes what neighbours took (`exportedKwh` is the remainder),
+  // so the two parts never count the same kWh.
+  const sold = rows.reduce(
+    (acc, r) => {
+      acc.gridKwh += r.exportedPricedKwh;
+      acc.gridChf += r.exportRevenueChf;
+      acc.neighbourKwh += r.neighborPricedKwh;
+      acc.neighbourChf += r.neighborSellRevenueChf;
+      acc.unpricedKwh += r.exportedKwh - r.exportedPricedKwh + (r.neighborConsumptionKwh - r.neighborPricedKwh);
+      return acc;
+    },
+    { gridKwh: 0, gridChf: 0, neighbourKwh: 0, neighbourChf: 0, unpricedKwh: 0 },
+  );
+  const soldKwh = sold.gridKwh + sold.neighbourKwh;
+  const soldPricePerKwhChf = soldKwh > 0 ? (sold.gridChf + sold.neighbourChf) / soldKwh : null;
+
   const daysWithData = rows.length; // "periods with data" — days or months, depending on periodsPerYear
   const avgDaily = {
     withBatteryChf: daysWithData > 0 ? totals.withBatteryChf / daysWithData : 0,
@@ -452,7 +497,7 @@ function summarizePeriodSavings(
   };
 
   return {
-    summary: { from, to, totals, daysWithData, avgDaily, costs, payback, breakeven },
+    summary: { from, to, totals, sold, soldPricePerKwhChf, daysWithData, avgDaily, costs, payback, breakeven },
     cumulative,
   };
 }

@@ -41,7 +41,9 @@ export type RateResolver = (kind: TariffKind, instantIso: string) => number | nu
  * Surcharges of the same kind covering that instant are then added on top —
  * a Herkunftsnachweis or Mindestvergütungsprämie is money received per
  * exported kWh *in addition to* the feed-in price, whichever source it came
- * from. Unlike periods they are allowed to overlap each other, so every match
+ * from, and only within its own dates. The neighbour-sale rate is the
+ * exception: it is the price agreed with the participants, and nothing is
+ * added to it. Unlike periods they are allowed to overlap each other, so every match
  * is summed rather than one being picked.
  *
  * Returns null when nothing prices the instant: no period covers it, or a
@@ -66,6 +68,9 @@ export function makeRateResolver(
         ? (dynamicByKindAndTs.get(`${kind}|${instantIso}`) ?? period.rateChfPerKwh)
         : period.rateChfPerKwh;
     if (base == null) return null;
+    // The agreed price, exactly as invoiced: no surcharge applies to it, even
+    // one stored before the form refused them.
+    if (kind === "neighbor_sell") return base;
 
     const surchargeSum = surcharges
       .filter((s) => s.kind === kind && instantIso >= s.startTs && instantIso < s.endTs)

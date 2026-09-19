@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { savingsDayQuerySchema, savingsQuerySchema } from "@energy-manager/shared";
-import { getDailySavings, getSavingsDay, getSavingsSummary } from "./service.js";
+import { dateRangeQuerySchema, savingsDayQuerySchema, savingsQuerySchema } from "@energy-manager/shared";
+import { getDailySavings, getNeighbourSales, getSavingsDay, getSavingsSummary } from "./service.js";
 
 export async function savingsRoutes(app: FastifyInstance) {
   // `granularity=monthly` returns one row per calendar month instead of per
@@ -55,6 +55,18 @@ export async function savingsRoutes(app: FastifyInstance) {
       const { from, to, granularity } = parsed.data;
       const { cumulative } = await getSavingsSummary(req.params.siteId, from, to, granularity);
       return cumulative;
+    },
+  );
+
+  // Per participant: what selling to them earned against exporting instead.
+  app.get<{ Params: { siteId: string }; Querystring: Record<string, string> }>(
+    "/api/sites/:siteId/savings/neighbours",
+    async (req, reply) => {
+      const parsed = dateRangeQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "invalid_query", issues: parsed.error.issues });
+      }
+      return getNeighbourSales(req.params.siteId, parsed.data.from, parsed.data.to);
     },
   );
 }

@@ -239,7 +239,7 @@ export const de: Record<keyof typeof en, string> = {
 
   "tariff.surcharges": "Zuschläge",
   "tariff.surchargesNote":
-    "Additive Bestandteile pro kWh, die auf den Tarif einer Periode aufgeschlagen werden — etwa ein Herkunftsnachweis oder eine Mindestvergütungsprämie zusätzlich zum Rücklieferungstarif. Anders als die Perioden oben dürfen sich Zuschläge überschneiden; jeder passende wird zum Grundtarif addiert.",
+    "Additive Bestandteile pro kWh, die auf den Tarif einer Periode aufgeschlagen werden — etwa ein Herkunftsnachweis oder eine Mindestvergütungsprämie zusätzlich zum Rücklieferungstarif, jeweils nur zwischen eigenem Beginn und Ende. Anders als die Perioden oben dürfen sich Zuschläge überschneiden; jeder passende wird zum Grundtarif addiert. Der Tarif für den Verkauf an Teilnehmer erhält keinen: Er ist der mit ihnen vereinbarte Preis.",
 
   // ---- Import readings ---------------------------------------------------
   "readings.title": "Messwerte importieren",
@@ -423,11 +423,21 @@ export const de: Record<keyof typeof en, string> = {
   "dash.units.period": "Perioden",
 
   "dash.kpi": "Kennzahlen",
+  "dash.soldPrice": "Durchschnittspreis pro verkaufte kWh",
+  "dash.soldPriceSub": "{kwh} kWh aus dem Haus · Netz {grid} · Teilnehmer {local}",
+  "dash.soldPriceHint": "Rücklieferungs- und Teilnehmerertrag geteilt durch die vergüteten kWh, jede zum Tarif ihrer Viertelstunde",
+  "dash.soldUnpriced": "{kwh} kWh ohne Tarif, nicht berücksichtigt",
+  "dash.neighbours": "Verkauf an Teilnehmer",
+  "dash.neighboursNote": "Was jeder Teilnehmer für den bezogenen Solarstrom bezahlt hat, verglichen mit dem, was dieselbe Energie bei Einspeisung ins Netz zum Rücklieferungstarif der jeweiligen Viertelstunde eingebracht hätte. Die Differenz ist der effektive Gewinn des lokalen Verkaufs.",
+  "dash.nb.participant": "Teilnehmer",
+  "dash.nb.revenue": "Verkauf an Teilnehmer",
+  "dash.nb.export": "Bei Einspeisung",
+  "dash.nb.gain": "Effektiver Gewinn",
+  "dash.nb.gainPerKwh": "Gewinn pro kWh",
+  "dash.nb.none": "In diesem Zeitraum kein Verkauf an Teilnehmer.",
+  "dash.nb.unpriced": "{kwh} kWh wurden ohne erfassten Rücklieferungs- oder Teilnehmertarif verkauft: Sie zählen zum Ertrag, aber nicht zum Vergleich.",
   "dash.withBatteryTotal": "Gesamtersparnis — mit Batterie",
   "dash.noBatteryTotal": "Gesamtersparnis — ohne Batterie",
-  "dash.batteryOnly": "Ersparnis nur durch die Batterie",
-  "dash.batteryOnlyHint":
-    "gegenüber demselben Zeitraum ohne Batterie — ohne Berücksichtigung der Zyklusverluste",
   "dash.batteryRevenue": "Ertrag der Batterie",
   "dash.batteryRevenueHint":
     "Wert der Entladung abzüglich der Ladekosten — die zutreffendere Zahl",

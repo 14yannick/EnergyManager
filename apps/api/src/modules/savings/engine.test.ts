@@ -10,6 +10,7 @@ import {
   chargeAcEquivalentKwh,
   computeBatteryRevenue,
   computeDirectUseKwh,
+  energyLeftHouseKwh,
   computeSavingsFromInputs,
   summarizeMonthlySavings,
   summarizeOverallSavings,
@@ -845,5 +846,105 @@ describe("computeBatteryRevenue — conversion loss on charging", () => {
     // been exported; export beyond it must have come from the battery.
     const r = computeBatteryRevenue({ ...base, exportedKwh: 53 });
     expect(r.dischargeExportedKwh).toBeCloseTo(3, 10);
+  });
+});
+
+describe("price per kWh sold", () => {
+  const costs = { battery: 4000, solar: 12000, total: 16000 };
+  // One interval selling to the grid and to participants, at round rates.
+  const sale = (gridKwh: number, feedIn: number | null, localKwh: number, neighbourRate: number | null) =>
+    computeSavingsFromInputs({
+      date: "2026-06-01",
+      producedKwh: gridKwh + localKwh + 5,
+      directUseKwh: 5,
+      batteryChargeKwh: 0,
+      batteryDischargeKwh: 0,
+      exportedKwh: gridKwh,
+      exportLocalKwh: gridKwh + localKwh,
+      neighborConsumptionKwh: localKwh,
+      purchaseRateChfPerKwh: 0.3,
+      sellRateChfPerKwh: feedIn,
+      neighborSellRateChfPerKwh: neighbourRate,
+    });
+  const summarize = (rows: DailySavings[]) => summarizeSavings(rows, costs, "2026-06-01", "2026-06-30").summary;
+
+  it("is the revenue of grid export and neighbour sales over the kWh they were paid for", () => {
+    const s = summarize([sale(30, 0.08, 10, 0.2), sale(20, 0.02, 5, 0.2)]);
+    expect(s.sold).toEqual({
+      gridKwh: 50,
+      gridChf: expect.closeTo(30 * 0.08 + 20 * 0.02, 10),
+      neighbourKwh: 15,
+      neighbourChf: expect.closeTo(15 * 0.2, 10),
+      unpricedKwh: 0,
+    });
+    expect(s.soldPricePerKwhChf).toBeCloseTo((30 * 0.08 + 20 * 0.02 + 15 * 0.2) / 65, 10);
+  });
+
+  it("lies between the grid price and the neighbour price it averages", () => {
+    const s = summarize([sale(30, 0.06, 10, 0.2)]);
+    expect(s.soldPricePerKwhChf!).toBeGreaterThan(0.06);
+    expect(s.soldPricePerKwhChf!).toBeLessThan(0.2);
+  });
+
+  it("does not let energy sold with no rate read as sold for free", () => {
+    const priced = sale(30, 0.08, 10, 0.2);
+    const alone = summarize([priced]).soldPricePerKwhChf;
+    // The same sales again, in intervals nobody had set a rate for.
+    const withGap = summarize([priced, sale(30, null, 10, null)]);
+    expect(withGap.soldPricePerKwhChf).toBeCloseTo(alone!, 10);
+    // Left out of the price, but still accounted for.
+    expect(withGap.sold.unpricedKwh).toBeCloseTo(40, 10);
+    expect(summarize([sale(30, null, 10, null)]).soldPricePerKwhChf).toBeNull();
+  });
+
+  it("takes a negative feed-in price as the loss it was", () => {
+    const s = summarize([sale(10, -0.05, 0, null)]);
+    expect(s.soldPricePerKwhChf).toBeCloseTo(-0.05, 10);
+  });
+});
+
+describe("energy sold to participants is counted once", () => {
+  // One interval as the service builds it: direct use measured against
+  // everything that left the house, of which participants took a share.
+  const interval = (gridKwh: number, participantsKwh: number) => {
+    const producedKwh = 100;
+    const leftHouse = energyLeftHouseKwh(gridKwh, gridKwh + participantsKwh);
+    return computeSavingsFromInputs({
+      date: "2027-02-01",
+      producedKwh,
+      directUseKwh: computeDirectUseKwh({ producedKwh, exportedKwh: leftHouse }),
+      batteryChargeKwh: 0,
+      batteryDischargeKwh: 0,
+      exportedKwh: gridKwh,
+      exportLocalKwh: leftHouse,
+      neighborConsumptionKwh: participantsKwh,
+      purchaseRateChfPerKwh: 0.25,
+      sellRateChfPerKwh: 0.08,
+      neighborSellRateChfPerKwh: 0.14,
+    });
+  };
+
+  it("splits production into used at home, sold to participants and exported — each kWh once", () => {
+    const row = interval(25, 15);
+    expect(row.directUseKwh + row.neighborConsumptionKwh + row.exportedKwh).toBeCloseTo(row.producedKwh, 10);
+    expect(row.savingsWithBatteryChf).toBeCloseTo(60 * 0.25 + 25 * 0.08 + 15 * 0.14, 10);
+  });
+
+  it("values a kWh moved from the grid to a participant at the difference of those two prices only", () => {
+    // The same energy left the house either way; only its buyer changed.
+    const delta = interval(24, 16).savingsWithBatteryChf - interval(25, 15).savingsWithBatteryChf;
+    expect(delta).toBeCloseTo(0.14 - 0.08, 10);
+  });
+
+  it("leaves battery-only savings untouched: participants' sales are in both scenarios", () => {
+    const row = interval(25, 15);
+    expect(row.savingsWithBatteryChf - row.savingsWithoutBatteryChf).toBeCloseTo(row.batteryOnlySavingsChf, 10);
+    expect(row.batteryOnlySavingsChf).toBeCloseTo(interval(40, 0).batteryOnlySavingsChf, 10);
+  });
+
+  it("takes grid export as what left the house only where there is no export_local reading", () => {
+    expect(energyLeftHouseKwh(25, 40)).toBe(40);
+    expect(energyLeftHouseKwh(25, 0)).toBe(0);
+    expect(energyLeftHouseKwh(25, null)).toBe(25);
   });
 });

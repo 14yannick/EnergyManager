@@ -54,6 +54,7 @@ describe("route policy", () => {
       "/api/sites/:siteId/savings/daily",
       "/api/sites/:siteId/savings/summary",
       "/api/sites/:siteId/savings/cumulative",
+      "/api/sites/:siteId/savings/neighbours", // every participant, and the feed-in rates
       "/api/sites/:siteId/readings",
       "/api/sites/:siteId/readings/export.xlsx",
       "/api/sites/:siteId/cost-items",

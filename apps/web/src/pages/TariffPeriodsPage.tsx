@@ -117,11 +117,14 @@ export function TariffPeriodsPage() {
       >
         <Field label={t("tariff.kind")}>
           <select {...register("kind")} className="input">
-            {Object.entries(KIND_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {t(label)}
-              </option>
-            ))}
+            {/* No neighbour sale: that rate is the agreed price, with nothing on top. */}
+            {Object.entries(KIND_LABELS)
+              .filter(([value]) => value !== "neighbor_sell")
+              .map(([value, label]) => (
+                <option key={value} value={value}>
+                  {t(label)}
+                </option>
+              ))}
           </select>
         </Field>
         <Field label={t("tariff.start")}>
