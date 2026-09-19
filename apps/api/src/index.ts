@@ -1,5 +1,5 @@
 import { buildApp } from "./app.js";
-import { adminEmails, env, viewerEmails } from "./config/env.js";
+import { adminEmails, env } from "./config/env.js";
 import { syncDynamicTariffs } from "./modules/dynamicTariffs/service.js";
 import { syncHomeAssistant } from "./modules/homeAssistant/service.js";
 import { db } from "./db/client.js";
@@ -19,8 +19,13 @@ try {
 // not take a request to /api/me to find out.
 if (env.AUTH_ENABLED) {
   app.log.info(
-    { admins: adminEmails.size, viewers: viewerEmails.size, team: env.CF_ACCESS_TEAM_DOMAIN },
+    { admins: adminEmails.size, team: env.CF_ACCESS_TEAM_DOMAIN },
     "authentication enabled (Cloudflare Access)",
+  );
+} else if (env.AUTH_DEV_AS) {
+  app.log.warn(
+    { as: env.AUTH_DEV_AS },
+    "AUTH_DEV_AS is set — every request acts as this address. Local preview only.",
   );
 } else {
   app.log.warn(

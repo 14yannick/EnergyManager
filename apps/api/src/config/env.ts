@@ -64,10 +64,33 @@ const envSchema = z.object({
    */
   CF_ACCESS_AUD: z.string().optional(),
   AUTH_ADMIN_EMAILS: z.string().default(""),
-  AUTH_VIEWER_EMAILS: z.string().default(""),
+  /**
+   * Local development only: with auth off, treat every request as this
+   * address instead of as an anonymous admin, resolved exactly as a signed-in
+   * user would be — so a participant's email shows their view, scoped by the
+   * server, without Cloudflare in the loop. Refused alongside AUTH_ENABLED.
+   *
+   * Read-only access has no list of its own: a party with the viewer role
+   * grants it, and this is how to preview it.
+   */
+  AUTH_DEV_AS: z
+    .string()
+    .optional()
+    .transform((v) => v?.trim().toLowerCase() || undefined)
+    .refine((v) => v === undefined || /^[^@\s]+@[^@\s]+$/.test(v), {
+      message: "AUTH_DEV_AS must be an email address",
+    }),
 });
 
 const parsed = envSchema.parse(process.env);
+
+// A simulated identity has no business next to real authentication: set by
+// mistake on a server, it would make every visitor that person.
+if (parsed.AUTH_ENABLED && parsed.AUTH_DEV_AS) {
+  throw new Error(
+    "AUTH_DEV_AS is for local development with AUTH_ENABLED=false. Remove it when authentication is on.",
+  );
+}
 
 // Half-configured auth is worse than none: it fails open on every request
 // while looking enabled. Refuse to start instead.
@@ -97,4 +120,3 @@ function emailSet(raw: string): ReadonlySet<string> {
 
 export const env = parsed;
 export const adminEmails = emailSet(parsed.AUTH_ADMIN_EMAILS);
-export const viewerEmails = emailSet(parsed.AUTH_VIEWER_EMAILS);

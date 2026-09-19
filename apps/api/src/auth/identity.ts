@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { AuthIdentity, Role } from "@energy-manager/shared";
-import { adminEmails, env, viewerEmails } from "../config/env.js";
+import { adminEmails, env } from "../config/env.js";
 import { db } from "../db/client.js";
 import { parties } from "../db/schema/index.js";
 import { AccessTokenError, verifyAccessJwt } from "./cfAccess.js";
@@ -12,6 +12,7 @@ export const ANONYMOUS_ADMIN: AuthIdentity = {
   partyId: null,
   partyName: null,
   siteId: null,
+  simulated: false,
 };
 
 export class UnauthenticatedError extends Error {}
@@ -45,9 +46,6 @@ export async function roleForEmail(
 ): Promise<{ role: Role; partyId: string | null; partyName: string | null; siteId: string | null }> {
   if (adminEmails.has(email)) {
     return { role: "admin", partyId: null, partyName: null, siteId: null };
-  }
-  if (viewerEmails.has(email)) {
-    return { role: "viewer", partyId: null, partyName: null, siteId: null };
   }
 
   // `parties.emails` is a text[]; compare case-insensitively against each
@@ -93,7 +91,16 @@ export async function roleForEmail(
 export async function resolveIdentity(
   headers: Record<string, string | string[] | undefined>,
 ): Promise<AuthIdentity> {
-  if (!env.AUTH_ENABLED) return ANONYMOUS_ADMIN;
+  if (!env.AUTH_ENABLED) {
+    // Local preview: the configured address, resolved as a real sign-in.
+    // Headers are ignored either way — with auth off nothing in them is
+    // verified, so nothing in them may choose who the caller is.
+    if (env.AUTH_DEV_AS) {
+      const resolved = await roleForEmail(env.AUTH_DEV_AS);
+      return { ...resolved, email: env.AUTH_DEV_AS, simulated: true };
+    }
+    return ANONYMOUS_ADMIN;
+  }
 
   const raw = headers["cf-access-jwt-assertion"];
   const token = Array.isArray(raw) ? raw[0] : raw;
@@ -110,5 +117,5 @@ export async function resolveIdentity(
   }
 
   const { role, partyId, partyName, siteId } = await roleForEmail(claims.email);
-  return { role, email: claims.email, partyId, partyName, siteId };
+  return { role, email: claims.email, partyId, partyName, siteId, simulated: false };
 }

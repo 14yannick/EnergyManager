@@ -16,6 +16,7 @@ export const fr: Record<keyof typeof en, string> = {
   "nav.billing": "Facturation",
   "nav.consumption": "Consommation",
   "session.signOut": "Se déconnecter",
+  "session.preview": "aperçu local",
   "session.noAccess": "aucun accès",
   "session.language": "Langue",
   "role.admin": "administrateur",
@@ -370,6 +371,8 @@ export const fr: Record<keyof typeof en, string> = {
   "invoice.days": "{count} jours",
   "billing.intro":
     "Saisissez la facture du gestionnaire de réseau position par position, puis générez une facture pour chaque participant du RCP. Les montants sont TVA incluse : la TVA du fournisseur est répercutée telle quelle, aucune TVA n'est ajoutée.",
+  "billing.introParticipant":
+    "Les tarifs du gestionnaire de réseau sur lesquels repose votre facture, et votre facture pour chaque période. Montants TVA incluse : la TVA du fournisseur est répercutée telle quelle, aucune TVA n'est ajoutée.",
 
   // ---- QR-bill -----------------------------------------------------------
   "qr.noBill":

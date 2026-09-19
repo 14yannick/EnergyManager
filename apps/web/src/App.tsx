@@ -72,12 +72,20 @@ function SessionBadge({ session }: { session: SessionState }) {
       >
         {label}
       </span>
-      <a
-        href={logoutHref()}
-        className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
-      >
-        {t("session.signOut")}
-      </a>
+      {session.kind === "active" && session.identity.simulated ? (
+        // AUTH_DEV_AS: no Cloudflare session exists to leave, and the logout
+        // path would only 404 locally. Say what this is instead.
+        <span className="shrink-0 whitespace-nowrap rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-900">
+          {t("session.preview")}
+        </span>
+      ) : (
+        <a
+          href={logoutHref()}
+          className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
+        >
+          {t("session.signOut")}
+        </a>
+      )}
     </div>
   );
 }
@@ -147,8 +155,8 @@ function NoAccess({ email, status }: { email: string | null; status: number }) {
 export function App() {
   const session = useSession();
   const t = useT();
-  // A participant sees their own consumption and nothing else: every other
-  // page reads site-wide data the API refuses them.
+  // A participant sees their own consumption and their own invoices, nothing
+  // else: every other page reads site-wide data the API refuses them.
   const participant = session.kind === "active" && session.identity.role === "participant";
 
   return (
@@ -174,9 +182,14 @@ export function App() {
             }`}
           >
             {participant ? (
-              <NavLink to="/" end className={navLinkClass}>
-                {t("nav.consumption")}
-              </NavLink>
+              <>
+                <NavLink to="/" end className={navLinkClass}>
+                  {t("nav.consumption")}
+                </NavLink>
+                <NavLink to="/billing" className={navLinkClass}>
+                  {t("nav.billing")}
+                </NavLink>
+              </>
             ) : (
               <>
                 <NavLink to="/" end className={navLinkClass}>
@@ -211,11 +224,17 @@ export function App() {
       </header>
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 lg:px-8">
-        {session.kind === "rejected" ? (
+        {session.kind === "loading" ? (
+          // Nothing until the role is known: rendering the admin routes in the
+          // meantime had a participant's browser request the site list, which
+          // the API refuses them.
+          <p className="text-slate-500">{t("common.loading")}</p>
+        ) : session.kind === "rejected" ? (
           <NoAccess email={session.email} status={session.status} />
         ) : participant ? (
           <Routes>
             <Route path="/" element={<PartyDashboardPage />} />
+            <Route path="/billing" element={<BillingPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         ) : (

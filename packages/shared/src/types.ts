@@ -276,6 +276,45 @@ export interface ParticipantInvoice {
   comparison: DirectBillingComparison;
 }
 
+/** A postal address as a QR-bill prints it. */
+export interface PostalAddress {
+  name: string;
+  address: string | null;
+  buildingNumber: string | null;
+  zip: string | null;
+  city: string | null;
+  country: string;
+}
+
+/** Who an invoice is payable to: the party administering the RCP. */
+export interface InvoicePayee extends PostalAddress {
+  partyId: string;
+  iban: string | null;
+}
+
+/** An invoice as issued: the figures, plus the address it goes to. */
+export interface IssuedInvoice extends ParticipantInvoice {
+  payer: PostalAddress;
+}
+
+/**
+ * One run of the invoices for a period.
+ *
+ * Carries the payee and each payer itself, so the page printing the QR-bills
+ * never needs the party list — which a participant may not see, since it holds
+ * every neighbour's address and email.
+ */
+export interface InvoiceRun {
+  from: string;
+  to: string;
+  days: number;
+  participantCount: number;
+  localRateChf: number | null;
+  payee: InvoicePayee | null;
+  invoices: IssuedInvoice[];
+  warnings: string[];
+}
+
 export interface ReadingsImportResult {
   inserted: number;
   updated: number;
@@ -427,6 +466,11 @@ export interface AuthIdentity {
   partyName: string | null;
   /** The site this identity belongs to. Null for admin/viewer, who see all. */
   siteId: string | null;
+  /**
+   * A local preview (AUTH_DEV_AS) rather than a real sign-in: there is no
+   * Cloudflare session behind it to sign out of.
+   */
+  simulated: boolean;
 }
 
 /**

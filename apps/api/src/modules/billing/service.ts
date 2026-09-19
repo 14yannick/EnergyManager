@@ -2,7 +2,8 @@ import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import type {
   GridTariffPosition,
   GridTariffPositionInput,
-  ParticipantInvoice,
+  InvoiceRun,
+  PostalAddress,
 } from "@energy-manager/shared";
 import { findRateForInstant } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
@@ -100,14 +101,15 @@ export async function deletePosition(id: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-export interface InvoiceRunResult {
-  from: string;
-  to: string;
-  days: number;
-  participantCount: number;
-  localRateChf: number | null;
-  invoices: ParticipantInvoice[];
-  warnings: string[];
+function postalAddressOf(party: typeof parties.$inferSelect): PostalAddress {
+  return {
+    name: party.name,
+    address: party.address,
+    buildingNumber: party.buildingNumber,
+    zip: party.zip,
+    city: party.city,
+    country: party.country,
+  };
 }
 
 /**
@@ -122,7 +124,7 @@ export async function runInvoices(
   siteId: string,
   from: string,
   to: string,
-): Promise<InvoiceRunResult> {
+): Promise<InvoiceRun> {
   const days = inclusiveDays(from, to);
   const warnings: string[] = [];
   const fromBound = sql`(${from}::date AT TIME ZONE 'Europe/Zurich')`;
@@ -210,7 +212,7 @@ export async function runInvoices(
       gridKwh: usage.grid,
       localKwh: usage.local,
     };
-    return buildParticipantInvoice({
+    const invoice = buildParticipantInvoice({
       from,
       to,
       days,
@@ -219,7 +221,14 @@ export async function runInvoices(
       localRateChf,
       usage: participantUsage,
     });
+    return { ...invoice, payer: postalAddressOf(party) };
   });
+
+  // Whoever administers the RCP is the QR-bill's payee, whether or not they
+  // are also billed by it. Their IBAN and address are printed on every bill,
+  // so handing them to a participant discloses nothing the bill doesn't.
+  const admin = participants.find((p) => p.role === "rcp_admin" || p.role === "rcp_admin_only");
+  const payee = admin ? { ...postalAddressOf(admin), partyId: admin.id, iban: admin.iban } : null;
 
   if (billable.length === 0) {
     warnings.push("No participants defined yet — add the neighbours sharing your connection.");
@@ -227,5 +236,5 @@ export async function runInvoices(
     warnings.push("No per-participant consumption recorded for this period.");
   }
 
-  return { from, to, days, participantCount, localRateChf, invoices, warnings };
+  return { from, to, days, participantCount, localRateChf, payee, invoices, warnings };
 }

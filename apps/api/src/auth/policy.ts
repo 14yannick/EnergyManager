@@ -57,7 +57,11 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   "/api/home-assistant/entities/:id": { DELETE: ADMIN },
   "/api/sites/:siteId/home-assistant/sync": { POST: ADMIN },
 
-  "/api/sites/:siteId/billing/positions": { GET: READ, POST: ADMIN },
+  // Open to a participant: these are the grid provider's own published rates,
+  // every one of which already appears as a line on their invoice. The
+  // feed-in and neighbour-sale tariffs, which would reveal the owner's
+  // revenue, live under tariff-periods and stay closed.
+  "/api/sites/:siteId/billing/positions": { GET: PARTICIPANT_READ, POST: ADMIN },
   "/api/billing/positions/:id": { PATCH: ADMIN, DELETE: ADMIN },
   // Filtered to the caller's own party for `participant` — see billing/routes.
   "/api/sites/:siteId/billing/invoices": { GET: PARTICIPANT_READ },

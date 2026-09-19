@@ -32,8 +32,9 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
   costs (battery vs. solar, subsidies, tax reductions), the production start date, and
   the battery's round-trip conversion loss
 - **Role-based access** via Cloudflare Access — admin, read-only, and a
-  participant role scoped to a single neighbour's own consumption and invoice.
-  Off by default; see [Access control](#access-control)
+  participant role: a neighbour sees the rates they are billed at, but only
+  their own consumption and invoices. Off by default; see
+  [Access control](#access-control)
 - **French, German and English**, switched from the header and remembered per
   browser. A new browser starts in its own language when we speak it, French
   otherwise; see [Language](#language)
@@ -102,25 +103,24 @@ Three roles, resolved from the verified address:
 |---|---|
 | `admin` | Everything, read and write. |
 | `viewer` | Everything, read only — no writes anywhere. |
-| `participant` | Only their own consumption and invoice, plus site-level community totals (PV produced, size of the local pool). Never another participant's figures, never your production, battery, export, tariffs or investment data. |
+| `participant` | **Rates: yes. Consumption: only their own.** Two pages — **Consumption** (their own, split local/grid, with what the RCP saved them) and **Billing** (their own invoices, plus the rates those invoices are built from: every grid provider tariff position, and the RCP rate for locally produced energy). Never another participant's consumption or invoice, and never your production, battery, grid export, feed-in tariff or investment data. |
 
 The API is the enforcement point — every route is denied by default and listed
 explicitly in `apps/api/src/auth/policy.ts`. The web app follows it where a
-page would otherwise offer a control that can only fail: **Settings** renders
-read-only for anyone who is not an admin, since every write on it (production
-start, battery loss, investment, Home Assistant mapping and sync) is
-admin-only.
+page would otherwise offer a control that can only fail: **Settings** and the
+billing tariff positions render read-only for anyone who is not an admin, and
+a participant's navigation holds only the two pages they can use.
 
 Addresses are matched in that order, and the first match wins:
 
 1. `AUTH_ADMIN_EMAILS` on the api container
-2. `AUTH_VIEWER_EMAILS` on the api container
-3. an address on a party's `emails` — the same list the invoices go to, so
+2. an address on a party's `emails` — the same list the invoices go to, so
    there is nothing extra to maintain. The party's own role decides what it
-   grants
-4. anything else gets a 403
+   grants: read-only access is a party with the `viewer` role, not a separate
+   list of addresses
+3. anything else gets a 403
 
-An address Cloudflare authenticated but none of those three recognise gets a
+An address Cloudflare authenticated but neither of those recognises gets a
 403 from every endpoint, including `/api/me`. The app shows it who it is
 signed in as and a sign-out button, rather than a dashboard full of failed
 requests — otherwise somebody added to Access but not yet to a party is stuck
@@ -143,7 +143,7 @@ instead sit outside the RCP entirely.
 
 | Role | App access | Invoiced | Counts towards shared costs |
 |---|---|---|---|
-| `rcp_party` *(default)* | participant — own figures only | yes | yes |
+| `rcp_party` *(default)* | participant — the rates, and only their own consumption | yes | yes |
 | `rcp_admin` | admin | yes | yes |
 | `rcp_admin_only` | admin | no | no |
 | `viewer` | viewer — reads everything | no | no |
@@ -171,6 +171,25 @@ through `app.register()`. Fastify encapsulates hooks added inside a registered
 plugin, so registering it would have left every sibling route module unguarded
 with nothing to indicate it.
 
+### Previewing a role locally
+
+With `AUTH_ENABLED=false` every request is an anonymous admin. To see the app
+as somebody else, set `AUTH_DEV_AS` to an address on one of the parties and
+restart the api:
+
+```sh
+AUTH_DEV_AS=neighbour@example.com
+```
+
+Every request is then resolved exactly as that person's Cloudflare sign-in
+would be — a participant gets their two pages and the API scopes every answer
+to their party, a viewer party gets read-only access. An address no party
+carries gets the same 403 a stranger would. The header shows *local preview*
+instead of a sign-out button. Clear the variable to be admin again.
+
+The api refuses to start with `AUTH_DEV_AS` and `AUTH_ENABLED=true` together:
+on a real deployment it would make every visitor that person.
+
 ### Turning it on
 
 1. **Put the app behind a Cloudflare Access application** covering the whole
@@ -186,7 +205,6 @@ with nothing to indicate it.
    | `CF_ACCESS_TEAM_DOMAIN` | `yourteam.cloudflareaccess.com`, no scheme |
    | `CF_ACCESS_AUD` | the AUD tag from step 2 |
    | `AUTH_ADMIN_EMAILS` | your address; comma- or space-separated |
-   | `AUTH_VIEWER_EMAILS` | optional, same format |
 
    The app **refuses to start** on a partial configuration. Half-enabled auth
    would otherwise fail open on every request while looking enabled, and a

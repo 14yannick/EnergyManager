@@ -6,20 +6,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * looking set.
  */
 const BASE = { DATABASE_URL: "postgres://x:x@127.0.0.1:1/x" };
+const AUTH_KEYS = ["AUTH_ENABLED", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "AUTH_ADMIN_EMAILS", "AUTH_DEV_AS"];
 
 async function loadEnv(overrides: Record<string, string> = {}) {
   vi.resetModules();
-  for (const k of ["AUTH_ENABLED", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "AUTH_ADMIN_EMAILS"]) {
-    delete process.env[k];
-  }
+  for (const k of AUTH_KEYS) delete process.env[k];
   Object.assign(process.env, BASE, overrides);
   return import("./env.js");
 }
 
 afterEach(() => {
-  for (const k of ["AUTH_ENABLED", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "AUTH_ADMIN_EMAILS"]) {
-    delete process.env[k];
-  }
+  for (const k of AUTH_KEYS) delete process.env[k];
 });
 
 const ENABLED = {
@@ -53,15 +50,32 @@ describe("boolean env flags", () => {
     expect(env.HA_SYNC_ENABLED).toBe(true);
   });
 
-  it("parses the admin and viewer lists case-insensitively", async () => {
-    const { adminEmails, viewerEmails } = await loadEnv({
+  it("parses the admin list case-insensitively", async () => {
+    const { adminEmails } = await loadEnv({
       AUTH_ENABLED: "true",
       ...ENABLED,
       AUTH_ADMIN_EMAILS: "Owner@Example.com, second@example.com",
-      AUTH_VIEWER_EMAILS: "Guest@Example.COM",
     });
     expect(adminEmails.has("owner@example.com")).toBe(true);
     expect(adminEmails.has("second@example.com")).toBe(true);
-    expect(viewerEmails.has("guest@example.com")).toBe(true);
+  });
+});
+
+describe("AUTH_DEV_AS", () => {
+  it("normalises the address, and reads blank as unset", async () => {
+    expect((await loadEnv({ AUTH_DEV_AS: "  Neighbour@Example.COM " })).env.AUTH_DEV_AS).toBe(
+      "neighbour@example.com",
+    );
+    expect((await loadEnv({ AUTH_DEV_AS: "" })).env.AUTH_DEV_AS).toBeUndefined();
+  });
+
+  it("refuses to start next to real authentication", async () => {
+    await expect(
+      loadEnv({ AUTH_ENABLED: "true", ...ENABLED, AUTH_DEV_AS: "neighbour@example.com" }),
+    ).rejects.toThrow(/AUTH_DEV_AS/);
+  });
+
+  it("refuses something that is not an address", async () => {
+    await expect(loadEnv({ AUTH_DEV_AS: "neighbour" })).rejects.toThrow(/AUTH_DEV_AS/);
   });
 });

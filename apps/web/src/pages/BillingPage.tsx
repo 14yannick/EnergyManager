@@ -7,14 +7,14 @@ import type {
   BillingRange,
   GridTariffPosition,
   InvoiceLine,
-  ParticipantInvoice,
-  Party,
-  Site,
+  InvoicePayee,
+  IssuedInvoice,
 } from "@energy-manager/shared";
 import { billingPeriodLabel, billingPeriodRange, toDateString } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCanEdit, useIdentity } from "../lib/useIdentity";
 import { QrBill } from "../components/QrBill";
 
 const CATEGORY_LABELS: Record<BillingCategory, MessageKey> = {
@@ -77,21 +77,31 @@ function todayLocal(): string {
 }
 
 export function BillingPage() {
-  const { site } = useDefaultSite();
   const t = useT();
-  if (!site) return <p className="text-slate-500">{t("common.loading")}</p>;
+  const identity = useIdentity();
+  const isParticipant = identity.data?.role === "participant";
+  // A participant learns their site from /api/me: the site list is closed to
+  // them, since a site row carries the owner's investment figures.
+  const { site } = useDefaultSite({ enabled: identity.isSuccess && !isParticipant });
+  const siteId = isParticipant ? identity.data?.siteId : site?.id;
+  if (!siteId) return <p className="text-slate-500">{t("common.loading")}</p>;
 
   return (
     <div className="space-y-6">
       <div className="print:hidden">
         <h1 className="text-xl font-semibold text-slate-900">{t("billing.title")}</h1>
-        <p className="max-w-4xl text-sm text-slate-500">{t("billing.intro")}</p>
+        <p className="max-w-4xl text-sm text-slate-500">
+          {isParticipant ? t("billing.introParticipant") : t("billing.intro")}
+        </p>
       </div>
-      <PositionsSection siteId={site.id} />
-      <InvoiceSection site={site} />
+      <PositionsSection siteId={siteId} />
+      <InvoiceSection siteId={siteId} />
     </div>
   );
 }
+
+/** Per-kWh positions, whether levied on grid draw only or on all consumption. */
+const isPerKwhAllocation = (a: BillingAllocation) => a === "per_kwh" || a === "per_kwh_total";
 
 const EMPTY_POSITION = {
   category: "energie" as BillingCategory,
@@ -107,6 +117,9 @@ const EMPTY_POSITION = {
 function PositionsSection({ siteId }: { siteId: string }) {
   const t = useT();
   const queryClient = useQueryClient();
+  // Everyone else reads the positions — a participant to see what the grid
+  // provider charges — but only an admin may change them.
+  const { canEdit } = useCanEdit();
   const [draft, setDraft] = useState({ ...EMPTY_POSITION });
   const [error, setError] = useState<string | null>(null);
 
@@ -134,7 +147,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
   });
 
   const positions = positionsQuery.data ?? [];
-  const isPerKwh = draft.allocation === "per_kwh";
+  const isPerKwh = isPerKwhAllocation(draft.allocation);
 
   return (
     <div className="space-y-4 rounded-lg border bg-white p-4 print:hidden">
@@ -143,6 +156,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
         <p className="mt-1 max-w-4xl text-xs text-slate-500">{t("billing.positionsNote")}</p>
       </div>
 
+      {canEdit && (
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -224,6 +238,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
           {t("billing.addPosition")}
         </button>
       </form>
+      )}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {positions.length === 0 && (
@@ -251,7 +266,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
                   <th className="py-1 pr-3 font-medium">{t("billing.allocation")}</th>
                   <th className="py-1 pr-3 text-right font-medium">{t("billing.rate")}</th>
                   <th className="py-1 pr-3 font-medium">{t("billing.withoutRcp")}</th>
-                  <th className="py-1" />
+                  {canEdit && <th className="py-1" />}
                 </tr>
               </thead>
               <tbody>
@@ -261,21 +276,23 @@ function PositionsSection({ siteId }: { siteId: string }) {
                     <td className="py-1 pr-3 text-slate-900">{p.label}</td>
                     <td className="py-1 pr-3 text-slate-500">{t(ALLOCATION_LABELS[p.allocation])}</td>
                     <td className="py-1 pr-3 text-right tabular-nums">
-                      {p.allocation === "per_kwh"
+                      {isPerKwhAllocation(p.allocation)
                         ? `${(p.rateChf * 100).toFixed(2)} ${t("billing.centsPerKwh")}`
                         : `${chf(p.rateChf)} ${t("billing.perYear")}`}
                     </td>
                     <td className="py-1 pr-3 text-slate-500">
                       {p.countsInDirectBilling ? t("billing.yes") : t("billing.no")}
                     </td>
-                    <td className="py-1 text-right">
-                      <button
-                        onClick={() => deleteMutation.mutate(p.id)}
-                        className="text-slate-400 hover:text-red-600"
-                      >
-                        {t("common.delete")}
-                      </button>
-                    </td>
+                    {canEdit && (
+                      <td className="py-1 text-right">
+                        <button
+                          onClick={() => deleteMutation.mutate(p.id)}
+                          className="text-slate-400 hover:text-red-600"
+                        >
+                          {t("common.delete")}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -287,9 +304,8 @@ function PositionsSection({ siteId }: { siteId: string }) {
   );
 }
 
-function InvoiceSection({ site }: { site: Site }) {
+function InvoiceSection({ siteId }: { siteId: string }) {
   const { t, locale } = useI18n();
-  const siteId = site.id;
   // Billing is retrospective: you invoice a period once it has finished, so
   // the useful default is the previous one rather than the current, partial
   // one. Offset 0 is the period we are in, -1 the one before it.
@@ -321,16 +337,6 @@ function InvoiceSection({ site }: { site: Site }) {
     // 5 months.
     setOffset(-1);
   };
-
-  const partiesQuery = useQuery({
-    queryKey: ["parties", siteId],
-    queryFn: () => api.parties.list(siteId),
-  });
-  const parties: Party[] = partiesQuery.data ?? [];
-  const partyById = new Map(parties.map((p) => [p.id, p]));
-  // Whoever administers the RCP is the QR-bill's payee, whether or not they
-  // are also billed by it.
-  const operator = parties.find((p) => p.role === "rcp_admin" || p.role === "rcp_admin_only");
 
   const invoicesQuery = useQuery({
     queryKey: ["billing-invoices", siteId, range?.from, range?.to],
@@ -448,8 +454,7 @@ function InvoiceSection({ site }: { site: Site }) {
         <InvoiceDocument
           key={inv.partyId ?? inv.partyName}
           invoice={inv}
-          operator={operator}
-          party={inv.partyId ? partyById.get(inv.partyId) : undefined}
+          payee={result.payee}
         />
       ))}
     </div>
@@ -459,12 +464,10 @@ function InvoiceSection({ site }: { site: Site }) {
 /** Page one mirrors the provider's layout; page two is the VZEV comparison. */
 function InvoiceDocument({
   invoice,
-  operator,
-  party,
+  payee,
 }: {
-  invoice: ParticipantInvoice;
-  operator?: Party;
-  party?: Party;
+  invoice: IssuedInvoice;
+  payee: InvoicePayee | null;
 }) {
   const t = useT();
   const grouped = CATEGORY_ORDER.map((category) => ({
@@ -573,8 +576,8 @@ function InvoiceDocument({
           to the same account is meaningless. An `rcp_admin` still receives the
           invoice itself: they owe their share, they just settle it without a
           payment slip. */}
-      {!(operator && party && operator.id === party.id) && (
-        <QrBill operator={operator} invoice={invoice} party={party} />
+      {payee?.partyId !== invoice.partyId && (
+        <QrBill payee={payee} invoice={invoice} />
       )}
       </div>
     </>

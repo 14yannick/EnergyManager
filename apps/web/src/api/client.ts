@@ -8,7 +8,7 @@ import type {
   DynamicTariffRate,
   GridTariffPosition,
   GridTariffPositionInput,
-  ParticipantInvoice,
+  InvoiceRun,
   HaEntityMapping,
   HaEntityMappingInput,
   HaStatisticOption,
@@ -199,15 +199,7 @@ export const api = {
       }),
     removePosition: (id: string) => request<void>(`/billing/positions/${id}`, { method: "DELETE" }),
     invoices: (siteId: string, from: string, to: string) =>
-      request<{
-        from: string;
-        to: string;
-        days: number;
-        participantCount: number;
-        localRateChf: number | null;
-        invoices: ParticipantInvoice[];
-        warnings: string[];
-      }>(`/sites/${siteId}/billing/invoices?from=${from}&to=${to}`),
+      request<InvoiceRun>(`/sites/${siteId}/billing/invoices?from=${from}&to=${to}`),
   },
   /** Who the server thinks we are. `email: null` means auth is switched off. */
   me: () => request<AuthIdentity>("/me"),

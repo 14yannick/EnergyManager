@@ -42,6 +42,8 @@ describe("route policy", () => {
     expect(isAllowed("participant", "/api/me", "GET")).toBe(true);
     expect(isAllowed("participant", "/api/sites/:siteId/billing/invoices", "GET")).toBe(true);
     expect(isAllowed("participant", "/api/sites/:siteId/community/summary", "GET")).toBe(true);
+    // The provider's rates their invoice is built from — not the owner's tariffs.
+    expect(isAllowed("participant", "/api/sites/:siteId/billing/positions", "GET")).toBe(true);
   });
 
   it("keeps the owner's own figures away from a participant", () => {
@@ -57,7 +59,6 @@ describe("route policy", () => {
       "/api/sites/:siteId/cost-items",
       "/api/sites/:siteId/cost-items/summary",
       "/api/sites/:siteId/parties", // the other participants
-      "/api/sites/:siteId/billing/positions",
       "/api/sites/:siteId/tariff-periods",
       "/api/home-assistant/status",
       "/api/home-assistant/statistics",

@@ -16,6 +16,7 @@ export const en = {
   "nav.billing": "Billing",
   "nav.consumption": "Consumption",
   "session.signOut": "Sign out",
+  "session.preview": "local preview",
   "session.noAccess": "no access",
   "session.language": "Language",
   "role.admin": "admin",
@@ -362,6 +363,8 @@ export const en = {
   "invoice.days": "{count} days",
   "billing.intro":
     "Enter the grid operator's bill position by position, then generate an invoice for each RCP participant. Amounts include VAT: the supplier's VAT is passed through as is, no VAT is added.",
+  "billing.introParticipant":
+    "The grid operator's rates your invoice is built from, and your invoice for each period. Amounts include VAT: the supplier's VAT is passed through as is, no VAT is added.",
 
   // ---- QR-bill -----------------------------------------------------------
   "qr.noBill":

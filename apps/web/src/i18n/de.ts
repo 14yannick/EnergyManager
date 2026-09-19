@@ -21,6 +21,7 @@ export const de: Record<keyof typeof en, string> = {
   "nav.billing": "Fakturierung",
   "nav.consumption": "Verbrauch",
   "session.signOut": "Abmelden",
+  "session.preview": "lokale Vorschau",
   "session.noAccess": "kein Zugriff",
   "session.language": "Sprache",
   "role.admin": "Administrator",
@@ -376,6 +377,8 @@ export const de: Record<keyof typeof en, string> = {
   "invoice.days": "{count} Tage",
   "billing.intro":
     "Erfassen Sie die Rechnung des Netzbetreibers Position für Position und erstellen Sie anschliessend für jeden RCP-Teilnehmer eine Rechnung. Die Beträge verstehen sich inkl. MWST: Die MWST des Lieferanten wird unverändert weitergegeben, es kommt keine zusätzliche MWST hinzu.",
+  "billing.introParticipant":
+    "Die Tarife des Netzbetreibers, auf denen Ihre Rechnung beruht, und Ihre Rechnung für jede Periode. Beträge inkl. MWST: Die MWST des Lieferanten wird unverändert weitergegeben, es kommt keine MWST hinzu.",
 
   // ---- QR-bill -----------------------------------------------------------
   "qr.noBill":

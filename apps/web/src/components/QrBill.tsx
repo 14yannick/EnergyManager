@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ParticipantInvoice, Party } from "@energy-manager/shared";
+import type { InvoicePayee, IssuedInvoice } from "@energy-manager/shared";
 import { SwissQRBill } from "swissqrbill/svg";
 import type { Data } from "swissqrbill/types";
 import { calculateQRReferenceChecksum, calculateSCORReferenceChecksum, isQRIBAN } from "swissqrbill/utils";
@@ -39,20 +39,20 @@ export function buildReference(iban: string, from: string, partyReference: strin
 }
 
 /**
- * Everything the creditor half needs, taken from the party flagged as RCP
- * operator. Anything missing means no bill: a payment slip with half an
- * address cannot be paid, so printing nothing is the honest outcome.
+ * Everything the creditor half needs, taken from the party administering the
+ * RCP. Anything missing means no bill: a payment slip with half an address
+ * cannot be paid, so printing nothing is the honest outcome.
  */
-function creditorOf(operator: Party | undefined): Data["creditor"] | null {
-  if (!operator?.iban || !operator.address || !operator.zip || !operator.city) return null;
+function creditorOf(payee: InvoicePayee | null): Data["creditor"] | null {
+  if (!payee?.iban || !payee.address || !payee.zip || !payee.city) return null;
   return {
-    account: operator.iban,
-    address: operator.address,
-    buildingNumber: operator.buildingNumber ?? undefined,
-    city: operator.city,
-    country: operator.country || "CH",
-    name: operator.name,
-    zip: operator.zip,
+    account: payee.iban,
+    address: payee.address,
+    buildingNumber: payee.buildingNumber ?? undefined,
+    city: payee.city,
+    country: payee.country || "CH",
+    name: payee.name,
+    zip: payee.zip,
   };
 }
 
@@ -61,15 +61,16 @@ function creditorOf(operator: Party | undefined): Data["creditor"] | null {
  * legitimate variant of the bill, and the right one when we don't know where
  * somebody lives.
  */
-function debtorOf(invoice: ParticipantInvoice, party?: Party): Data["debtor"] | undefined {
-  if (!party?.address || !party.zip || !party.city) return undefined;
+function debtorOf(invoice: IssuedInvoice): Data["debtor"] | undefined {
+  const payer = invoice.payer;
+  if (!payer.address || !payer.zip || !payer.city) return undefined;
   return {
-    address: party.address,
-    buildingNumber: party.buildingNumber ?? undefined,
-    city: party.city,
-    country: party.country || "CH",
+    address: payer.address,
+    buildingNumber: payer.buildingNumber ?? undefined,
+    city: payer.city,
+    country: payer.country || "CH",
     name: invoice.partyName,
-    zip: party.zip,
+    zip: payer.zip,
   };
 }
 
@@ -77,20 +78,19 @@ function debtorOf(invoice: ParticipantInvoice, party?: Party): Data["debtor"] | 
 const QR_LANGUAGE = { fr: "FR", de: "DE", en: "EN" } as const;
 
 export interface QrBillProps {
-  /** The party flagged as RCP operator — the payee. */
-  operator?: Party;
-  invoice: ParticipantInvoice;
-  /** The invoiced party, for the payer half. Undefined leaves that box empty. */
-  party?: Party;
+  /** Whoever administers the RCP — the payee. */
+  payee: InvoicePayee | null;
+  /** The invoice, carrying its payer's address for the "payable by" half. */
+  invoice: IssuedInvoice;
 }
 
-export function QrBill({ operator, invoice, party }: QrBillProps) {
+export function QrBill({ payee, invoice }: QrBillProps) {
   const { t, locale } = useI18n();
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   const data = useMemo<Data | null>(() => {
-    const creditor = creditorOf(operator);
+    const creditor = creditorOf(payee);
     if (!creditor) return null;
     // An amount of zero is not a valid QR-bill amount. Omitting it prints an
     // empty amount box, which is the correct way to say "nothing due" without
@@ -100,13 +100,13 @@ export function QrBill({ operator, invoice, party }: QrBillProps) {
       amount,
       creditor,
       currency: "CHF",
-      debtor: debtorOf(invoice, party),
+      debtor: debtorOf(invoice),
       // Joined without spaces: the bill's text box breaks on whitespace, and
       // a spaced dash sends the closing date onto a third line.
       message: t("qr.message", { from: swissDate(invoice.from), to: swissDate(invoice.to) }),
       reference: buildReference(creditor.account, invoice.from, invoice.partyReference),
     };
-  }, [operator, invoice, party, t]);
+  }, [payee, invoice, t]);
 
   useEffect(() => {
     const node = host.current;
