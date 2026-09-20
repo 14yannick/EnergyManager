@@ -6,6 +6,12 @@ export interface Site {
   productionStartDate: string | null;
   /** Fraction (0-1) of battery charge lost to conversion. Defaults to 0.1. */
   batteryConversionLoss: number;
+  /**
+   * The Home Assistant entity the dynamic feed-in sync reads for this site,
+   * e.g. "sensor.dynamic_tariff". Null falls back to the api's own
+   * HA_DYNAMIC_TARIFF_ENTITY_ID.
+   */
+  dynamicTariffEntityId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -206,6 +212,19 @@ export interface HaStatisticOption {
   hasSum: boolean;
 }
 
+/**
+ * A live Home Assistant entity shaped like a price-forecast sensor — carries
+ * `today`/`tomorrow` slot attributes, not a cumulative `sum` (so it never
+ * appears in HaStatisticOption's list; it needs its own).
+ */
+export interface HaDynamicTariffCandidate {
+  entityId: string;
+  friendlyName: string | null;
+  /** What it claims to price, e.g. "feed_in" — shown to help tell candidates apart. */
+  priceComponent: string | null;
+  unit: string | null;
+}
+
 export interface HaSyncResult {
   from: string;
   to: string;
@@ -367,6 +386,16 @@ export interface DailySavings {
   exportedPricedKwh: number;
   neighborPricedKwh: number;
   /**
+   * The owner's standing charges for the period, alone and inside the RCP
+   * (their share of the pooled positions), and the difference — what sharing
+   * the connection saves the owner. Counted on days with readings, like every
+   * other figure here, and part of both savings totals: the battery has no
+   * bearing on it. Zero when the owner is not a member of the RCP.
+   */
+  ownerFixedAloneChf: number;
+  ownerFixedRcpChf: number;
+  rcpFixedAdvantageChf: number;
+  /**
    * Export revenue in the counterfactual where no battery exists: the PV that
    * charged it would have been exported, and the export that came out of it
    * never happens. Direct consumption and neighbour sales are unaffected, so
@@ -482,6 +511,12 @@ export interface NeighbourSale {
    * "zero".
    */
   unpricedKwh: number;
+  /**
+   * What this participant saved against being supplied directly over the same
+   * range — the figure their own Consumption page leads with, priced by the
+   * same engine so the two agree.
+   */
+  participantSavedChf: number;
 }
 
 export interface NeighbourSales {
@@ -489,6 +524,12 @@ export interface NeighbourSales {
   to: string;
   parties: NeighbourSale[];
   totals: Omit<NeighbourSale, "partyId" | "name">;
+  /**
+   * The owner's own gain from the RCP: standing charges alone against their
+   * share inside it, over the same days as the savings figures. Null when the
+   * owner runs the RCP without being a member of it.
+   */
+  owner: { aloneChf: number; rcpChf: number; advantageChf: number } | null;
 }
 
 export interface CumulativeSavingsPoint {

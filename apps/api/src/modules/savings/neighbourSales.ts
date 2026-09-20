@@ -19,13 +19,15 @@ export interface PartyDraw {
   kwh: number;
 }
 
-const emptyFigures = () => ({ kwh: 0, revenueChf: 0, exportValueChf: 0, gainChf: 0, unpricedKwh: 0 });
+const emptyFigures = () => ({ kwh: 0, revenueChf: 0, exportValueChf: 0, gainChf: 0, unpricedKwh: 0, participantSavedChf: 0 });
 
 export function priceNeighbourSales(
   draws: PartyDraw[],
   resolveRate: RateResolver,
   range: { from: string; to: string },
-): NeighbourSales {
+  /** What each party saved against direct supply, by party id. */
+  savedByParty: ReadonlyMap<string, number> = new Map(),
+): Omit<NeighbourSales, "owner"> {
   const byParty = new Map<string, NeighbourSale>();
   const totals = emptyFigures();
 
@@ -54,6 +56,11 @@ export function priceNeighbourSales(
       totals.gainChf += revenue - exportValue;
     }
     byParty.set(d.partyId, entry);
+  }
+
+  for (const [partyId, party] of byParty) {
+    party.participantSavedChf = savedByParty.get(partyId) ?? 0;
+    totals.participantSavedChf += party.participantSavedChf;
   }
 
   return {

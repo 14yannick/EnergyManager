@@ -9,9 +9,10 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
 ## Features (phase 1)
 
 - **Tariff periods** with per-period purchase/sell rates in CHF/kWh, surcharges, and a
-  pricing mode per period: a flat rate, or the dynamic rate fetched from BKW
-- **Dynamic feed-in rates** synced from BKW's rolling window and stored per interval,
-  so revenue is priced at the rate that actually applied at that hour
+  pricing mode per period: a flat rate, or the dynamic day-ahead rate
+- **Dynamic feed-in rates** synced from a Home Assistant price-forecast sensor and
+  stored per interval, so revenue is priced at the rate that actually applied at
+  that hour
 - **Interval data from Home Assistant** (long-term statistics over the websocket API)
   or from a CSV import — the CSV path takes a long-format file (one row per
   timestamp + metric) in either per-interval or cumulative-meter form
@@ -246,9 +247,11 @@ docker compose -f docker-compose.yml -f docker-compose.local-db.yml up -d
 
 ## Deploying to a home server (Unraid)
 
-Running on a server rather than a laptop is not cosmetic here: BKW publishes a
-rolling ~25 hour window of feed-in prices with **no history endpoint**, so every
-interval missed while the app is down is lost permanently.
+Running on a server rather than a laptop is not cosmetic here: the dynamic
+feed-in sync reads a rolling window of prices from a Home Assistant entity
+(itself re-polling BKW, typically) with **no history endpoint on either side**,
+so every interval missed while the app — or Home Assistant — is down is lost
+permanently.
 
 Images for `linux/amd64` are built and pushed to GHCR by
 [`.github/workflows/publish.yml`](.github/workflows/publish.yml) on every push to
@@ -281,7 +284,7 @@ no toolchain.
    ```bash
    docker compose -f docker-compose.ghcr.yml pull
    docker compose -f docker-compose.ghcr.yml up -d
-   docker compose -f docker-compose.ghcr.yml exec api env | grep -E 'HA_URL|BKW_SYNC'
+   docker compose -f docker-compose.ghcr.yml exec api env | grep -E 'HA_URL|HA_DYNAMIC_TARIFF|BKW_SYNC'
    docker compose -f docker-compose.ghcr.yml logs -f api
    ```
 
@@ -342,8 +345,9 @@ docker run -d --name EnergyManager-web --network energymanager \
 ```
 
 Everything else has a working default: `PORT`, `BKW_SYNC_ENABLED`,
-`BKW_SYNC_INTERVAL_MINUTES`, `HA_SYNC_ENABLED`, `HA_SYNC_INTERVAL_MINUTES` and
-`HA_SYNC_LOOKBACK_HOURS`. Pass them only to change them.
+`BKW_SYNC_INTERVAL_MINUTES`, `HA_SYNC_ENABLED`, `HA_SYNC_INTERVAL_MINUTES`,
+`HA_SYNC_LOOKBACK_HOURS` and `HA_DYNAMIC_TARIFF_ENTITY_ID`. Pass them only to
+change them.
 
 `AUTH_ENABLED` defaults to `false`, so the api container above accepts every
 request as admin — fine while the port is only reachable on the LAN. Exposing
@@ -376,7 +380,17 @@ diverges from the cruder approximations the app started out with.
 ### Currency
 
 Everything stored and displayed by the app is **CHF**: tariff periods, surcharges,
-and the dynamic feed-in rates fetched from BKW (`CHF_kWh`).
+and the dynamic feed-in rates read from the Home Assistant entity configured as
+`HA_DYNAMIC_TARIFF_ENTITY_ID` (its `price` attributes, in CHF/kWh).
+
+The app does no EUR→CHF conversion of its own on this path — it trusts that
+entity's own values, whatever produced them. That used to be a direct call to
+BKW's API, which does the conversion described below; a household pointing
+`HA_DYNAMIC_TARIFF_ENTITY_ID` at a sensor with a different source, or a
+misconfigured one, would have its dynamic feed-in rates silently wrong. The
+sync does refuse to write anything if the entity's `price_component` isn't
+`"feed_in"` — but it cannot tell a correctly-labelled bad price from a good
+one.
 
 The public day-ahead spot sources are **EUR/MWh**, not CHF/kWh — both the BFE open
 data series (`ogd106_preise_strom_boerse.csv`, daily baseload) and the
@@ -445,7 +459,7 @@ pnpm db:generate   # generate a new Drizzle migration after changing apps/api/sr
       on demand from a date range, so there is no stored history and no payment
       tracking yet
 - [ ] Phase 3: real-time monitoring. Live ingestion is partly here already — interval
-      data syncs from Home Assistant and feed-in rates from BKW, both on a timer
+      data and dynamic feed-in rates both sync from Home Assistant, on a timer
       rather than on demand
 
 ## Contributing

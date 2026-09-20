@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "dynamic_tariff_entity_id" text;

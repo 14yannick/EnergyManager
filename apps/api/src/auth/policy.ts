@@ -55,6 +55,7 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
 
   "/api/home-assistant/status": { GET: READ },
   "/api/home-assistant/statistics": { GET: READ },
+  "/api/home-assistant/dynamic-tariff-entities": { GET: READ },
   "/api/sites/:siteId/home-assistant/entities": { GET: READ, PUT: ADMIN },
   "/api/home-assistant/entities/:id": { DELETE: ADMIN },
   "/api/sites/:siteId/home-assistant/sync": { POST: ADMIN },

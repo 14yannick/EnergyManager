@@ -256,6 +256,54 @@ export function consumptionCosts(inputs: InvoiceInputs): ConsumptionCosts {
   };
 }
 
+/**
+ * Positions in force on a calendar day. Tested at local noon: positions are
+ * stored from local midnights, so noon sits safely inside whichever one
+ * covers the day, whatever the UTC offset.
+ */
+export function positionsValidOn(positions: GridTariffPosition[], day: string): GridTariffPosition[] {
+  const noon = `${day}T12:00:00.000Z`;
+  return positions.filter((p) => p.validFrom <= noon && p.validTo > noon);
+}
+
+/**
+ * Whether the owner is a member of the RCP: administering it as `rcp_admin`,
+ * or not entered as a party at all (the unlisted owner `participantCountOf`
+ * already counts). An `rcp_admin_only` runs the app from outside the RCP and
+ * shares no connection.
+ */
+export function ownerIsMember(parties: ReadonlyArray<{ role: PartyRole }>): boolean {
+  const admin = parties.find((p) => ADMIN_PARTY_ROLES.includes(p.role));
+  return admin == null || admin.role === "rcp_admin";
+}
+
+export interface OwnerFixedCosts {
+  /** Every standing charge borne in full, as on a connection of one's own. */
+  aloneChf: number;
+  /** The owner's part inside the RCP: shared positions divided, own ones whole. */
+  rcpChf: number;
+}
+
+/**
+ * The owner's standing charges for `days` (a day, or 1/24 of one), alone and
+ * inside the RCP — the same arithmetic as a participant's invoice and its
+ * direct-supply comparison, with no energy. What the owner saves by sharing
+ * the connection is `aloneChf - rcpChf`: less when a VZEV-only position (the
+ * virtual metering fee) is added, more the more members share the rest.
+ */
+export function ownerFixedCosts(positions: GridTariffPosition[], participantCount: number, days: number): OwnerFixedCosts {
+  const costs = consumptionCosts({
+    from: "",
+    to: "",
+    days,
+    participantCount,
+    positions,
+    localRateChf: null,
+    usage: { partyId: null, partyReference: null, partyName: "", gridKwh: 0, localKwh: 0 },
+  });
+  return { aloneChf: costs.directFixedChf, rcpChf: costs.rcpFixedChf };
+}
+
 /** Inclusive day count between two YYYY-MM-DD dates, as the provider counts them. */
 export function inclusiveDays(from: string, to: string): number {
   const a = new Date(`${from}T00:00:00Z`).getTime();

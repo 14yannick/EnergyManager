@@ -10,6 +10,7 @@ import {
   chargeAcEquivalentKwh,
   computeBatteryRevenue,
   computeDirectUseKwh,
+  addOwnerFixedAdvantage,
   energyLeftHouseKwh,
   computeSavingsFromInputs,
   summarizeMonthlySavings,
@@ -946,5 +947,34 @@ describe("energy sold to participants is counted once", () => {
     expect(energyLeftHouseKwh(25, 40)).toBe(40);
     expect(energyLeftHouseKwh(25, 0)).toBe(0);
     expect(energyLeftHouseKwh(25, null)).toBe(25);
+  });
+});
+
+describe("the owner's gain from sharing the connection", () => {
+  const rows = scenarios.map(priceScenario);
+  const costs = { battery: 4000, solar: 12000, total: 16000 };
+  const perDay = () => ({ aloneChf: 0.5, rcpChf: 0.2 });
+
+  it("joins both savings totals, leaving battery-only savings untouched", () => {
+    const withOwner = addOwnerFixedAdvantage(rows, perDay);
+    withOwner.forEach((r, i) => {
+      expect(r.rcpFixedAdvantageChf).toBeCloseTo(0.3, 10);
+      expect(r.savingsWithBatteryChf).toBeCloseTo(rows[i]!.savingsWithBatteryChf + 0.3, 10);
+      expect(r.savingsWithoutBatteryChf).toBeCloseTo(rows[i]!.savingsWithoutBatteryChf + 0.3, 10);
+      expect(r.batteryOnlySavingsChf).toBe(rows[i]!.batteryOnlySavingsChf);
+    });
+    const before = summarizeSavings(rows, costs, "2024-01-01", "2024-03-31").summary;
+    const after = summarizeSavings(withOwner, costs, "2024-01-01", "2024-03-31").summary;
+    expect(after.totals.withBatteryChf - before.totals.withBatteryChf).toBeCloseTo(0.3 * rows.length, 10);
+    expect(after.totals.batteryOnlyChf).toBeCloseTo(before.totals.batteryOnlyChf, 10);
+  });
+
+  it("gives an hour a twenty-fourth of its day, and a month the sum of its days", () => {
+    const hour = { ...rows[0]!, date: "2024-01-31T13" };
+    const days: number[] = [];
+    addOwnerFixedAdvantage([hour], (_day, d) => (days.push(d), perDay()));
+    expect(days).toEqual([1 / 24]);
+    const daily = addOwnerFixedAdvantage(rows, perDay);
+    expect(aggregateDailyToOverall(daily)[0]!.rcpFixedAdvantageChf).toBeCloseTo(0.3 * rows.length, 10);
   });
 });

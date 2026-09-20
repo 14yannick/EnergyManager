@@ -27,6 +27,14 @@ export const sites = pgTable("sites", {
   batteryConversionLoss: numeric("battery_conversion_loss", { precision: 5, scale: 4 })
     .notNull()
     .default("0.1000"),
+  /**
+   * The Home Assistant price-forecast entity the dynamic feed-in sync reads
+   * for this site (see dynamicTariffs/service.ts) — installation-specific,
+   * so it lives here rather than as a constant. Null falls back to
+   * HA_DYNAMIC_TARIFF_ENTITY_ID, which is how every site behaved before this
+   * column existed.
+   */
+  dynamicTariffEntityId: text("dynamic_tariff_entity_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

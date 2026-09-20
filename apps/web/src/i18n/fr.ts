@@ -119,6 +119,7 @@ export const fr: Record<keyof typeof en, string> = {
   "calc.col.chargingCost": "Coût de charge",
   "calc.col.batteryNet": "Net batterie",
   "calc.col.partySales": "Ventes participants",
+  "calc.col.rcpFixed": "Économie frais fixes RCP",
   "calc.col.selfConsumption": "Valeur de l'autoconsommation",
   "calc.col.exportRevenue": "Revenu d'injection",
   "calc.col.totalWithBattery": "Total (avec batterie)",
@@ -138,6 +139,10 @@ export const fr: Record<keyof typeof en, string> = {
   "settings.haConnected": "Connecté à {url}.",
   "settings.haSyncing": "Synchronisation automatique toutes les {minutes} minutes.",
   "settings.haSyncOff": "La synchronisation automatique est désactivée.",
+  "settings.dynamicTariffEntity": "Capteur de tarif de reprise dynamique",
+  "settings.dynamicTariffEntityHint": "Alimente la synchronisation des tarifs de reprise dynamiques",
+  "settings.dynamicTariffDefaultOption": "— valeur par défaut : {entity} —",
+  "settings.dynamicTariffNoDefaultOption": "— aucun configuré —",
 
   "settings.mapping": "Correspondance des entités",
   "settings.mappingNote":
@@ -225,7 +230,7 @@ export const fr: Record<keyof typeof en, string> = {
   "tariff.mode.flat": "Trimestriel (tarif fixe)",
   "tariff.mode.dynamic": "Day-ahead (spot)",
 
-  "tariff.dynamic": "Tarification de reprise dynamique (BKW)",
+  "tariff.dynamic": "Tarification de reprise dynamique (Home Assistant)",
   "tariff.dynamicLoaded":
     "{count} tarifs au quart d'heure chargés pour la fenêtre en cours, publiés le {published}.",
   "tariff.dynamicEmpty":
@@ -418,13 +423,18 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.soldPriceHint": "Revenus de reprise et des participants divisés par les kWh rémunérés, chacun au tarif de son quart d'heure",
   "dash.soldUnpriced": "{kwh} kWh sans tarif, non comptés",
   "dash.neighbours": "Ventes aux participants",
-  "dash.neighboursNote": "Ce que chaque participant a payé pour l'énergie solaire prélevée, comparé à ce que cette même énergie aurait rapporté injectée dans le réseau au tarif de reprise du quart d'heure concerné. La différence est le gain réel de la vente locale.",
+  "dash.neighboursNote": "Ce que chaque participant a payé pour l'énergie solaire prélevée, comparé à ce que cette même énergie aurait rapporté injectée dans le réseau au tarif de reprise du quart d'heure concerné. La différence est le gain réel de la vente locale. En dessous, votre propre gain du RCP : les frais fixes que vous ne supportez plus seul.",
   "dash.nb.participant": "Participant",
   "dash.nb.revenue": "Vendu au participant",
   "dash.nb.export": "Si injecté",
   "dash.nb.gain": "Gain réel",
   "dash.nb.gainPerKwh": "Gain par kWh",
+  "dash.nb.participantSaved": "Leur économie",
   "dash.nb.none": "Aucune vente aux participants sur cette période.",
+  "dash.nb.owner": "Vous — frais fixes partagés",
+  "dash.nb.ownerDetail": "{alone} seul, {rcp} dans le RCP",
+  "dash.nb.ownerHint": "Vos frais fixes de raccordement : {alone} si vous étiez seul, {rcp} pour votre part dans le RCP.",
+  "dash.nb.rcpTotal": "Gain total du RCP",
   "dash.nb.unpriced": "{kwh} kWh ont été vendus sans tarif de reprise ou de vente aux participants défini : ils comptent dans le revenu, mais pas dans la comparaison.",
   "dash.withBatteryTotal": "Économies totales — avec batterie",
   "dash.noBatteryTotal": "Économies totales — sans batterie",
@@ -448,7 +458,7 @@ export const fr: Record<keyof typeof en, string> = {
 
   "dash.revenue": "Revenus",
   "dash.revenueNote":
-    "Consommation directe (achat évité), injection directe, batterie et ventes aux participants, par {unit}",
+    "Consommation directe (achat évité), injection directe, batterie, ventes aux participants et frais fixes partagés dans le RCP, par {unit}",
   "dash.revenueKwh": " — l'énergie derrière chaque montant",
   "dash.revenueBoth": " — avec la même répartition en kWh hachurée à côté, sur l'axe de droite",
   "dash.revenueCharging":
@@ -462,6 +472,7 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.flow.battery": "Décharge batterie",
   "dash.flow.neighborSale": "Vente aux participants",
   "dash.flow.neighborSupply": "Fourniture aux participants",
+  "dash.flow.rcpFixed": "RCP : frais fixes partagés",
   "dash.flow.neighbor": "Participants",
   "dash.wholePeriod": "Toute la période",
   "dash.chargingForgone": "Charge (injection perdue)",

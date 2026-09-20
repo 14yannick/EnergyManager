@@ -61,6 +61,7 @@ const seriesNames = (unit: RevenueUnit, t: Translate) => ({
   // different numbers under one label was the confusion.
   battery: t("dash.flow.battery"),
   neighbor: barUnit(unit) === "chf" ? t("dash.flow.neighborSale") : t("dash.flow.neighborSupply"),
+  rcp: t("dash.flow.rcpFixed"),
 });
 
 export function DashboardPage() {
@@ -240,6 +241,9 @@ const REVENUE_COLORS = {
   direct: "#2a78d6",
   battery: "#eb6834",
   neighbor: "#1baf7a",
+  // Slot 7 (violet): next to aqua on top of the stack, validated with the
+  // other four in stack order.
+  rcp: "#4a3aa7",
 };
 
 /**
@@ -258,6 +262,11 @@ interface RevenueFlows {
   direct: number;
   battery: number;
   neighbor: number;
+  /**
+   * The owner's saving on standing charges from sharing the connection. Money
+   * only — no energy stands behind it — so it is zero in the kWh view.
+   */
+  rcp: number;
 }
 
 interface RevenuePeriod extends RevenueFlows {
@@ -271,6 +280,7 @@ interface RevenuePeriod extends RevenueFlows {
   directChf: number;
   batteryChf: number;
   neighborChf: number;
+  rcpChf: number;
   /**
    * Gross PV yield plus energy into the battery, as one line when enabled.
    *
@@ -358,15 +368,17 @@ function RevenueTooltip({
     { key: "direct", name: t("dash.flow.direct"), chf: row.directChf, kwh: row.directKwh },
     { key: "battery", name: t("dash.flow.battery"), chf: row.batteryChf, kwh: row.batteryKwh },
     { key: "neighbor", name: t("dash.flow.neighbor"), chf: row.neighborChf, kwh: row.neighborKwh },
+    { key: "rcp", name: t("dash.flow.rcpFixed"), chf: row.rcpChf, kwh: null },
   ] as const;
   const totalChf = flows.reduce((sum, f) => sum + f.chf, 0);
-  const totalKwh = flows.reduce((sum, f) => sum + f.kwh, 0);
+  const totalKwh = flows.reduce((sum, f) => sum + (f.kwh ?? 0), 0);
   // A period with no energy at all would otherwise divide by zero.
   const share = (part: number, whole: number) => (whole === 0 ? null : (part / whole) * 100);
-  const total = row.consumption + row.direct + row.battery + row.neighbor;
 
+  // Capped to the screen: with five flows the labels outgrew a phone and
+  // pushed the page sideways, so on small screens they wrap instead.
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-md">
+    <div className="max-w-[16rem] rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md sm:max-w-none sm:text-sm">
       <p className="mb-1.5 font-medium text-slate-900">{heading}</p>
       <table className="w-full border-separate border-spacing-x-3 border-spacing-y-0.5">
         <thead>
@@ -379,10 +391,10 @@ function RevenueTooltip({
         <tbody>
           {flows.map((f) => {
             const sc = share(f.chf, totalChf);
-            const sk = share(f.kwh, totalKwh);
+            const sk = f.kwh == null ? null : share(f.kwh, totalKwh);
             return (
               <tr key={f.key}>
-                <td className="whitespace-nowrap text-slate-600">
+                <td className="text-slate-600 sm:whitespace-nowrap">
                   <span className="mr-1.5 inline-block h-0.5 w-3 rounded-full align-middle"
                     style={{ backgroundColor: REVENUE_COLORS[f.key] }} />
                   {f.name}
@@ -394,10 +406,16 @@ function RevenueTooltip({
                   </span>
                 </td>
                 <td className="whitespace-nowrap text-right tabular-nums text-slate-900">
-                  {f.kwh.toFixed(1)}
-                  <span className="ml-1 text-xs text-slate-400">
-                    {sk == null ? "—" : `${sk.toFixed(0)}%`}
-                  </span>
+                  {f.kwh == null ? (
+                    <span className="text-slate-400">—</span>
+                  ) : (
+                    <>
+                      {f.kwh.toFixed(1)}
+                      <span className="ml-1 text-xs text-slate-400">
+                        {sk == null ? "—" : `${sk.toFixed(0)}%`}
+                      </span>
+                    </>
+                  )}
                 </td>
               </tr>
             );
@@ -483,12 +501,14 @@ function RevenueBreakdownChart({
         battery:
           (row?.batteryDischargeConsumedValueChf ?? 0) + (row?.batteryDischargeExportedValueChf ?? 0),
         neighbor: row?.neighborSellRevenueChf ?? 0,
+        rcp: row?.rcpFixedAdvantageChf ?? 0,
       };
       const kwh: RevenueFlows = {
         consumption: row?.directUseKwh ?? 0,
         direct: (row?.exportedKwh ?? 0) - batteryExportedKwh,
         battery: (row?.batteryDischargeConsumedKwh ?? 0) + batteryExportedKwh,
         neighbor: row?.neighborConsumptionKwh ?? 0,
+        rcp: 0,
       };
       const bars = barUnit(unit) === "chf" ? chf : kwh;
       const money = barUnit(unit) === "chf";
@@ -501,6 +521,7 @@ function RevenueBreakdownChart({
         directChf: chf.direct,
         batteryChf: chf.battery,
         neighborChf: chf.neighbor,
+        rcpChf: chf.rcp,
         batteryChargingCostChf: row?.batteryChargingCostChf ?? 0,
         batteryNetChf: row?.batteryRevenueChf ?? 0,
         producedKwh: (row?.producedKwh ?? 0) + (row?.batteryChargeKwh ?? 0),
@@ -516,7 +537,7 @@ function RevenueBreakdownChart({
   }, [query.data, from, to, granularity, unit]);
 
   const total = chartData.reduce(
-    (sum, d) => sum + d.consumption + d.direct + d.battery + d.neighbor,
+    (sum, d) => sum + d.consumption + d.direct + d.battery + d.neighbor + d.rcp,
     0,
   );
 
@@ -547,7 +568,8 @@ function RevenueBreakdownChart({
    */
   const axisDomains = useMemo(() => {
     const posOf = (d: RevenuePeriod) =>
-      Math.max(d.consumption, 0) + Math.max(d.direct, 0) + Math.max(d.battery, 0) + Math.max(d.neighbor, 0);
+      Math.max(d.consumption, 0) + Math.max(d.direct, 0) + Math.max(d.battery, 0) + Math.max(d.neighbor, 0) +
+      Math.max(d.rcp, 0);
     const maxLeft = Math.max(0, ...chartData.map(posOf));
     const minLeft = Math.min(0, ...chartData.map((d) => (barUnit(unit) === "chf" ? d.batteryChargingChf : 0)));
     const maxRight = Math.max(
@@ -753,8 +775,21 @@ function RevenueBreakdownChart({
               stroke={flowStroke("neighbor")}
               strokeWidth={1}
               maxBarSize={barSize}
-              radius={[4, 4, 0, 0]}
+              radius={barUnit(unit) === "kwh" ? [4, 4, 0, 0] : undefined}
             />
+            {barUnit(unit) === "chf" && (
+              // Top of the money stack: what sharing the connection saves on
+              // standing charges. No kWh behind it, so absent from the energy view.
+              <Bar
+                yAxisId="bars"
+                dataKey="rcp"
+                name={names.rcp}
+                stackId="revenue"
+                fill={REVENUE_COLORS.rcp}
+                maxBarSize={barSize}
+                radius={[4, 4, 0, 0]}
+              />
+            )}
             {unit === "both" &&
               // Its own column on its own axis, split the same four ways as the
               // money bar. Same colours on purpose, so a segment can be read

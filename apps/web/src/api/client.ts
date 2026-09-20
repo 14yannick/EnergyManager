@@ -9,6 +9,7 @@ import type {
   GridTariffPosition,
   GridTariffPositionInput,
   InvoiceRun,
+  HaDynamicTariffCandidate,
   HaEntityMapping,
   HaEntityMappingInput,
   HaStatisticOption,
@@ -160,10 +161,13 @@ export const api = {
   },
   dynamicTariffs: {
     sync: (siteId: string) =>
-      request<{ inserted: number; updated: number; source: string; publicationTimestamp: string | null }>(
-        `/sites/${siteId}/dynamic-tariffs/sync`,
-        { method: "POST" },
-      ),
+      request<{
+        inserted: number;
+        updated: number;
+        source: string;
+        publicationTimestamp: string | null;
+        warnings: string[];
+      }>(`/sites/${siteId}/dynamic-tariffs/sync`, { method: "POST" }),
     list: (siteId: string, from: string, to: string, kind?: TariffKind) =>
       request<DynamicTariffRate[]>(
         `/sites/${siteId}/dynamic-tariffs?from=${from}&to=${to}${kind ? `&kind=${kind}` : ""}`,
@@ -171,10 +175,16 @@ export const api = {
   },
   homeAssistant: {
     status: () =>
-      request<{ configured: boolean; url: string | null; syncEnabled: boolean; syncIntervalMinutes: number }>(
-        "/home-assistant/status",
-      ),
+      request<{
+        configured: boolean;
+        url: string | null;
+        syncEnabled: boolean;
+        syncIntervalMinutes: number;
+        dynamicTariffEntityDefault: string | null;
+      }>("/home-assistant/status"),
     statistics: () => request<HaStatisticOption[]>("/home-assistant/statistics"),
+    dynamicTariffEntities: () =>
+      request<HaDynamicTariffCandidate[]>("/home-assistant/dynamic-tariff-entities"),
     mappings: (siteId: string) => request<HaEntityMapping[]>(`/sites/${siteId}/home-assistant/entities`),
     setMapping: (siteId: string, input: HaEntityMappingInput) =>
       request<HaEntityMapping>(`/sites/${siteId}/home-assistant/entities`, {

@@ -55,7 +55,7 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
       </div>
 
       <div className="space-y-4 rounded-lg border bg-white p-4">
-        {data && parties.length === 0 ? (
+        {data && parties.length === 0 && !data.owner?.advantageChf ? (
           <p className="py-6 text-center text-sm text-slate-500">{t("dash.nb.none")}</p>
         ) : (
           <>
@@ -99,9 +99,9 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
                     <th className="py-1 pr-3 font-medium">{t("dash.nb.participant")}</th>
                     <th className="py-1 pr-3 text-right font-medium">kWh</th>
                     <th className="py-1 pr-3 text-right font-medium">{t("dash.nb.revenue")}</th>
-                    <th className="py-1 pr-3 text-right font-medium">{t("dash.nb.export")}</th>
                     <th className="py-1 pr-3 text-right font-medium">{t("dash.nb.gain")}</th>
-                    <th className="py-1 text-right font-medium">{t("dash.nb.gainPerKwh")}</th>
+                    <th className="py-1 pr-3 text-right font-medium">{t("dash.nb.gainPerKwh")}</th>
+                    <th className="py-1 text-right font-medium">{t("dash.nb.participantSaved")}</th>
                   </tr>
                 </thead>
                 <tbody className="tabular-nums">
@@ -110,11 +110,11 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
                       <td className="py-1 pr-3 text-slate-900">{p.name}</td>
                       <td className="py-1 pr-3 text-right">{p.kwh.toFixed(1)}</td>
                       <td className="py-1 pr-3 text-right">{chf(p.revenueChf)}</td>
-                      <td className="py-1 pr-3 text-right">{compared(p) > 0 ? chf(p.exportValueChf) : "—"}</td>
                       <td className="py-1 pr-3 text-right font-medium">{compared(p) > 0 ? chf(p.gainChf) : "—"}</td>
-                      <td className="py-1 text-right">
+                      <td className="py-1 pr-3 text-right">
                         {gainPerKwh(p) == null ? "—" : ctPerKwh(gainPerKwh(p)!, t("billing.centsPerKwh"))}
                       </td>
+                      <td className="py-1 text-right">{chf(p.participantSavedChf)}</td>
                     </tr>
                   ))}
                   {data && parties.length > 1 && (
@@ -123,16 +123,43 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
                       <td className="py-1 pr-3 text-right">{data.totals.kwh.toFixed(1)}</td>
                       <td className="py-1 pr-3 text-right">{chf(data.totals.revenueChf)}</td>
                       <td className="py-1 pr-3 text-right">
-                        {compared(data.totals) > 0 ? chf(data.totals.exportValueChf) : "—"}
-                      </td>
-                      <td className="py-1 pr-3 text-right">
                         {compared(data.totals) > 0 ? chf(data.totals.gainChf) : "—"}
                       </td>
-                      <td className="py-1 text-right">
+                      <td className="py-1 pr-3 text-right">
                         {gainPerKwh(data.totals) == null
                           ? "—"
                           : ctPerKwh(gainPerKwh(data.totals)!, t("billing.centsPerKwh"))}
                       </td>
+                      <td className="py-1 text-right">{chf(data.totals.participantSavedChf)}</td>
+                    </tr>
+                  )}
+                  {data?.owner && (
+                    // The owner's own gain from the RCP: not a sale, so no
+                    // energy columns — just what sharing the connection saves.
+                    <tr className="border-t text-slate-700">
+                      <td className="py-1 pr-3" title={t("dash.nb.ownerHint", {
+                        alone: chf(data.owner.aloneChf), rcp: chf(data.owner.rcpChf) })}>
+                        {t("dash.nb.owner")}
+                        <span className="ml-2 text-xs text-slate-400">
+                          {t("dash.nb.ownerDetail", { alone: chf(data.owner.aloneChf), rcp: chf(data.owner.rcpChf) })}
+                        </span>
+                      </td>
+                      <td className="py-1 pr-3 text-right text-slate-400">—</td>
+                      <td className="py-1 pr-3 text-right text-slate-400">—</td>
+                      <td className="py-1 pr-3 text-right font-medium">{chf(data.owner.advantageChf)}</td>
+                      <td className="py-1 pr-3 text-right text-slate-400">—</td>
+                      <td className="py-1 text-right text-slate-400">—</td>
+                    </tr>
+                  )}
+                  {data?.owner && (
+                    <tr className="border-t-2 border-slate-300 font-semibold text-slate-900">
+                      <td className="py-1 pr-3">{t("dash.nb.rcpTotal")}</td>
+                      <td className="py-1 pr-3" colSpan={2} />
+                      <td className="py-1 pr-3 text-right">
+                        {chf((compared(data.totals) > 0 ? data.totals.gainChf : 0) + data.owner.advantageChf)}
+                      </td>
+                      <td className="py-1 pr-3" />
+                      <td className="py-1" />
                     </tr>
                   )}
                 </tbody>

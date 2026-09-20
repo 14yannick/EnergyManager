@@ -110,11 +110,17 @@ class HaSession {
   }
 }
 
-function requireConfig(): { url: string; token: string } {
+/** The plain HTTP base and token, shared by the websocket and REST callers below. */
+function requireHaConfig(): { baseUrl: string; token: string } {
   if (!env.HA_URL || !env.HA_TOKEN) {
     throw new Error("Home Assistant is not configured — set HA_URL and HA_TOKEN");
   }
-  return { url: `${env.HA_URL.replace(/^http/, "ws")}/api/websocket`, token: env.HA_TOKEN };
+  return { baseUrl: env.HA_URL, token: env.HA_TOKEN };
+}
+
+function requireConfig(): { url: string; token: string } {
+  const { baseUrl, token } = requireHaConfig();
+  return { url: `${baseUrl.replace(/^http/, "ws")}/api/websocket`, token };
 }
 
 async function withSession<T>(fn: (session: HaSession) => Promise<T>): Promise<T> {
@@ -177,4 +183,149 @@ export async function fetchStatistics(
     }
     return out;
   });
+}
+
+/**
+ * A price-forecast entity of the shape a "dynamic tariff" sensor exposes: a
+ * current price as the state, plus `today`/`tomorrow` arrays of priced
+ * quarter-hour slots as attributes. This is not a stock Home Assistant
+ * integration — it is whatever the household has set up (a template sensor
+ * re-polling a tariff feed, a Nordpool-style integration, …) — so the shape
+ * is validated loosely and extra attributes are simply ignored.
+ */
+const haTariffSlotSchema = z.object({
+  start: z.string(),
+  end: z.string().optional(),
+  price: z.number(),
+});
+
+const haEntityStateSchema = z.object({
+  entity_id: z.string(),
+  state: z.string(),
+  attributes: z
+    .object({
+      price_component: z.string().nullish(),
+      publication_timestamp: z.string().nullish(),
+      unit_of_measurement: z.string().nullish(),
+      today: z.array(haTariffSlotSchema).nullish(),
+      tomorrow: z.array(haTariffSlotSchema).nullish(),
+      tomorrow_valid: z.boolean().nullish(),
+    })
+    .passthrough(),
+});
+
+export interface HaDynamicTariffSlot {
+  startTs: string; // ISO, UTC
+  endTs: string;
+  rateChfPerKwh: number;
+}
+
+export interface HaDynamicTariffState {
+  entityId: string;
+  /** What this sensor claims to price, e.g. "feed_in" — the caller's to match against a TariffKind. */
+  priceComponent: string | null;
+  unit: string | null;
+  publicationTimestamp: string | null;
+  /** `today` plus `tomorrow` (only once HA itself marks it valid), sorted, deduplicated. */
+  slots: HaDynamicTariffSlot[];
+}
+
+/**
+ * Reads one entity's current state and attributes over the plain REST API —
+ * a single request, unlike the statistics client's websocket session, because
+ * there is nothing here to subscribe to: the caller wants this instant's
+ * forecast, not a stream of updates.
+ *
+ * This is the dynamic-tariff sync's actual data source (see
+ * dynamicTariffs/service.ts) — replacing a direct call to BKW's own API,
+ * which this household's Home Assistant already polls independently.
+ */
+export async function fetchHaEntityDynamicTariff(entityId: string): Promise<HaDynamicTariffState> {
+  const { baseUrl, token } = requireHaConfig();
+  const res = await fetch(`${baseUrl}/api/states/${encodeURIComponent(entityId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) {
+    throw new Error(`Home Assistant has no entity "${entityId}"`);
+  }
+  if (!res.ok) {
+    throw new Error(`Home Assistant request failed: ${res.status}`);
+  }
+  const parsed = haEntityStateSchema.parse(await res.json());
+  const a = parsed.attributes;
+
+  // `tomorrow_valid` is how these sensors say "tomorrow's auction hasn't
+  // cleared yet" — the array can still be present but stale (yesterday's
+  // values shifted forward) or simply absent. Treat an explicit `false` as
+  // "leave it out"; an unset flag is taken as valid, since not every sensor
+  // of this shape sets it at all.
+  const includeTomorrow = a.tomorrow_valid !== false;
+  const raw = [...(a.today ?? []), ...(includeTomorrow ? (a.tomorrow ?? []) : [])];
+
+  const byStart = new Map<string, HaDynamicTariffSlot>();
+  for (const slot of raw) {
+    const startTs = new Date(slot.start).toISOString();
+    const endTs = slot.end
+      ? new Date(slot.end).toISOString()
+      : new Date(new Date(slot.start).getTime() + 15 * 60000).toISOString();
+    byStart.set(startTs, { startTs, endTs, rateChfPerKwh: slot.price });
+  }
+
+  return {
+    entityId,
+    priceComponent: a.price_component ?? null,
+    unit: a.unit_of_measurement ?? null,
+    publicationTimestamp: a.publication_timestamp ?? null,
+    slots: [...byStart.values()].sort((x, y) => x.startTs.localeCompare(y.startTs)),
+  };
+}
+
+/**
+ * Every entity shaped like a price-forecast sensor: carries a `today` array
+ * of slots as an attribute. This is the filter, not a name pattern or a
+ * domain check — out of ~1800 entities on a real household instance, exactly
+ * the one dynamic-tariff sensor matched it, which is the specificity a
+ * mapping dropdown needs (nothing here to narrow further by unit or class,
+ * unlike the energy statistics list).
+ *
+ * Uses `/api/states` (every entity's current state), not the statistics
+ * client's websocket session — this is about live state shape, not recorder
+ * history.
+ */
+const haStateEntitySchema = z.object({
+  entity_id: z.string(),
+  attributes: z
+    .object({
+      friendly_name: z.string().nullish(),
+      price_component: z.string().nullish(),
+      unit_of_measurement: z.string().nullish(),
+      today: z.array(z.unknown()).nullish(),
+    })
+    .passthrough(),
+});
+
+export interface HaDynamicTariffCandidate {
+  entityId: string;
+  friendlyName: string | null;
+  priceComponent: string | null;
+  unit: string | null;
+}
+
+export async function listHaDynamicTariffEntities(): Promise<HaDynamicTariffCandidate[]> {
+  const { baseUrl, token } = requireHaConfig();
+  const res = await fetch(`${baseUrl}/api/states`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Home Assistant request failed: ${res.status}`);
+  }
+  const parsed = z.array(haStateEntitySchema).parse(await res.json());
+  return parsed
+    .filter((e) => Array.isArray(e.attributes.today))
+    .map((e) => ({
+      entityId: e.entity_id,
+      friendlyName: e.attributes.friendly_name ?? null,
+      priceComponent: e.attributes.price_component ?? null,
+      unit: e.attributes.unit_of_measurement ?? null,
+    }));
 }

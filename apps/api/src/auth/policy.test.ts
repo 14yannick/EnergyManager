@@ -63,6 +63,7 @@ describe("route policy", () => {
       "/api/sites/:siteId/tariff-periods",
       "/api/home-assistant/status",
       "/api/home-assistant/statistics",
+      "/api/home-assistant/dynamic-tariff-entities",
       "/api/sites/:siteId/home-assistant/entities",
       "/api/sites/:siteId/dynamic-tariffs",
     ];

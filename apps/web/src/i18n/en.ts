@@ -116,6 +116,7 @@ export const en = {
   "calc.col.chargingCost": "Charging cost",
   "calc.col.batteryNet": "Battery net",
   "calc.col.partySales": "Party sales",
+  "calc.col.rcpFixed": "RCP fixed-charge saving",
   "calc.col.selfConsumption": "Self-consumption value",
   "calc.col.exportRevenue": "Export revenue",
   "calc.col.totalWithBattery": "Total (with battery)",
@@ -135,6 +136,10 @@ export const en = {
   "settings.haConnected": "Connected to {url}.",
   "settings.haSyncing": "Syncing automatically every {minutes} minutes.",
   "settings.haSyncOff": "Automatic sync is disabled.",
+  "settings.dynamicTariffEntity": "Dynamic feed-in sensor",
+  "settings.dynamicTariffEntityHint": "Feeds the dynamic feed-in rate sync",
+  "settings.dynamicTariffDefaultOption": "— use default: {entity} —",
+  "settings.dynamicTariffNoDefaultOption": "— none configured —",
 
   "settings.mapping": "Entity mapping",
   "settings.mappingNote":
@@ -222,7 +227,7 @@ export const en = {
   "tariff.mode.flat": "Quarterly (fixed rate)",
   "tariff.mode.dynamic": "Day-ahead (spot)",
 
-  "tariff.dynamic": "Dynamic feed-in pricing (BKW)",
+  "tariff.dynamic": "Dynamic feed-in pricing (Home Assistant)",
   "tariff.dynamicLoaded":
     "{count} quarter-hour rates loaded for the current window, published {published}.",
   "tariff.dynamicEmpty":
@@ -410,13 +415,18 @@ export const en = {
   "dash.soldPriceHint": "Feed-in and participant revenue divided by the kWh paid for, each priced at its own quarter-hour",
   "dash.soldUnpriced": "{kwh} kWh with no rate, left out",
   "dash.neighbours": "Sales to participants",
-  "dash.neighboursNote": "What each participant paid for the solar energy they took, against what the same energy would have earned exported to the grid at the feed-in rate of that quarter-hour. The difference is what selling locally really gained.",
+  "dash.neighboursNote": "What each participant paid for the solar energy they took, against what the same energy would have earned exported to the grid at the feed-in rate of that quarter-hour. The difference is what selling locally really gained. Below it, your own gain from the RCP: the standing charges you no longer bear alone.",
   "dash.nb.participant": "Participant",
   "dash.nb.revenue": "Sold to participant",
   "dash.nb.export": "If exported",
   "dash.nb.gain": "Real gain",
   "dash.nb.gainPerKwh": "Gain per kWh",
+  "dash.nb.participantSaved": "Their saving",
   "dash.nb.none": "No sales to participants in this range.",
+  "dash.nb.owner": "You — shared fixed charges",
+  "dash.nb.ownerDetail": "{alone} alone, {rcp} in the RCP",
+  "dash.nb.ownerHint": "Your standing charges for the connection: {alone} if you were alone on it, {rcp} as your share inside the RCP.",
+  "dash.nb.rcpTotal": "Total gain from the RCP",
   "dash.nb.unpriced": "{kwh} kWh were sold when no feed-in or neighbour-sale rate was set: they count in the revenue, but are left out of the comparison.",
   "dash.withBatteryTotal": "Total savings — with battery",
   "dash.noBatteryTotal": "Total savings — no battery",
@@ -439,7 +449,7 @@ export const en = {
 
   "dash.revenue": "Revenue",
   "dash.revenueNote":
-    "Direct consumption (avoided import), direct export, battery and neighbour sales, by {unit}",
+    "Direct consumption (avoided import), direct export, battery, neighbour sales and the fixed charges shared in the RCP, by {unit}",
   "dash.revenueKwh": " — the energy behind each revenue figure",
   "dash.revenueBoth": " — with the same split in kWh hatched beside it, on the right axis",
   "dash.revenueCharging":
@@ -453,6 +463,7 @@ export const en = {
   "dash.flow.battery": "Battery discharge",
   "dash.flow.neighborSale": "Neighbour sale",
   "dash.flow.neighborSupply": "Neighbour supply",
+  "dash.flow.rcpFixed": "RCP: shared fixed charges",
   "dash.flow.neighbor": "Neighbour",
   "dash.wholePeriod": "Whole period",
   "dash.chargingForgone": "Charging (export forgone)",

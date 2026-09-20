@@ -27,18 +27,23 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       PORT: 3000
-      # BKW serves a rolling ~25h window with no history endpoint, so anything
-      # missed while this is down is lost permanently.
+      # Still named BKW_SYNC_* — reads a rolling window of feed-in prices from
+      # a Home Assistant entity now (HA_DYNAMIC_TARIFF_ENTITY_ID below), not by
+      # calling BKW directly. No history endpoint exists either way, so
+      # anything missed while this (and Home Assistant) are down is lost
+      # permanently.
       BKW_SYNC_ENABLED: ${BKW_SYNC_ENABLED:-true}
       BKW_SYNC_INTERVAL_MINUTES: ${BKW_SYNC_INTERVAL_MINUTES:-30}
-      # An unset HA_URL disables Home Assistant sync *silently*. Use the VM's
-      # IP, not homeassistant.local — containers resolve via DNS, which returns
+      # An unset HA_URL disables Home Assistant sync *silently* — including the
+      # dynamic feed-in sync above, which now depends on it. Use the VM's IP,
+      # not homeassistant.local — containers resolve via DNS, which returns
       # NXDOMAIN for mDNS names.
       HA_URL: ${HA_URL:-}
       HA_TOKEN: ${HA_TOKEN:-}
       HA_SYNC_ENABLED: ${HA_SYNC_ENABLED:-true}
       HA_SYNC_INTERVAL_MINUTES: ${HA_SYNC_INTERVAL_MINUTES:-15}
       HA_SYNC_LOOKBACK_HOURS: ${HA_SYNC_LOOKBACK_HOURS:-48}
+      HA_DYNAMIC_TARIFF_ENTITY_ID: ${HA_DYNAMIC_TARIFF_ENTITY_ID:-sensor.dynamic_tariff}
     depends_on:
       migrate:
         condition: service_completed_successfully

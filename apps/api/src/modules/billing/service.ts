@@ -13,7 +13,11 @@ import {
   buildParticipantInvoice,
   inclusiveDays,
   isBilledParty,
+  ownerFixedCosts,
+  ownerIsMember,
   participantCountOf,
+  positionsValidOn,
+  type OwnerFixedCosts,
   type ParticipantUsage,
 } from "./engine.js";
 
@@ -237,4 +241,21 @@ export async function runInvoices(
   }
 
   return { from, to, days, participantCount, localRateChf, payee, invoices, warnings };
+}
+
+/**
+ * The owner's standing charges for any day, alone and inside the RCP — or null
+ * when the owner is not a member (an `rcp_admin_only` administrator), who then
+ * has no share in the connection to gain from.
+ */
+export async function loadOwnerFixedCosts(
+  siteId: string,
+): Promise<((day: string, days: number) => OwnerFixedCosts) | null> {
+  const [positions, siteParties] = await Promise.all([
+    listPositions(siteId),
+    db.select({ role: parties.role }).from(parties).where(eq(parties.siteId, siteId)),
+  ]);
+  if (!ownerIsMember(siteParties)) return null;
+  const participantCount = participantCountOf(siteParties);
+  return (day, days) => ownerFixedCosts(positionsValidOn(positions, day), participantCount, days);
 }

@@ -507,6 +507,8 @@ const ENERGY: Array<{ key: keyof DailySavings; label: MessageKey; unit: string }
   { key: "batteryChargingCostChf", label: "calc.col.chargingCost", unit: "CHF" },
   { key: "batteryRevenueChf", label: "calc.col.batteryNet", unit: "CHF" },
   { key: "neighborSellRevenueChf", label: "calc.col.partySales", unit: "CHF" },
+  // Part of both totals, so it needs its own column for them to add up.
+  { key: "rcpFixedAdvantageChf", label: "calc.col.rcpFixed", unit: "CHF" },
   { key: "selfConsumptionValueChf", label: "calc.col.selfConsumption", unit: "CHF" },
   { key: "exportRevenueChf", label: "calc.col.exportRevenue", unit: "CHF" },
   { key: "savingsWithBatteryChf", label: "calc.col.totalWithBattery", unit: "CHF" },

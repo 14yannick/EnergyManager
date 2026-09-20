@@ -62,3 +62,17 @@ describe("priceNeighbourSales", () => {
     expect(a.gainChf).toBeCloseTo(2 * (0.2 - 0.08), 9);
   });
 });
+
+describe("what the participants themselves saved", () => {
+  it("carries each party's figure through and totals them", () => {
+    const saved = new Map([["a", 12.5], ["b", 7.25]]);
+    const { parties, totals } = priceNeighbourSales(draws, rates(), range, saved);
+    expect(parties.map((p) => p.participantSavedChf)).toEqual([12.5, 7.25]);
+    expect(totals.participantSavedChf).toBeCloseTo(19.75, 10);
+  });
+
+  it("reads zero for a party with no figure rather than inventing one", () => {
+    const { parties } = priceNeighbourSales(draws, rates(), range, new Map([["a", 3]]));
+    expect(parties.find((p) => p.partyId === "b")!.participantSavedChf).toBe(0);
+  });
+});

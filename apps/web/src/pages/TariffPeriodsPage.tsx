@@ -330,6 +330,11 @@ function DynamicTariffStatus({ siteId }: { siteId: string }) {
       {syncMutation.isError && (
         <p className="mt-2 text-sm text-red-600">{(syncMutation.error as Error).message}</p>
       )}
+      {syncMutation.data?.warnings.map((w, i) => (
+        <p key={i} className="mt-2 text-sm text-amber-700">
+          {w}
+        </p>
+      ))}
     </div>
   );
 }

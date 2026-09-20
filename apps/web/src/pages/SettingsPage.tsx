@@ -99,7 +99,11 @@ export function SettingsPage() {
               ? t("settings.haSyncing", { minutes: status.syncIntervalMinutes ?? 0 })
               : t("settings.haSyncOff")}
           </div>
-          <MappingSection siteId={site.id} canEdit={canEdit} />
+          <MappingSection
+            site={site}
+            canEdit={canEdit}
+            dynamicTariffDefault={status.dynamicTariffEntityDefault}
+          />
           <SyncSection siteId={site.id} canEdit={canEdit} />
         </>
       )}
@@ -107,8 +111,17 @@ export function SettingsPage() {
   );
 }
 
-function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
+function MappingSection({
+  site,
+  canEdit,
+  dynamicTariffDefault,
+}: {
+  site: Site;
+  canEdit: boolean;
+  dynamicTariffDefault: string | null;
+}) {
   const t = useT();
+  const siteId = site.id;
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -116,6 +129,13 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
   const mapQuery = useQuery({
     queryKey: ["ha-mappings", siteId],
     queryFn: () => api.homeAssistant.mappings(siteId),
+  });
+  // Not a statistic (no `sum`), so it never appears in statsQuery above —
+  // this is what makes it possible to select a live price-forecast sensor
+  // by name instead of typing it.
+  const tariffEntitiesQuery = useQuery({
+    queryKey: ["ha-dynamic-tariff-entities"],
+    queryFn: api.homeAssistant.dynamicTariffEntities,
   });
 
   const setMutation = useMutation({
@@ -131,6 +151,14 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
     mutationFn: (id: string) => api.homeAssistant.removeMapping(id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["ha-mappings", siteId] }),
   });
+  const tariffSave = useMutation({
+    mutationFn: (dynamicTariffEntityId: string | null) => api.sites.update(siteId, { dynamicTariffEntityId }),
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
 
   const byKind = new Map((mapQuery.data ?? []).map((m) => [m.metricKind, m]));
   // Home Assistant classifies statistics by unit; "energy" is the set that can
@@ -144,6 +172,20 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
       (s.unitClass === null && (s.unit === "kWh" || s.unit === "Wh")) ||
       mappedIds.has(s.statisticId),
   );
+
+  // Same "never let a saved choice vanish from its own dropdown" rule as
+  // above: if the stored entity isn't among the candidates Home Assistant
+  // currently reports (renamed, or HA briefly unreachable), it still gets an
+  // option so it stays visibly selected rather than silently blank.
+  const tariffOptions = tariffEntitiesQuery.data ?? [];
+  const currentTariffEntity = site.dynamicTariffEntityId;
+  const tariffOptionList =
+    currentTariffEntity && !tariffOptions.some((o) => o.entityId === currentTariffEntity)
+      ? [...tariffOptions, { entityId: currentTariffEntity, friendlyName: null, priceComponent: null, unit: null }]
+      : tariffOptions;
+  const defaultOptionLabel = dynamicTariffDefault
+    ? t("settings.dynamicTariffDefaultOption", { entity: dynamicTariffDefault })
+    : t("settings.dynamicTariffNoDefaultOption");
 
   return (
     <div className="space-y-3 rounded-lg border bg-white p-4">
@@ -205,8 +247,42 @@ function MappingSection({ siteId, canEdit }: { siteId: string; canEdit: boolean 
               </tr>
             );
           })}
+          {/* A different kind of setting — a price feed, not an energy flow —
+              so it gets a heavier top border, same convention as a totals
+              row elsewhere in the app. */}
+          <tr className="border-t-2 border-slate-300 align-middle">
+            <td className="py-2 pr-4">
+              <div className="text-slate-900">{t("settings.dynamicTariffEntity")}</div>
+              <div className="text-xs text-slate-500">{t("settings.dynamicTariffEntityHint")}</div>
+            </td>
+            <td className="py-2 pr-4">
+              <select
+                className="input w-full max-w-md"
+                value={currentTariffEntity ?? ""}
+                disabled={!canEdit || tariffEntitiesQuery.isLoading || tariffSave.isPending}
+                onChange={(e) => tariffSave.mutate(e.target.value === "" ? null : e.target.value)}
+              >
+                <option value="">{defaultOptionLabel}</option>
+                {tariffOptionList.map((o) => (
+                  <option key={o.entityId} value={o.entityId}>
+                    {o.entityId}
+                    {o.friendlyName ? ` · ${o.friendlyName}` : ""}
+                    {o.priceComponent ? ` (${o.priceComponent})` : ""}
+                  </option>
+                ))}
+              </select>
+            </td>
+            <td className="py-2 text-right text-xs text-slate-400">
+              {currentTariffEntity ? t("settings.mapped") : ""}
+            </td>
+          </tr>
         </tbody>
       </table>
+      {tariffEntitiesQuery.isError && (
+        <p className="text-sm text-red-600">
+          {t("settings.statListFailed", { message: (tariffEntitiesQuery.error as Error).message })}
+        </p>
+      )}
 
       <p className="mt-3 text-xs text-slate-500">{t("settings.derivedNote")}</p>
     </div>

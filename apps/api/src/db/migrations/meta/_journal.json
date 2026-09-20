@@ -155,6 +155,13 @@
       "when": 1789712953485,
       "tag": "0021_sticky_bromley",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789926710798,
+      "tag": "0022_clumsy_onslaught",
+      "breakpoints": true
     }
   ]
 }

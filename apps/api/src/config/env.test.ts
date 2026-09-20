@@ -6,7 +6,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * looking set.
  */
 const BASE = { DATABASE_URL: "postgres://x:x@127.0.0.1:1/x" };
-const AUTH_KEYS = ["AUTH_ENABLED", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "AUTH_ADMIN_EMAILS", "AUTH_DEV_AS"];
+const AUTH_KEYS = [
+  "AUTH_ENABLED",
+  "CF_ACCESS_TEAM_DOMAIN",
+  "CF_ACCESS_AUD",
+  "AUTH_ADMIN_EMAILS",
+  "AUTH_DEV_AS",
+  "HA_DYNAMIC_TARIFF_ENTITY_ID",
+];
 
 async function loadEnv(overrides: Record<string, string> = {}) {
   vi.resetModules();
@@ -77,5 +84,22 @@ describe("AUTH_DEV_AS", () => {
 
   it("refuses something that is not an address", async () => {
     await expect(loadEnv({ AUTH_DEV_AS: "neighbour" })).rejects.toThrow(/AUTH_DEV_AS/);
+  });
+});
+
+describe("HA_DYNAMIC_TARIFF_ENTITY_ID", () => {
+  it("defaults to this household's own sensor when unset", async () => {
+    const { env } = await loadEnv();
+    expect(env.HA_DYNAMIC_TARIFF_ENTITY_ID).toBe("sensor.dynamic_tariff");
+  });
+
+  it("takes an explicit entity id", async () => {
+    const { env } = await loadEnv({ HA_DYNAMIC_TARIFF_ENTITY_ID: "sensor.my_own_tariff" });
+    expect(env.HA_DYNAMIC_TARIFF_ENTITY_ID).toBe("sensor.my_own_tariff");
+  });
+
+  it("reads blank as unset, which turns the sync off rather than pointing it at nothing", async () => {
+    const { env } = await loadEnv({ HA_DYNAMIC_TARIFF_ENTITY_ID: "" });
+    expect(env.HA_DYNAMIC_TARIFF_ENTITY_ID).toBeUndefined();
   });
 });

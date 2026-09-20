@@ -125,6 +125,7 @@ export const de: Record<keyof typeof en, string> = {
   "calc.col.chargingCost": "Ladekosten",
   "calc.col.batteryNet": "Netto Batterie",
   "calc.col.partySales": "Verkauf an Teilnehmer",
+  "calc.col.rcpFixed": "Ersparnis Grundtarife RCP",
   "calc.col.selfConsumption": "Wert des Eigenverbrauchs",
   "calc.col.exportRevenue": "Einspeiseertrag",
   "calc.col.totalWithBattery": "Total (mit Batterie)",
@@ -144,6 +145,10 @@ export const de: Record<keyof typeof en, string> = {
   "settings.haConnected": "Verbunden mit {url}.",
   "settings.haSyncing": "Automatische Synchronisierung alle {minutes} Minuten.",
   "settings.haSyncOff": "Die automatische Synchronisierung ist deaktiviert.",
+  "settings.dynamicTariffEntity": "Sensor für dynamische Rücklieferungstarife",
+  "settings.dynamicTariffEntityHint": "Speist den Sync für dynamische Rücklieferungstarife",
+  "settings.dynamicTariffDefaultOption": "— Standard: {entity} —",
+  "settings.dynamicTariffNoDefaultOption": "— keiner konfiguriert —",
 
   "settings.mapping": "Zuordnung der Entitäten",
   "settings.mappingNote":
@@ -231,7 +236,7 @@ export const de: Record<keyof typeof en, string> = {
   "tariff.mode.flat": "Quartalsweise (fester Tarif)",
   "tariff.mode.dynamic": "Day-ahead (Spot)",
 
-  "tariff.dynamic": "Dynamische Rücklieferungstarife (BKW)",
+  "tariff.dynamic": "Dynamische Rücklieferungstarife (Home Assistant)",
   "tariff.dynamicLoaded":
     "{count} Viertelstundentarife für das aktuelle Fenster geladen, publiziert am {published}.",
   "tariff.dynamicEmpty":
@@ -428,13 +433,18 @@ export const de: Record<keyof typeof en, string> = {
   "dash.soldPriceHint": "Rücklieferungs- und Teilnehmerertrag geteilt durch die vergüteten kWh, jede zum Tarif ihrer Viertelstunde",
   "dash.soldUnpriced": "{kwh} kWh ohne Tarif, nicht berücksichtigt",
   "dash.neighbours": "Verkauf an Teilnehmer",
-  "dash.neighboursNote": "Was jeder Teilnehmer für den bezogenen Solarstrom bezahlt hat, verglichen mit dem, was dieselbe Energie bei Einspeisung ins Netz zum Rücklieferungstarif der jeweiligen Viertelstunde eingebracht hätte. Die Differenz ist der effektive Gewinn des lokalen Verkaufs.",
+  "dash.neighboursNote": "Was jeder Teilnehmer für den bezogenen Solarstrom bezahlt hat, verglichen mit dem, was dieselbe Energie bei Einspeisung ins Netz zum Rücklieferungstarif der jeweiligen Viertelstunde eingebracht hätte. Die Differenz ist der effektive Gewinn des lokalen Verkaufs. Darunter Ihr eigener Gewinn aus dem RCP: die Grundtarife, die Sie nicht mehr allein tragen.",
   "dash.nb.participant": "Teilnehmer",
   "dash.nb.revenue": "Verkauf an Teilnehmer",
   "dash.nb.export": "Bei Einspeisung",
   "dash.nb.gain": "Effektiver Gewinn",
   "dash.nb.gainPerKwh": "Gewinn pro kWh",
+  "dash.nb.participantSaved": "Ihre Ersparnis",
   "dash.nb.none": "In diesem Zeitraum kein Verkauf an Teilnehmer.",
+  "dash.nb.owner": "Sie — geteilte Grundtarife",
+  "dash.nb.ownerDetail": "{alone} allein, {rcp} im RCP",
+  "dash.nb.ownerHint": "Ihre Grundtarife für den Anschluss: {alone} allein, {rcp} als Ihr Anteil im RCP.",
+  "dash.nb.rcpTotal": "Gesamtgewinn aus dem RCP",
   "dash.nb.unpriced": "{kwh} kWh wurden ohne erfassten Rücklieferungs- oder Teilnehmertarif verkauft: Sie zählen zum Ertrag, aber nicht zum Vergleich.",
   "dash.withBatteryTotal": "Gesamtersparnis — mit Batterie",
   "dash.noBatteryTotal": "Gesamtersparnis — ohne Batterie",
@@ -458,7 +468,7 @@ export const de: Record<keyof typeof en, string> = {
 
   "dash.revenue": "Erträge",
   "dash.revenueNote":
-    "Direktverbrauch (vermiedener Bezug), direkte Einspeisung, Batterie und Verkauf an Teilnehmer, pro {unit}",
+    "Direktverbrauch (vermiedener Bezug), direkte Einspeisung, Batterie, Verkauf an Teilnehmer und im RCP geteilte Grundtarife, pro {unit}",
   "dash.revenueKwh": " — die Energie hinter jeder Ertragszahl",
   "dash.revenueBoth": " — mit derselben Aufteilung in kWh schraffiert daneben, auf der rechten Achse",
   "dash.revenueCharging":
@@ -472,6 +482,7 @@ export const de: Record<keyof typeof en, string> = {
   "dash.flow.battery": "Batterieentladung",
   "dash.flow.neighborSale": "Verkauf an Teilnehmer",
   "dash.flow.neighborSupply": "Lieferung an Teilnehmer",
+  "dash.flow.rcpFixed": "RCP: geteilte Grundtarife",
   "dash.flow.neighbor": "Teilnehmer",
   "dash.wholePeriod": "Ganzer Zeitraum",
   "dash.chargingForgone": "Laden (entgangene Einspeisung)",

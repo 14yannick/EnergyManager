@@ -15,6 +15,7 @@ function toDomain(row: Row): Site {
     // drizzle's `date` column is already "YYYY-MM-DD".
     productionStartDate: row.productionStartDate,
     batteryConversionLoss: Number(row.batteryConversionLoss),
+    dynamicTariffEntityId: row.dynamicTariffEntityId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -44,6 +45,7 @@ export async function siteRoutes(app: FastifyInstance) {
       .set({
         productionStartDate: d.productionStartDate ?? null,
         ...set("batteryConversionLoss", d.batteryConversionLoss?.toString()),
+        ...set("dynamicTariffEntityId", d.dynamicTariffEntityId),
         updatedAt: new Date(),
       })
       .where(eq(sites.id, req.params.id))

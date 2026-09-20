@@ -26,8 +26,11 @@ import {
 } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { priceNeighbourSales } from "./neighbourSales.js";
+import { loadOwnerFixedCosts } from "../billing/service.js";
+import { savedByParty } from "../consumption/service.js";
 import { getCostItemsSummary } from "../costItems/service.js";
 import {
+  addOwnerFixedAdvantage,
   aggregateDailyToMonthly,
   aggregateDailyToOverall,
   aggregateDailyToQuarterly,
@@ -218,12 +221,17 @@ export async function getDailySavings(
   to: string,
   granularity: SavingsQuery["granularity"] = "daily",
 ): Promise<DailySavings[]> {
-  const { slots } = await loadPricedSlots(siteId, from, to);
+  const [{ slots }, ownerCosts] = await Promise.all([
+    loadPricedSlots(siteId, from, to),
+    loadOwnerFixedCosts(siteId),
+  ]);
   const intervalRows = slots.map(toDailySavings);
+  // Per day (or hour) of readings, before any rolling up.
+  const withOwner = (rows: DailySavings[]) => (ownerCosts ? addOwnerFixedAdvantage(rows, ownerCosts) : rows);
 
-  if (granularity === "hourly") return aggregateIntervalsToHourly(intervalRows);
+  if (granularity === "hourly") return withOwner(aggregateIntervalsToHourly(intervalRows));
 
-  const daily = aggregateIntervalsToDaily(intervalRows);
+  const daily = withOwner(aggregateIntervalsToDaily(intervalRows));
   if (granularity === "monthly") return aggregateDailyToMonthly(daily);
   if (granularity === "quarterly") return aggregateDailyToQuarterly(daily);
   if (granularity === "yearly") return aggregateDailyToYearly(daily);
@@ -365,5 +373,20 @@ export async function getNeighbourSales(siteId: string, from: string, to: string
   const draws = rows.flatMap((r) =>
     r.partyId ? [{ partyId: r.partyId, name: r.name, ts: r.ts.toISOString(), kwh: toNumber(r.kwh) }] : [],
   );
-  return priceNeighbourSales(draws, resolveRate, { from, to });
+  // Read off the savings rows themselves, so this can never disagree with the
+  // revenue chart or the savings totals about which days it covers.
+  const [overall, ownerCosts, saved] = await Promise.all([
+    getDailySavings(siteId, from, to, "overall"),
+    loadOwnerFixedCosts(siteId),
+    savedByParty(siteId, from, to),
+  ]);
+  const row = overall[0];
+  const owner = ownerCosts
+    ? {
+        aloneChf: row?.ownerFixedAloneChf ?? 0,
+        rcpChf: row?.ownerFixedRcpChf ?? 0,
+        advantageChf: row?.rcpFixedAdvantageChf ?? 0,
+      }
+    : null;
+  return { ...priceNeighbourSales(draws, resolveRate, { from, to }, saved), owner };
 }

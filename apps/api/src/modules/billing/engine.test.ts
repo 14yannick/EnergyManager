@@ -1,7 +1,7 @@
 import type { PartyRole } from "@energy-manager/shared";
 import { describe, expect, it } from "vitest";
 import type { GridTariffPosition } from "@energy-manager/shared";
-import { buildParticipantInvoice, consumptionCosts, inclusiveDays, isBilledParty, participantCountOf, type InvoiceInputs } from "./engine.js";
+import { buildParticipantInvoice, consumptionCosts, inclusiveDays, ownerFixedCosts, ownerIsMember, isBilledParty, participantCountOf, type InvoiceInputs } from "./engine.js";
 
 // The 2026 tariff as the provider bills it, gross (VAT passed through).
 const G = 1.081;
@@ -208,5 +208,44 @@ describe("consumptionCosts", () => {
 
   it("charges nothing for local energy when no neighbour rate is set", () => {
     expect(consumptionCosts(inputs({ localRateChf: null })).localEnergyChf).toBe(0);
+  });
+});
+
+describe("the owner's share of the standing charges", () => {
+  // Round synthetic rates: a shared base, individual metering, and a
+  // VZEV-only virtual metering fee that exists only because of the pool.
+  const base = position("Base", "energie", "pool_shared", 120);
+  const meter = position("Meter", "messung", "per_participant", 60);
+  const virtualMeter = position("Virtual meter", "messung", "pool_shared", 30, false);
+
+  it("saves nothing for an owner alone on the connection", () => {
+    const { aloneChf, rcpChf } = ownerFixedCosts([base, meter], 1, 365);
+    expect(rcpChf).toBeCloseTo(aloneChf, 10);
+  });
+
+  it("saves the part of the shared base the other members now carry", () => {
+    const { aloneChf, rcpChf } = ownerFixedCosts([base, meter], 3, 365);
+    // Metering is borne individually either way, so only the base differs.
+    expect(aloneChf - rcpChf).toBeCloseTo(120 - 120 / 3, 10);
+  });
+
+  it("loses the owner's share of what only the pool costs", () => {
+    const without = ownerFixedCosts([base, meter], 3, 365);
+    const withVirtual = ownerFixedCosts([base, meter, virtualMeter], 3, 365);
+    const gain = (c: { aloneChf: number; rcpChf: number }) => c.aloneChf - c.rcpChf;
+    expect(gain(without) - gain(withVirtual)).toBeCloseTo(30 / 3, 10);
+  });
+
+  it("accrues by the day", () => {
+    const year = ownerFixedCosts([base, meter], 3, 365);
+    const day = ownerFixedCosts([base, meter], 3, 1);
+    expect(day.aloneChf * 365).toBeCloseTo(year.aloneChf, 10);
+    expect(day.rcpChf * 365).toBeCloseTo(year.rcpChf, 10);
+  });
+
+  it("counts the owner as a member unless they only administer the RCP", () => {
+    expect(ownerIsMember([{ role: "rcp_admin" }, { role: "rcp_party" }])).toBe(true);
+    expect(ownerIsMember([{ role: "rcp_party" }])).toBe(true); // unlisted owner
+    expect(ownerIsMember([{ role: "rcp_admin_only" }, { role: "rcp_party" }])).toBe(false);
   });
 });

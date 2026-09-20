@@ -3,6 +3,7 @@ import { haEntityMappingInputSchema, haSyncRequestSchema } from "@energy-manager
 import { env } from "../../config/env.js";
 import {
   deleteMapping,
+  listHaDynamicTariffEntities,
   listHaStatistics,
   listMappings,
   syncHomeAssistant,
@@ -15,6 +16,9 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
     url: env.HA_URL ?? null,
     syncEnabled: env.HA_SYNC_ENABLED,
     syncIntervalMinutes: env.HA_SYNC_INTERVAL_MINUTES,
+    // What a site's dynamic-tariff entity field falls back to when left
+    // blank — shown on the Settings page so "blank" doesn't read as "off".
+    dynamicTariffEntityDefault: env.HA_DYNAMIC_TARIFF_ENTITY_ID ?? null,
   }));
 
   // Browsing Home Assistant's statistic list is what makes the mapping UI
@@ -24,6 +28,16 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
       return reply.status(503).send({ error: "not_configured", message: "Set HA_URL and HA_TOKEN." });
     }
     return listHaStatistics();
+  });
+
+  // Same idea as /statistics above, but for the dynamic-tariff mapping row:
+  // a price-forecast sensor carries no `sum`, so it never appears in that
+  // list and needs its own, filtered by shape instead of by unit class.
+  app.get("/api/home-assistant/dynamic-tariff-entities", async (_req, reply) => {
+    if (!env.HA_URL || !env.HA_TOKEN) {
+      return reply.status(503).send({ error: "not_configured", message: "Set HA_URL and HA_TOKEN." });
+    }
+    return listHaDynamicTariffEntities();
   });
 
   app.get<{ Params: { siteId: string } }>("/api/sites/:siteId/home-assistant/entities", async (req) => {

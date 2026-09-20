@@ -1,6 +1,7 @@
 import { splitInverterOutput } from "./split.js";
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type {
+  HaDynamicTariffCandidate,
   HaEntityMapping,
   HaEntityMappingInput,
   HaStatisticOption,
@@ -9,7 +10,12 @@ import type {
 } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { haEntityMap, intervalMetrics } from "../../db/schema/index.js";
-import { fetchStatistics, listEnergyStatistics, type HaPeriod } from "./haClient.js";
+import {
+  fetchStatistics,
+  listEnergyStatistics,
+  listHaDynamicTariffEntities as fetchDynamicTariffEntities,
+  type HaPeriod,
+} from "./haClient.js";
 import { aggregateBuckets, startOfDayBefore } from "./buckets.js";
 
 export const HA_SOURCE = "home_assistant";
@@ -41,6 +47,11 @@ function toDomain(row: Row): HaEntityMapping {
 
 export async function listHaStatistics(): Promise<HaStatisticOption[]> {
   return listEnergyStatistics();
+}
+
+/** Live entities shaped like a price-forecast sensor — for the dynamic-tariff mapping row. */
+export async function listHaDynamicTariffEntities(): Promise<HaDynamicTariffCandidate[]> {
+  return fetchDynamicTariffEntities();
 }
 
 export async function listMappings(siteId: string): Promise<HaEntityMapping[]> {

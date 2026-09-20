@@ -264,6 +264,11 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
     neighborSellRevenueChf,
     exportedPricedKwh: sellRate != null ? exportedKwh : 0,
     neighborPricedKwh: neighborSellRate != null ? neighborConsumptionKwh : 0,
+    // Per day, not per interval: filled in by addOwnerFixedAdvantage once the
+    // intervals are rolled up.
+    ownerFixedAloneChf: 0,
+    ownerFixedRcpChf: 0,
+    rcpFixedAdvantageChf: 0,
     noBatteryDirectExportRevenueChf,
   };
 }
@@ -292,6 +297,9 @@ const SUMMABLE_FIELDS = [
   "neighborSellRevenueChf",
   "exportedPricedKwh",
   "neighborPricedKwh",
+  "ownerFixedAloneChf",
+  "ownerFixedRcpChf",
+  "rcpFixedAdvantageChf",
   "noBatteryDirectExportRevenueChf",
 ] as const satisfies readonly (keyof DailySavings)[];
 
@@ -574,4 +582,33 @@ export function summarizeOverallSavings(
   to: string,
 ): { summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] } {
   return summarizePeriodSavings(overallRows, costs, from, to, 365 / inclusiveDays(from, to));
+}
+
+/**
+ * Adds the owner's gain from sharing the grid connection to daily or hourly
+ * rows: standing charges alone, less the owner's part of them inside the RCP.
+ *
+ * It is a saving like any other the installation brings, so it joins both
+ * totals; with and without battery alike, since the battery plays no part in
+ * it, which leaves battery-only savings untouched. Applied before rows are
+ * rolled up into months or quarters, so every coarser view sums it for free.
+ */
+export function addOwnerFixedAdvantage(
+  rows: DailySavings[],
+  costsFor: (day: string, days: number) => { aloneChf: number; rcpChf: number },
+): DailySavings[] {
+  return rows.map((row) => {
+    // "YYYY-MM-DD" for a day, "YYYY-MM-DDTHH" for one of its hours.
+    const hourly = row.date.length > 10;
+    const { aloneChf, rcpChf } = costsFor(row.date.slice(0, 10), hourly ? 1 / 24 : 1);
+    const advantage = aloneChf - rcpChf;
+    return {
+      ...row,
+      ownerFixedAloneChf: aloneChf,
+      ownerFixedRcpChf: rcpChf,
+      rcpFixedAdvantageChf: advantage,
+      savingsWithBatteryChf: row.savingsWithBatteryChf + advantage,
+      savingsWithoutBatteryChf: row.savingsWithoutBatteryChf + advantage,
+    };
+  });
 }

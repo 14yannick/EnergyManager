@@ -1,14 +1,112 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import type { PartyConsumption, SavingsQuery } from "@energy-manager/shared";
 import { findRateForInstant } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, parties, tariffPeriods } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
-import { participantCountOf } from "../billing/engine.js";
+import { participantCountOf, positionsValidOn } from "../billing/engine.js";
 import { listPositions } from "../billing/service.js";
-import { daysIn, periodKeyOf, priceConsumption, type PricingUnit } from "./engine.js";
+import {
+  daysIn,
+  periodKeyOf,
+  priceConsumption,
+  type PricingContext,
+  type PricingUnit,
+} from "./engine.js";
 
 type Granularity = NonNullable<SavingsQuery["granularity"]>;
+
+/** Local midnight bounds, the same ones billing and savings use. */
+const rangeBounds = (from: string, to: string) => ({
+  fromBound: sql`(${from}::date AT TIME ZONE 'Europe/Zurich')`,
+  toBoundExclusive: sql`((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`,
+});
+
+/**
+ * How a party's consumption is priced on any day of the range: the positions
+ * in force, the agreed neighbour rate, and how many share the fixed costs.
+ *
+ * One loader for both views, so a participant's own page and the owner's
+ * per-participant table can never price the same day differently.
+ */
+async function loadPricingContext(siteId: string): Promise<PricingContext> {
+  const [siteParties, positions, flatRows] = await Promise.all([
+    db.select({ role: parties.role }).from(parties).where(eq(parties.siteId, siteId)),
+    listPositions(siteId),
+    db.select().from(tariffPeriods).where(eq(tariffPeriods.siteId, siteId)),
+  ]);
+  // Validity is tested at local noon: positions and tariff periods are stored
+  // from local midnights, so noon sits safely inside whichever one covers the
+  // day, whatever the UTC offset.
+  const noon = (day: string) => `${day}T12:00:00.000Z`;
+  const neighbourRates = flatRows.map((r) => ({
+    kind: r.kind,
+    startTs: r.startTs.toISOString(),
+    endTs: r.endTs.toISOString(),
+    rateChfPerKwh: r.rateChfPerKwh == null ? null : toNumber(r.rateChfPerKwh),
+  }));
+  return {
+    participantCount: participantCountOf(siteParties),
+    positionsOn: (day) => positionsValidOn(positions, day),
+    localRateOn: (day) =>
+      findRateForInstant("neighbor_sell", noon(day), neighbourRates)?.rateChfPerKwh ?? null,
+  };
+}
+
+/**
+ * What each party saved against being supplied directly, keyed by party id —
+ * the figure their own Consumption page leads with. Priced through the same
+ * context and the same engine, so the two always agree.
+ */
+export async function savedByParty(siteId: string, from: string, to: string): Promise<Map<string, number>> {
+  const { fromBound, toBoundExclusive } = rangeBounds(from, to);
+  const localDay = sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`;
+  const [rows, ctx] = await Promise.all([
+    db
+      .select({
+        partyId: intervalMetrics.partyId,
+        day: localDay,
+        localKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption'), 0)`,
+        gridKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption_grid'), 0)`,
+      })
+      .from(intervalMetrics)
+      .where(
+        and(
+          eq(intervalMetrics.siteId, siteId),
+          isNotNull(intervalMetrics.partyId),
+          sql`${intervalMetrics.metricKind} in ('consumption', 'consumption_grid')`,
+          sql`${intervalMetrics.ts} >= ${fromBound}`,
+          sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
+        ),
+      )
+      .groupBy(intervalMetrics.partyId, localDay),
+    loadPricingContext(siteId),
+  ]);
+
+  const byParty = new Map<string, Map<string, { localKwh: number; gridKwh: number }>>();
+  for (const r of rows) {
+    if (!r.partyId) continue;
+    const days = byParty.get(r.partyId) ?? new Map();
+    days.set(r.day, { localKwh: toNumber(r.localKwh), gridKwh: toNumber(r.gridKwh) });
+    byParty.set(r.partyId, days);
+  }
+
+  const saved = new Map<string, number>();
+  const rangeDays = daysIn(from, to);
+  for (const [partyId, days] of byParty) {
+    // Every day of the range, with or without readings: the standing charges
+    // accrue either way, exactly as on the party's own page.
+    const units: PricingUnit[] = rangeDays.map((day) => ({
+      day,
+      key: day,
+      days: 1,
+      localKwh: days.get(day)?.localKwh ?? 0,
+      gridKwh: days.get(day)?.gridKwh ?? 0,
+    }));
+    saved.set(partyId, priceConsumption(units, ctx).totals.savedChf);
+  }
+  return saved;
+}
 
 /**
  * One party's consumption over a range, split into what came from the site's
@@ -25,8 +123,7 @@ export async function getPartyConsumption(
 ): Promise<PartyConsumption | null> {
   // Same local-midnight bounds as billing and savings, so the three can't
   // disagree about which intervals fall inside a range.
-  const fromBound = sql`(${from}::date AT TIME ZONE 'Europe/Zurich')`;
-  const toBoundExclusive = sql`((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
+  const { fromBound, toBoundExclusive } = rangeBounds(from, to);
   const localHour = sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD"T"HH24')`;
   const ofParty = and(
     eq(intervalMetrics.siteId, siteId),
@@ -34,7 +131,7 @@ export async function getPartyConsumption(
     sql`${intervalMetrics.metricKind} in ('consumption', 'consumption_grid')`,
   );
 
-  const [siteParties, usageRows, spanRows, positions, flatRows] = await Promise.all([
+  const [siteParties, usageRows, spanRows, ctx] = await Promise.all([
     db.select().from(parties).where(eq(parties.siteId, siteId)),
     db
       .select({
@@ -61,8 +158,7 @@ export async function getPartyConsumption(
       })
       .from(intervalMetrics)
       .where(ofParty),
-    listPositions(siteId),
-    db.select().from(tariffPeriods).where(eq(tariffPeriods.siteId, siteId)),
+    loadPricingContext(siteId),
   ]);
 
   const party = siteParties.find((p) => p.id === partyId);
@@ -94,23 +190,7 @@ export async function getPartyConsumption(
     units.push({ day, key: periodKeyOf(day, granularity), days: 1, localKwh, gridKwh });
   }
 
-  // Validity is tested at local noon: positions and tariff periods are stored
-  // from local midnights, so noon sits safely inside whichever one covers the
-  // day, whatever the UTC offset.
-  const noon = (day: string) => `${day}T12:00:00.000Z`;
-  const neighbourRates = flatRows.map((r) => ({
-    kind: r.kind,
-    startTs: r.startTs.toISOString(),
-    endTs: r.endTs.toISOString(),
-    rateChfPerKwh: r.rateChfPerKwh == null ? null : toNumber(r.rateChfPerKwh),
-  }));
-
-  const priced = priceConsumption(units, {
-    participantCount: participantCountOf(siteParties),
-    positionsOn: (day) => positions.filter((p) => p.validFrom <= noon(day) && p.validTo > noon(day)),
-    localRateOn: (day) =>
-      findRateForInstant("neighbor_sell", noon(day), neighbourRates)?.rateChfPerKwh ?? null,
-  });
+  const priced = priceConsumption(units, ctx);
 
   return {
     partyId: party.id,
