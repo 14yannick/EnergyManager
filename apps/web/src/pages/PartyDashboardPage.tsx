@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Area,
   Bar,
   CartesianGrid,
   ComposedChart,
   Legend,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import type { LiveDayCurve } from "@energy-manager/shared";
 import type { PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useSelectedPeriod } from "../lib/usePeriod";
@@ -253,17 +256,20 @@ function LiveSection({ siteId }: { siteId: string | null | undefined }) {
   });
 
   const live = query.data;
-  // Nothing configured is not a failure worth shouting about — the view just
-  // isn't set up, and the admin is told where to do it.
-  if (!live || !live.configured) return null;
+  if (!live) return null;
 
-  const hasAny =
-    live.exportW != null ||
-    live.pvW != null ||
-    live.forecastTodayKwh != null ||
-    live.forecastRemainingKwh != null ||
-    live.forecastTomorrowKwh != null;
-  if (!hasAny) return null;
+  // The cards need a live entity each; the day's curve needs none — it
+  // reads production from the store and the forecast from Home Assistant's
+  // own energy setup. Show whichever the site has, and nothing when it has
+  // neither: an unset-up view is not a failure worth shouting about.
+  const hasCards =
+    live.configured &&
+    (live.exportW != null ||
+      live.pvW != null ||
+      live.forecastTodayKwh != null ||
+      live.forecastRemainingKwh != null ||
+      live.forecastTomorrowKwh != null);
+  if (!hasCards && !live.today) return null;
 
   const kw = (w: number) => `${(w / 1000).toFixed(2)} kW`;
   const kwh = (v: number) => `${v.toFixed(1)} kWh`;
@@ -274,6 +280,7 @@ function LiveSection({ siteId }: { siteId: string | null | undefined }) {
         <h2 className="text-lg font-semibold text-slate-900">{t("party.live")}</h2>
         <p className="text-xs text-slate-500">{t("party.liveNote")}</p>
       </div>
+      {hasCards && (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {live.exportW != null && (
           <LiveCard
@@ -306,7 +313,163 @@ function LiveSection({ siteId }: { siteId: string | null | undefined }) {
           <LiveCard label={t("party.live.tomorrow")} value={kwh(live.forecastTomorrowKwh)} />
         )}
       </div>
+      )}
+      {live.today && <DayCurveChart today={live.today} />}
     </section>
+  );
+}
+
+// Actual production wears the sun's colour, the forecast a dashed neutral: a
+// measurement and a prediction must not be told apart by hue alone, and a
+// dash reads as "expected" without a legend. The still-to-come area is the
+// same neutral, faint, so it sits under the line it belongs to.
+const PRODUCED_COLOR = "#eda100";
+const FORECAST_COLOR = "#475569";
+// The forecast colour as it looks over white at a tenth of its strength —
+// a real colour rather than the dark one with opacity, because the legend
+// swatch is drawn from `fill` alone and would otherwise promise a dark block
+// where the chart shows a faint one.
+const REMAINING_FILL = "#e4e7ec";
+
+interface CurvePoint {
+  hour: number;
+  label: string;
+  produced: number | null;
+  forecast: number | null;
+  /** The forecast again, but only from the current hour on — what is still to come. */
+  remaining: number | null;
+  partial: boolean;
+}
+
+/**
+ * Today, hour by hour: bars for what the panels made, a dashed line for
+ * what was expected, and the part of the line still ahead shaded in.
+ *
+ * Every hour from the first with anything to the last is on the axis, so
+ * a gap in the readings shows as a gap and not as time skipped. The hour in
+ * progress is drawn with what it has and named as partial in the tooltip:
+ * production is only derived once the hour's PV figure arrives, so it will
+ * usually look short until the hour ends, and must not read as a cloud.
+ */
+function DayCurveChart({ today }: { today: LiveDayCurve }) {
+  const t = useT();
+  const points = useMemo<CurvePoint[]>(() => {
+    const actual = new Map(today.actual.map((h) => [h.hour, h.kwh]));
+    const forecast = new Map(today.forecast.map((h) => [h.hour, h.kwh]));
+    // The axis runs from the first hour with anything in it to the last. A
+    // night hour that only reports zero — the store says so for every hour
+    // since midnight — is not "anything": it would pin the axis to 00:00 and
+    // squeeze the day into its right-hand half.
+    const hours = [...actual.entries(), ...forecast.entries()]
+      .filter(([, kwh]) => kwh > 0)
+      .map(([hour]) => hour);
+    if (hours.length === 0) return [];
+    const first = Math.min(...hours);
+    const last = Math.max(...hours);
+    const out: CurvePoint[] = [];
+    for (let hour = first; hour <= last; hour++) {
+      const f = forecast.get(hour) ?? null;
+      out.push({
+        hour,
+        label: `${String(hour).padStart(2, "0")}:00`,
+        produced: actual.get(hour) ?? null,
+        forecast: f,
+        remaining: hour >= today.currentHour ? f : null,
+        partial: hour === today.currentHour,
+      });
+    }
+    return out;
+  }, [today]);
+  if (points.length === 0) return null;
+
+  const producedKwh = today.actual.reduce((sum, h) => sum + h.kwh, 0);
+  const forecastKwh = today.forecast.reduce((sum, h) => sum + h.kwh, 0);
+
+  return (
+    <div className="rounded-lg border bg-white p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-slate-900">{t("party.live.chart")}</p>
+          <p className="text-xs text-slate-500">{t("party.live.chartNote")}</p>
+        </div>
+        <p className="text-sm text-slate-600">
+          {t("party.live.chartTotals", { produced: producedKwh.toFixed(1), forecast: forecastKwh.toFixed(1) })}
+        </p>
+      </div>
+      <div className="mt-3 h-56 sm:h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={points} barCategoryGap="25%">
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={points.length > 14 ? 2 : 0} />
+            <YAxis tick={{ fontSize: 11 }} width={40} domain={[0, "auto"]} tickFormatter={(v: number) => v.toFixed(1)} />
+            <Tooltip
+              content={({ active, payload }) => {
+                const p = payload?.[0]?.payload as CurvePoint | undefined;
+                if (!active || !p) return null;
+                return (
+                  <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+                    <p className="mb-1 font-medium text-slate-900">
+                      {p.label}
+                      {p.partial ? ` · ${t("party.live.partial")}` : ""}
+                    </p>
+                    <p className="text-slate-600">
+                      {t("party.live.produced")}:{" "}
+                      <span className="font-semibold text-slate-900">
+                        {p.produced == null ? "—" : `${p.produced.toFixed(2)} kWh`}
+                      </span>
+                    </p>
+                    <p className="text-slate-600">
+                      {t("party.live.forecast")}:{" "}
+                      <span className="font-semibold text-slate-900">
+                        {p.forecast == null ? "—" : `${p.forecast.toFixed(2)} kWh`}
+                      </span>
+                    </p>
+                  </div>
+                );
+              }}
+            />
+            {/* Labels in ink, not in the series colour recharts defaults to:
+                the faint "still expected" tint is unreadable as text, and
+                identity is the swatch's job. */}
+            <Legend
+              wrapperStyle={{ fontSize: 12 }}
+              formatter={(value: string) => <span className="text-slate-600">{value}</span>}
+            />
+            <Area
+              type="monotone"
+              dataKey="remaining"
+              name={t("party.live.stillExpected")}
+              stroke="none"
+              fill={REMAINING_FILL}
+              // A square, not the line-and-dot recharts gives an area, which
+              // would be the forecast's own icon twice over.
+              legendType="rect"
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+            <Bar
+              dataKey="produced"
+              name={t("party.live.produced")}
+              fill={PRODUCED_COLOR}
+              maxBarSize={28}
+              radius={[3, 3, 0, 0]}
+              isAnimationActive={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="forecast"
+              name={t("party.live.forecast")}
+              stroke={FORECAST_COLOR}
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              dot={false}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
   );
 }
 

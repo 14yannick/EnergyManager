@@ -417,3 +417,28 @@ export async function listHaSensorsByDeviceClass(deviceClass: string): Promise<H
     }))
     .sort((a, b) => a.entityId.localeCompare(b.entityId));
 }
+
+/**
+ * The hourly solar forecast Home Assistant's own Energy dashboard draws —
+ * the `energy/solar_forecast` command, one map per configured forecast
+ * source (a Forecast.Solar or Solcast config entry), each keyed by a
+ * period's start in UTC with the watt-hours expected in it.
+ *
+ * This is the curve behind the scalar `energy_production_today*` sensors,
+ * which are only its sums. Asked for on demand, never stored: a forecast is
+ * revised every few hours and only the current one means anything.
+ *
+ * Empty, not an error, when no forecast source is configured — the chart
+ * then simply has no dashed line.
+ */
+const solarForecastSchema = z.record(
+  z.string(),
+  z.object({ wh_hours: z.record(z.string(), z.number()).default({}) }).passthrough(),
+);
+
+export async function fetchSolarForecast(): Promise<Array<Record<string, number>>> {
+  return withSession(async (session) => {
+    const result = await session.call({ type: "energy/solar_forecast" }, solarForecastSchema);
+    return Object.values(result).map((entry) => entry.wh_hours ?? {});
+  });
+}

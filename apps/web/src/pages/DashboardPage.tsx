@@ -737,6 +737,11 @@ function RevenueBreakdownChart({
     // Fraction of each axis that must sit below zero.
     const share = (min: number, max: number) => (max - min === 0 ? 0 : -min / (max - min));
     const want = Math.max(share(minLeft, maxLeft), 0);
+    // Nothing below zero: hand both axes back to recharts, but anchored. Left
+    // to "auto" at both ends, an axis carrying only the production line picks
+    // a window around the data — 1200 to 2400 kWh — and a curve that merely
+    // slopes reads as one that plunges. Revenue and energy both start at
+    // nothing, so their axes do too.
     if (want <= 0) return { left: undefined, right: undefined };
 
     // min such that -min/(max-min) === want  =>  min = -want*max/(1-want)
@@ -859,7 +864,7 @@ function RevenueBreakdownChart({
               yAxisId="bars"
               tick={{ fontSize: 11 }}
               tickFormatter={axisTick}
-              domain={axisDomains.left ?? ["auto", "auto"]}
+              domain={axisDomains.left ?? [0, "auto"]}
               ticks={ticksThroughZero(axisDomains.left)}
               width={barUnit(unit) === "kwh" ? 56 : 52}
             />
@@ -869,7 +874,7 @@ function RevenueBreakdownChart({
                 orientation="right"
                 tick={{ fontSize: 11, fill: "#64748b" }}
                 tickFormatter={axisTick}
-                domain={axisDomains.right ?? ["auto", "auto"]}
+                domain={axisDomains.right ?? [0, "auto"]}
                 ticks={ticksThroughZero(axisDomains.right)}
                 width={56}
               />

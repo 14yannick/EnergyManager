@@ -567,7 +567,31 @@ export interface NeighbourSales {
  * any of which may be unconfigured, unavailable, or briefly unreadable, and
  * a missing one should leave a gap rather than read as zero.
  */
+/** One local hour of a day and the energy in it. */
+export interface HourKwh {
+  /** 0–23, in the site's time zone. */
+  hour: number;
+  kwh: number;
+}
+
+/**
+ * Today, hour by hour: what the panels made in each hour that has passed,
+ * and what the forecast expected for every hour of the day.
+ */
+export interface LiveDayCurve {
+  /** YYYY-MM-DD in the site's time zone. */
+  day: string;
+  /** The hour in progress — its actual figure, if any, is partial. */
+  currentHour: number;
+  /** Production per completed hour, from the interval store. Hours with no reading are absent. */
+  actual: HourKwh[];
+  /** The forecast per hour, from Home Assistant. Empty when no forecast source is configured. */
+  forecast: HourKwh[];
+}
+
 export interface LiveEnergyView {
+  /** Today's curve — null when the site has no interval data at all. */
+  today: LiveDayCurve | null;
   /** When these values were read. */
   at: string;
   /** Leaving the house for the grid, in watts. */
