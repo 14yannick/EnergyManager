@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
-import { useI18n, useT } from "./i18n/context";
+import { useI18n, useT, type MessageKey } from "./i18n/context";
 import { useSession, type SessionState } from "./lib/useIdentity";
+import { PeriodProvider } from "./lib/usePeriod";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TariffPeriodsPage } from "./pages/TariffPeriodsPage";
 import { CalculationDetailPage } from "./pages/CalculationDetailPage";
@@ -10,11 +12,51 @@ import { BillingPage } from "./pages/BillingPage";
 import { PartyDashboardPage } from "./pages/PartyDashboardPage";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  // `shrink-0` and `whitespace-nowrap`: the nav scrolls sideways on a phone
-  // rather than squashing seven labels into two lines each.
+  // `shrink-0` and `whitespace-nowrap`: between `sm` and `xl` the nav has its
+  // own row and scrolls sideways rather than squashing seven labels into two
+  // lines each. Below `sm` it is not this bar at all — see `MenuLinks`.
   `shrink-0 whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium ${
     isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
   }`;
+
+/** The same links stacked, where a row would have to be swiped to be read. */
+const menuLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `block rounded-md px-3 py-2 text-sm font-medium ${
+    isActive ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+  }`;
+
+interface NavItem {
+  to: string;
+  label: MessageKey;
+  end?: boolean;
+}
+
+/**
+ * Where a role may go. One list, rendered twice — as the bar and as the phone
+ * menu — so the two can never drift apart.
+ *
+ * A participant sees their own consumption and their own invoices, nothing
+ * else: every other page reads site-wide data the API refuses them.
+ */
+function navItems(participant: boolean): NavItem[] {
+  return participant
+    ? [
+        { to: "/", label: "nav.consumption", end: true },
+        { to: "/billing", label: "nav.billing" },
+      ]
+    : [
+        // What the system did, then what it bills, then the inputs that
+        // produced both — tariffs and readings — with the audit view last
+        // before settings, because it is where you go to check the others.
+        { to: "/", label: "nav.dashboard", end: true },
+        { to: "/consumption", label: "nav.consumption" },
+        { to: "/billing", label: "nav.billing" },
+        { to: "/tariff-periods", label: "nav.tariffs" },
+        { to: "/readings", label: "nav.readings" },
+        { to: "/calculation", label: "nav.calculation" },
+        { to: "/settings", label: "nav.settings" },
+      ];
+}
 
 /**
  * Cloudflare Access ends a session by clearing its cookie at this path. It is
@@ -155,17 +197,22 @@ function NoAccess({ email, status }: { email: string | null; status: number }) {
 export function App() {
   const session = useSession();
   const t = useT();
-  // A participant sees their own consumption and their own invoices, nothing
-  // else: every other page reads site-wide data the API refuses them.
+  const [menuOpen, setMenuOpen] = useState(false);
   const participant = session.kind === "active" && session.identity.role === "participant";
+  const items = navItems(participant);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <PeriodProvider>
+      <div className="min-h-screen bg-slate-50">
       {/* Kept out of print: the billing page prints participant invoices,
           and a nav bar on a document that goes to a neighbour is noise. */}
-      <header className="border-b bg-white print:hidden">
+      {/* Sticky: these pages are long tables, and losing the nav after one
+          screen means scrolling back to the top to go anywhere. Kept out of
+          print: the billing page prints participant invoices, and a nav bar on
+          a document that goes to a neighbour is noise. */}
+      <header className="sticky top-0 z-20 border-b bg-white print:hidden">
         {/* Wraps below `xl`: the seven links plus the language switch and the
-            session badge need about 1100px, so letting them try on anything
+            session badge need about 1260px, so letting them try on anything
             narrower pushed the sign-out button off the side of the screen and
             gave every page a horizontal scrollbar. */}
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 lg:px-8 xl:flex-nowrap">
@@ -175,52 +222,75 @@ export function App() {
 
               `order-last w-full` puts it on its own line under the brand until
               there is room beside it; `overflow-x-auto` keeps the overflow
-              inside the bar instead of widening the page. */}
+              inside the bar instead of widening the page. Below `sm` even
+              swiping could not reach the far links, and nothing said they were
+              there, so the menu button takes over. */}
           <nav
-            className={`order-last flex w-full gap-1 overflow-x-auto xl:order-none xl:w-auto xl:overflow-x-visible ${
-              session.kind === "rejected" ? "hidden" : ""
+            className={`order-last hidden w-full gap-1 overflow-x-auto sm:flex xl:order-none xl:w-auto xl:overflow-x-visible ${
+              session.kind === "rejected" ? "sm:hidden" : ""
             }`}
           >
-            {participant ? (
-              <>
-                <NavLink to="/" end className={navLinkClass}>
-                  {t("nav.consumption")}
-                </NavLink>
-                <NavLink to="/billing" className={navLinkClass}>
-                  {t("nav.billing")}
-                </NavLink>
-              </>
-            ) : (
-              <>
-                <NavLink to="/" end className={navLinkClass}>
-                  {t("nav.dashboard")}
-                </NavLink>
-                <NavLink to="/consumption" className={navLinkClass}>
-                  {t("nav.consumption")}
-                </NavLink>
-                <NavLink to="/tariff-periods" className={navLinkClass}>
-                  {t("nav.tariffs")}
-                </NavLink>
-                <NavLink to="/calculation" className={navLinkClass}>
-                  {t("nav.calculation")}
-                </NavLink>
-                <NavLink to="/readings" className={navLinkClass}>
-                  {t("nav.readings")}
-                </NavLink>
-                <NavLink to="/settings" className={navLinkClass}>
-                  {t("nav.settings")}
-                </NavLink>
-                <NavLink to="/billing" className={navLinkClass}>
-                  {t("nav.billing")}
-                </NavLink>
-              </>
-            )}
+            {items.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
+                {t(item.label)}
+              </NavLink>
+            ))}
           </nav>
           <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
             <LanguageSwitch />
             <SessionBadge session={session} />
+            {session.kind !== "rejected" && (
+              <button
+                type="button"
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-expanded={menuOpen}
+                aria-controls="nav-menu"
+                aria-label={t("nav.menu")}
+                className="shrink-0 rounded-md border border-slate-300 p-1.5 text-slate-700 hover:bg-slate-100 sm:hidden"
+              >
+                <svg
+                  viewBox="0 0 20 20"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  {menuOpen ? (
+                    <>
+                      <line x1="5" y1="5" x2="15" y2="15" />
+                      <line x1="15" y1="5" x2="5" y2="15" />
+                    </>
+                  ) : (
+                    <>
+                      <line x1="3" y1="6" x2="17" y2="6" />
+                      <line x1="3" y1="10" x2="17" y2="10" />
+                      <line x1="3" y1="14" x2="17" y2="14" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            )}
           </div>
         </div>
+        {menuOpen && session.kind !== "rejected" && (
+          <nav id="nav-menu" className="border-t px-4 pb-3 pt-2 sm:hidden">
+            {items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                // Closing on the way out: leaving the sheet open over the page
+                // it just navigated to would hide the thing it was opened for.
+                onClick={() => setMenuOpen(false)}
+                className={menuLinkClass}
+              >
+                {t(item.label)}
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </header>
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 lg:px-8">
@@ -252,6 +322,7 @@ export function App() {
           </Routes>
         )}
       </main>
-    </div>
+      </div>
+    </PeriodProvider>
   );
 }

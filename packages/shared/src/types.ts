@@ -8,10 +8,19 @@ export interface Site {
   batteryConversionLoss: number;
   /**
    * The Home Assistant entity the dynamic feed-in sync reads for this site,
-   * e.g. "sensor.dynamic_tariff". Null falls back to the api's own
-   * HA_DYNAMIC_TARIFF_ENTITY_ID.
+   * e.g. "sensor.dynamic_tariff". Null means this site syncs no dynamic
+   * rates at all.
    */
   dynamicTariffEntityId: string | null;
+  /**
+   * Live Home Assistant entities behind the participants' "right now" view.
+   * Read on demand, never stored. Null leaves that figure off the view.
+   */
+  liveExportPowerEntityId: string | null;
+  livePvPowerEntityId: string | null;
+  forecastTodayEntityId: string | null;
+  forecastRemainingEntityId: string | null;
+  forecastTomorrowEntityId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -225,6 +234,14 @@ export interface HaDynamicTariffCandidate {
   unit: string | null;
 }
 
+/** One sensor of a given device class, for the live-view mapping dropdowns. */
+export interface HaSensorCandidate {
+  entityId: string;
+  friendlyName: string | null;
+  unit: string | null;
+  deviceClass: string | null;
+}
+
 export interface HaSyncResult {
   from: string;
   to: string;
@@ -378,6 +395,16 @@ export interface DailySavings {
   /** neighborConsumptionKwh priced at the neighbour-sale rate. */
   neighborSellRevenueChf: number;
   /**
+   * What the energy sold to participants would have earned exported instead,
+   * at the same interval's feed-in rate — the same opportunity cost
+   * `batteryChargingCostChf` measures for charging. Reported, never
+   * subtracted from a total: the sale itself is already the revenue, and the
+   * grid export figure already excludes these kWh.
+   */
+  neighborExportForgoneChf: number;
+  /** neighborSellRevenueChf less that forgone export: what selling locally really gained. */
+  neighborNetChf: number;
+  /**
    * The share of `exportedKwh` / `neighborConsumptionKwh` that had a rate to
    * price it. What an average price per kWh sold divides by: an interval with
    * no rate earns nothing on paper, and counting its kWh would read as having
@@ -530,6 +557,30 @@ export interface NeighbourSales {
    * owner runs the RCP without being a member of it.
    */
   owner: { aloneChf: number; rcpChf: number; advantageChf: number } | null;
+}
+
+/**
+ * What the site is doing at this instant, for the participants' view: how
+ * much is leaving the house right now, and how much sun the day still holds.
+ *
+ * Every figure is nullable: each comes from its own Home Assistant entity,
+ * any of which may be unconfigured, unavailable, or briefly unreadable, and
+ * a missing one should leave a gap rather than read as zero.
+ */
+export interface LiveEnergyView {
+  /** When these values were read. */
+  at: string;
+  /** Leaving the house for the grid, in watts. */
+  exportW: number | null;
+  /** PV output at this instant, in watts. */
+  pvW: number | null;
+  /** Forecast for the whole day, in kWh. */
+  forecastTodayKwh: number | null;
+  /** Of that, still to come, in kWh. */
+  forecastRemainingKwh: number | null;
+  forecastTomorrowKwh: number | null;
+  /** True once at least one entity is configured for this site. */
+  configured: boolean;
 }
 
 export interface CumulativeSavingsPoint {

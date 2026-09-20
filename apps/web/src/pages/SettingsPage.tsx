@@ -1,10 +1,58 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useCanEdit } from "../lib/useIdentity";
+
+/**
+ * One labelled control with its explanation underneath.
+ *
+ * The two forms on this page each had their own idea of a field — different
+ * label colours, three different input widths, hints that wrapped at whatever
+ * width the flex row happened to leave. Sharing one component, laid out on
+ * `FIELD_GRID`, is what makes a label, an input and a hint line up with their
+ * counterparts in the section above or below.
+ *
+ * Read-only figures pass `readOnly` so the wrapper is not a `<label>` with no
+ * control to point at.
+ */
+function Field({
+  label,
+  hint,
+  readOnly,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  readOnly?: boolean;
+  children: ReactNode;
+}) {
+  const Wrapper = readOnly ? "div" : "label";
+  return (
+    <Wrapper className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs font-medium text-slate-600">{label}</span>
+      {children}
+      {hint ? <span className="text-xs leading-snug text-slate-400">{hint}</span> : null}
+    </Wrapper>
+  );
+}
+
+/** Equal columns, so fields align across every card on the page. */
+const FIELD_GRID = "grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 xl:max-w-4xl";
+
+/**
+ * A computed figure standing in a field's place. Bordered transparently so it
+ * is exactly as tall as an input and the row does not step.
+ */
+function ReadOnlyValue({ children }: { children: ReactNode }) {
+  return (
+    <p className="rounded-md border border-transparent px-2 py-1.5 text-sm font-semibold text-slate-900">
+      {children}
+    </p>
+  );
+}
 
 // Only site-level flows are pullable from Home Assistant: per-party
 // consumption needs a party attached, which a single statistic can't express.
@@ -99,11 +147,8 @@ export function SettingsPage() {
               ? t("settings.haSyncing", { minutes: status.syncIntervalMinutes ?? 0 })
               : t("settings.haSyncOff")}
           </div>
-          <MappingSection
-            site={site}
-            canEdit={canEdit}
-            dynamicTariffDefault={status.dynamicTariffEntityDefault}
-          />
+          <MappingSection site={site} canEdit={canEdit} />
+          <LiveViewSection site={site} canEdit={canEdit} />
           <SyncSection siteId={site.id} canEdit={canEdit} />
         </>
       )}
@@ -111,15 +156,7 @@ export function SettingsPage() {
   );
 }
 
-function MappingSection({
-  site,
-  canEdit,
-  dynamicTariffDefault,
-}: {
-  site: Site;
-  canEdit: boolean;
-  dynamicTariffDefault: string | null;
-}) {
+function MappingSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
   const t = useT();
   const siteId = site.id;
   const queryClient = useQueryClient();
@@ -183,9 +220,6 @@ function MappingSection({
     currentTariffEntity && !tariffOptions.some((o) => o.entityId === currentTariffEntity)
       ? [...tariffOptions, { entityId: currentTariffEntity, friendlyName: null, priceComponent: null, unit: null }]
       : tariffOptions;
-  const defaultOptionLabel = dynamicTariffDefault
-    ? t("settings.dynamicTariffDefaultOption", { entity: dynamicTariffDefault })
-    : t("settings.dynamicTariffNoDefaultOption");
 
   return (
     <div className="space-y-3 rounded-lg border bg-white p-4">
@@ -262,7 +296,7 @@ function MappingSection({
                 disabled={!canEdit || tariffEntitiesQuery.isLoading || tariffSave.isPending}
                 onChange={(e) => tariffSave.mutate(e.target.value === "" ? null : e.target.value)}
               >
-                <option value="">{defaultOptionLabel}</option>
+                <option value="">{t("settings.notSynced")}</option>
                 {tariffOptionList.map((o) => (
                   <option key={o.entityId} value={o.entityId}>
                     {o.entityId}
@@ -285,6 +319,124 @@ function MappingSection({
       )}
 
       <p className="mt-3 text-xs text-slate-500">{t("settings.derivedNote")}</p>
+    </div>
+  );
+}
+
+/** Which live entity feeds each figure on the participants' "right now" view. */
+const LIVE_FIELDS: Array<{
+  field: "liveExportPowerEntityId" | "livePvPowerEntityId" | "forecastTodayEntityId" | "forecastRemainingEntityId" | "forecastTomorrowEntityId";
+  label: MessageKey;
+  hint: MessageKey;
+  deviceClass: "power" | "energy";
+}> = [
+  { field: "liveExportPowerEntityId", label: "settings.live.export", hint: "settings.live.exportHint", deviceClass: "power" },
+  { field: "livePvPowerEntityId", label: "settings.live.pv", hint: "settings.live.pvHint", deviceClass: "power" },
+  { field: "forecastTodayEntityId", label: "settings.live.today", hint: "settings.live.todayHint", deviceClass: "energy" },
+  { field: "forecastRemainingEntityId", label: "settings.live.remaining", hint: "settings.live.remainingHint", deviceClass: "energy" },
+  { field: "forecastTomorrowEntityId", label: "settings.live.tomorrow", hint: "settings.live.tomorrowHint", deviceClass: "energy" },
+];
+
+/**
+ * The live view's sensors, kept apart from the entity mapping above: those
+ * are statistics pulled into history on a timer, these are instantaneous
+ * readings fetched only while somebody is looking at them. Nothing here is
+ * ever written to the database.
+ */
+function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const powerQuery = useQuery({
+    queryKey: ["ha-sensors", "power"],
+    queryFn: () => api.homeAssistant.sensors("power"),
+  });
+  const energyQuery = useQuery({
+    queryKey: ["ha-sensors", "energy"],
+    queryFn: () => api.homeAssistant.sensors("energy"),
+  });
+
+  const save = useMutation({
+    mutationFn: (input: SiteUpdateInput) => api.sites.update(site.id, input),
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const loading = powerQuery.isLoading || energyQuery.isLoading;
+  const listFor = (deviceClass: "power" | "energy") =>
+    (deviceClass === "power" ? powerQuery.data : energyQuery.data) ?? [];
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-white p-4">
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">{t("settings.live")}</h2>
+        <p className="mt-1 text-xs text-slate-500">{t("settings.liveNote")}</p>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {(powerQuery.isError || energyQuery.isError) && (
+        <p className="text-sm text-red-600">
+          {t("settings.statListFailed", {
+            message: ((powerQuery.error ?? energyQuery.error) as Error).message,
+          })}
+        </p>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-slate-500">
+            <tr>
+              <th className="py-1 pr-4 font-medium">{t("settings.live.figure")}</th>
+              <th className="py-1 pr-4 font-medium">{t("settings.haSensor")}</th>
+              <th className="py-1" />
+            </tr>
+          </thead>
+          <tbody>
+            {LIVE_FIELDS.map(({ field, label, hint, deviceClass }) => {
+              const current = site[field];
+              // Same rule as the mapping above: a saved choice never vanishes
+              // from its own dropdown, whatever Home Assistant reports today.
+              const options = listFor(deviceClass);
+              const withCurrent =
+                current && !options.some((o) => o.entityId === current)
+                  ? [...options, { entityId: current, friendlyName: null, unit: null, deviceClass: null }]
+                  : options;
+              return (
+                <tr key={field} className="border-t align-middle">
+                  <td className="py-2 pr-4">
+                    <div className="text-slate-900">{t(label)}</div>
+                    <div className="text-xs text-slate-500">{t(hint)}</div>
+                  </td>
+                  <td className="py-2 pr-4">
+                    <select
+                      className="input w-full max-w-md"
+                      value={current ?? ""}
+                      disabled={!canEdit || loading || save.isPending}
+                      onChange={(e) => save.mutate({ [field]: e.target.value === "" ? null : e.target.value })}
+                    >
+                      <option value="">{t("settings.live.none")}</option>
+                      {withCurrent.map((o) => (
+                        <option key={o.entityId} value={o.entityId}>
+                          {o.entityId}
+                          {o.friendlyName ? ` · ${o.friendlyName}` : ""}
+                          {o.unit ? ` (${o.unit})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="py-2 text-right text-xs text-slate-400">
+                    {current ? t("settings.live.shown") : ""}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -501,42 +653,42 @@ function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boole
         <p className="text-xs text-slate-500">{t("settings.investmentNote")}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:max-w-4xl">
-        {([
-          ["battery", "settings.battery", battery],
-          ["solar", "settings.solar", solar],
-        ] as const).map(([category, label, row]) => (
-          <div key={category} className="rounded-lg border bg-white p-4">
-            <p className="text-xs font-medium text-slate-500">{t(label)}</p>
-            {row.editable ? (
-              <input
-                type="number"
-                step="0.01"
-                className="input mt-1 w-full text-lg"
-                value={draft[category] ?? (row.matching[0]?.amountChf ?? "")}
-                onChange={(e) => setDraft((d) => ({ ...d, [category]: e.target.value }))}
-                onBlur={(e) => {
-                  const amount = Number(e.target.value);
-                  if (e.target.value === "" || Number.isNaN(amount)) return;
-                  if (amount === row.matching[0]?.amountChf) return;
-                  save.mutate({ category, amount });
-                }}
-              />
+      <div className="rounded-lg border bg-white p-4">
+        <div className={FIELD_GRID}>
+          {([
+            ["battery", "settings.battery", battery],
+            ["solar", "settings.solar", solar],
+          ] as const).map(([category, label, row]) =>
+            row.editable ? (
+              <Field key={category} label={t(label)} hint={t("settings.amountChf")}>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input w-full"
+                  value={draft[category] ?? (row.matching[0]?.amountChf ?? "")}
+                  onChange={(e) => setDraft((d) => ({ ...d, [category]: e.target.value }))}
+                  onBlur={(e) => {
+                    const amount = Number(e.target.value);
+                    if (e.target.value === "" || Number.isNaN(amount)) return;
+                    if (amount === row.matching[0]?.amountChf) return;
+                    save.mutate({ category, amount });
+                  }}
+                />
+              </Field>
             ) : (
-              <>
-                <p className="mt-1 text-lg text-slate-700">CHF {row.total.toFixed(2)}</p>
-                {row.split && (
-                  <p className="mt-1 text-xs text-slate-400">
-                    {t("settings.splitItems", { count: row.matching.length })}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        ))}
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-xs font-medium text-slate-500">{t("common.total")}</p>
-          <p className="mt-1 text-lg font-semibold text-slate-900">CHF {total.toFixed(2)}</p>
+              <Field
+                key={category}
+                label={t(label)}
+                readOnly
+                hint={row.split ? t("settings.splitItems", { count: row.matching.length }) : undefined}
+              >
+                <ReadOnlyValue>CHF {row.total.toFixed(2)}</ReadOnlyValue>
+              </Field>
+            ),
+          )}
+          <Field label={t("common.total")} readOnly hint={t("settings.totalHint")}>
+            <ReadOnlyValue>CHF {total.toFixed(2)}</ReadOnlyValue>
+          </Field>
         </div>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -583,52 +735,53 @@ function ProductionStartSection({ site, canEdit }: { site: Site; canEdit: boolea
         <p className="text-xs text-slate-500">{t("settings.productionStartNote")}</p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4">
-        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          {t("settings.productionStartDate")}
-          <input
-            type="date"
-            className="input"
-            disabled={!canEdit}
-            max={new Date().toISOString().slice(0, 10)}
-            value={site.productionStartDate ?? firstProduction ?? ""}
-            onChange={(e) =>
-              save.mutate({ productionStartDate: e.target.value === "" ? null : e.target.value })
+      <div className="rounded-lg border bg-white p-4">
+        <div className={FIELD_GRID}>
+          <Field
+            label={t("settings.productionStartDate")}
+            hint={
+              site.productionStartDate == null && firstProduction
+                ? t("settings.productionStartFallback", { date: firstProduction })
+                : undefined
             }
-          />
-        </label>
-        {site.productionStartDate == null && firstProduction && (
-          <p className="text-xs text-slate-400">
-            {t("settings.productionStartFallback", { date: firstProduction })}
-          </p>
-        )}
-        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          {t("settings.conversionLoss")}
-          <input
-            type="number"
-            step="0.1"
-            min="0"
-            max="90"
-            disabled={!canEdit}
-            className="input w-28"
-            defaultValue={(site.batteryConversionLoss * 100).toFixed(1)}
-            onBlur={(e) => {
-              const pct = Number(e.target.value);
-              if (e.target.value === "" || Number.isNaN(pct)) return;
-              const fraction = pct / 100;
-              if (fraction === site.batteryConversionLoss) return;
-              save.mutate({ batteryConversionLoss: fraction });
-            }}
-          />
-          <span className="max-w-56 font-normal text-slate-400">
-            {t("settings.conversionLossNote")}
-          </span>
-        </label>
+          >
+            <input
+              type="date"
+              className="input w-full"
+              disabled={!canEdit}
+              max={new Date().toISOString().slice(0, 10)}
+              value={site.productionStartDate ?? firstProduction ?? ""}
+              onChange={(e) =>
+                save.mutate({ productionStartDate: e.target.value === "" ? null : e.target.value })
+              }
+            />
+          </Field>
+          <Field label={t("settings.conversionLoss")} hint={t("settings.conversionLossNote")}>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="90"
+              disabled={!canEdit}
+              className="input w-full"
+              defaultValue={(site.batteryConversionLoss * 100).toFixed(1)}
+              onBlur={(e) => {
+                const pct = Number(e.target.value);
+                if (e.target.value === "" || Number.isNaN(pct)) return;
+                const fraction = pct / 100;
+                if (fraction === site.batteryConversionLoss) return;
+                save.mutate({ batteryConversionLoss: fraction });
+              }}
+            />
+          </Field>
+        </div>
+        {/* Under the fields it resets, rather than adrift in the row beside a
+            setting it has nothing to do with. */}
         {canEdit && site.productionStartDate != null && (
           <button
             type="button"
             onClick={() => save.mutate({ productionStartDate: null })}
-            className="text-xs text-slate-400 hover:text-slate-900"
+            className="mt-3 text-xs text-slate-400 hover:text-slate-900"
           >
             {t("settings.resetProductionStart")}
           </button>

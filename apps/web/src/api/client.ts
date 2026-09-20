@@ -10,12 +10,14 @@ import type {
   GridTariffPositionInput,
   InvoiceRun,
   HaDynamicTariffCandidate,
+  HaSensorCandidate,
   HaEntityMapping,
   HaEntityMappingInput,
   HaStatisticOption,
   HaSyncRequest,
   HaSyncResult,
   IntervalMetricKind,
+  LiveEnergyView,
   Party,
   NeighbourSales,
   PartyConsumption,
@@ -160,14 +162,6 @@ export const api = {
       ),
   },
   dynamicTariffs: {
-    sync: (siteId: string) =>
-      request<{
-        inserted: number;
-        updated: number;
-        source: string;
-        publicationTimestamp: string | null;
-        warnings: string[];
-      }>(`/sites/${siteId}/dynamic-tariffs/sync`, { method: "POST" }),
     list: (siteId: string, from: string, to: string, kind?: TariffKind) =>
       request<DynamicTariffRate[]>(
         `/sites/${siteId}/dynamic-tariffs?from=${from}&to=${to}${kind ? `&kind=${kind}` : ""}`,
@@ -180,11 +174,13 @@ export const api = {
         url: string | null;
         syncEnabled: boolean;
         syncIntervalMinutes: number;
-        dynamicTariffEntityDefault: string | null;
       }>("/home-assistant/status"),
     statistics: () => request<HaStatisticOption[]>("/home-assistant/statistics"),
     dynamicTariffEntities: () =>
       request<HaDynamicTariffCandidate[]>("/home-assistant/dynamic-tariff-entities"),
+    sensors: (deviceClass: "power" | "energy") =>
+      request<HaSensorCandidate[]>(`/home-assistant/sensors?deviceClass=${deviceClass}`),
+    live: (siteId: string) => request<LiveEnergyView>(`/sites/${siteId}/home-assistant/live`),
     mappings: (siteId: string) => request<HaEntityMapping[]>(`/sites/${siteId}/home-assistant/entities`),
     setMapping: (siteId: string, input: HaEntityMappingInput) =>
       request<HaEntityMapping>(`/sites/${siteId}/home-assistant/entities`, {

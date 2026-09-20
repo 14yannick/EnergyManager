@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { haEntityMappingInputSchema, haSyncRequestSchema } from "@energy-manager/shared";
 import { env } from "../../config/env.js";
+import { syncDynamicTariffs } from "../dynamicTariffs/service.js";
+import { listHaSensorsByDeviceClass } from "./haClient.js";
+import { getLiveEnergyView } from "./liveView.js";
 import {
   deleteMapping,
   listHaDynamicTariffEntities,
@@ -16,9 +19,6 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
     url: env.HA_URL ?? null,
     syncEnabled: env.HA_SYNC_ENABLED,
     syncIntervalMinutes: env.HA_SYNC_INTERVAL_MINUTES,
-    // What a site's dynamic-tariff entity field falls back to when left
-    // blank — shown on the Settings page so "blank" doesn't read as "off".
-    dynamicTariffEntityDefault: env.HA_DYNAMIC_TARIFF_ENTITY_ID ?? null,
   }));
 
   // Browsing Home Assistant's statistic list is what makes the mapping UI
@@ -39,6 +39,34 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
     }
     return listHaDynamicTariffEntities();
   });
+
+  // Sensors of one device class, for the live-view mapping dropdowns.
+  app.get<{ Querystring: Record<string, string> }>(
+    "/api/home-assistant/sensors",
+    async (req, reply) => {
+      if (!env.HA_URL || !env.HA_TOKEN) {
+        return reply.status(503).send({ error: "not_configured", message: "Set HA_URL and HA_TOKEN." });
+      }
+      const deviceClass = req.query.deviceClass;
+      if (deviceClass !== "power" && deviceClass !== "energy") {
+        return reply
+          .status(400)
+          .send({ error: "invalid_query", message: "deviceClass must be power or energy." });
+      }
+      return listHaSensorsByDeviceClass(deviceClass);
+    },
+  );
+
+  // What the site is doing right now — the participants' live view. Read
+  // fresh from Home Assistant, nothing stored.
+  app.get<{ Params: { siteId: string } }>(
+    "/api/sites/:siteId/home-assistant/live",
+    async (req, reply) => {
+      const view = await getLiveEnergyView(req.params.siteId);
+      if (!view) return reply.status(404).send({ error: "not_found" });
+      return view;
+    },
+  );
 
   app.get<{ Params: { siteId: string } }>("/api/sites/:siteId/home-assistant/entities", async (req) => {
     return listMappings(req.params.siteId);
@@ -77,13 +105,25 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
           .status(400)
           .send({ error: "invalid_input", message: "Give both from and to, or neither." });
       }
-      return syncHomeAssistant(req.params.siteId, {
+      const result = await syncHomeAssistant(req.params.siteId, {
         // Inclusive local calendar days: end bound is the start of the day after `to`.
         from: from ? new Date(`${from}T00:00:00`) : undefined,
         to: to ? new Date(new Date(`${to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000) : undefined,
         granularity,
         lookbackHours: env.HA_SYNC_LOOKBACK_HOURS,
       });
+
+      // Dynamic feed-in rates come from Home Assistant too, so this one
+      // button refreshes both — the scheduled timer treats them together as
+      // well. A backfill range is meaningless for them (the entity only ever
+      // holds today and tomorrow), so they are refreshed either way, and
+      // anything that stopped them is reported alongside the statistics that
+      // were skipped.
+      const tariffs = await syncDynamicTariffs();
+      return {
+        ...result,
+        skipped: [...result.skipped, ...tariffs.warnings],
+      };
     },
   );
 }

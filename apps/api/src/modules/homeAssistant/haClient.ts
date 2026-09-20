@@ -329,3 +329,91 @@ export async function listHaDynamicTariffEntities(): Promise<HaDynamicTariffCand
       unit: e.attributes.unit_of_measurement ?? null,
     }));
 }
+
+/**
+ * Current numeric values for a set of entities, by entity id.
+ *
+ * One `/api/states` call however many entities are asked for: Home Assistant
+ * has no bulk-by-id endpoint, and fetching each separately would multiply
+ * round trips for a view that refreshes on a timer.
+ *
+ * An entity that is absent, unavailable, or non-numeric is simply left out —
+ * "unknown"/"unavailable" are ordinary states here, not failures, and the
+ * caller renders a gap rather than a zero.
+ */
+export async function fetchHaNumericStates(entityIds: string[]): Promise<Map<string, number>> {
+  const wanted = new Set(entityIds.filter(Boolean));
+  if (wanted.size === 0) return new Map();
+
+  const { baseUrl, token } = requireHaConfig();
+  const res = await fetch(`${baseUrl}/api/states`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Home Assistant request failed: ${res.status}`);
+  }
+  const parsed = z
+    .array(z.object({ entity_id: z.string(), state: z.string() }))
+    .parse(await res.json());
+
+  const out = new Map<string, number>();
+  for (const e of parsed) {
+    if (!wanted.has(e.entity_id)) continue;
+    const value = Number(e.state);
+    if (Number.isFinite(value)) out.set(e.entity_id, value);
+  }
+  return out;
+}
+
+export interface HaSensorCandidate {
+  entityId: string;
+  friendlyName: string | null;
+  unit: string | null;
+  deviceClass: string | null;
+}
+
+/**
+ * Sensors of one device class, for the live-view mapping dropdowns. Filtered
+ * on Home Assistant's own `device_class` rather than on names or units, the
+ * same way the statistics list leans on its `unit_class`.
+ */
+export async function listHaSensorsByDeviceClass(deviceClass: string): Promise<HaSensorCandidate[]> {
+  const { baseUrl, token } = requireHaConfig();
+  const res = await fetch(`${baseUrl}/api/states`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Home Assistant request failed: ${res.status}`);
+  }
+  const parsed = z
+    .array(
+      z.object({
+        entity_id: z.string(),
+        attributes: z
+          .object({
+            friendly_name: z.string().nullish(),
+            unit_of_measurement: z.string().nullish(),
+            device_class: z.string().nullish(),
+          })
+          .passthrough(),
+      }),
+    )
+    .parse(await res.json());
+
+  return parsed
+    // Only the `sensor` domain with a stated unit: a `binary_sensor` can also
+    // carry device_class "power", but it reports on/off, never a number.
+    .filter(
+      (e) =>
+        e.attributes.device_class === deviceClass &&
+        e.entity_id.startsWith("sensor.") &&
+        e.attributes.unit_of_measurement != null,
+    )
+    .map((e) => ({
+      entityId: e.entity_id,
+      friendlyName: e.attributes.friendly_name ?? null,
+      unit: e.attributes.unit_of_measurement ?? null,
+      deviceClass: e.attributes.device_class ?? null,
+    }))
+    .sort((a, b) => a.entityId.localeCompare(b.entityId));
+}

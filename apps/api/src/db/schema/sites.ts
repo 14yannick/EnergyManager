@@ -30,11 +30,25 @@ export const sites = pgTable("sites", {
   /**
    * The Home Assistant price-forecast entity the dynamic feed-in sync reads
    * for this site (see dynamicTariffs/service.ts) — installation-specific,
-   * so it lives here rather than as a constant. Null falls back to
-   * HA_DYNAMIC_TARIFF_ENTITY_ID, which is how every site behaved before this
-   * column existed.
+   * so it is configuration rather than a constant, chosen under Settings →
+   * Home Assistant. Null means this site syncs no dynamic rates at all.
    */
   dynamicTariffEntityId: text("dynamic_tariff_entity_id"),
+  /**
+   * Live Home Assistant entities for the participants' "right now" view —
+   * read on demand and never stored, unlike everything else here, because a
+   * current reading has no history worth keeping. All optional: each one
+   * missing simply leaves its figure off the view.
+   *
+   * Power in W, forecasts in kWh. The forecast three are what a
+   * Forecast.Solar-style integration exposes; the two power ones are
+   * whatever the household's own inverter reports.
+   */
+  liveExportPowerEntityId: text("live_export_power_entity_id"),
+  livePvPowerEntityId: text("live_pv_power_entity_id"),
+  forecastTodayEntityId: text("forecast_today_entity_id"),
+  forecastRemainingEntityId: text("forecast_remaining_entity_id"),
+  forecastTomorrowEntityId: text("forecast_tomorrow_entity_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1,6 +1,5 @@
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import type { DynamicTariffRate, TariffKind } from "@energy-manager/shared";
-import { env } from "../../config/env.js";
 import { db } from "../../db/client.js";
 import { dynamicTariffRates, sites } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
@@ -42,18 +41,21 @@ export interface SyncResult {
 }
 
 /**
- * One site's worth of the sync: resolve which entity this site reads (its
- * own, or the api-wide default), fetch it, and upsert. Never throws — a
+ * One site's worth of the sync: read the entity this site is configured with
+ * (Settings → Home Assistant), fetch it, and upsert. Never throws — a
  * problem with one site's entity is reported in the caller's `warnings`
  * rather than aborting every other site's sync.
  */
 async function syncSite(
   site: { id: string; name: string; dynamicTariffEntityId: string | null },
 ): Promise<{ inserted: number; updated: number; source: string | null; publicationTimestamp: string | null; warning: string | null }> {
-  const entityId = site.dynamicTariffEntityId ?? env.HA_DYNAMIC_TARIFF_ENTITY_ID;
+  const entityId = site.dynamicTariffEntityId;
   const empty = { inserted: 0, updated: 0, source: null, publicationTimestamp: null };
   if (!entityId) {
-    return { ...empty, warning: `${site.name}: no dynamic-tariff entity configured.` };
+    return {
+      ...empty,
+      warning: `${site.name}: no dynamic feed-in sensor chosen — pick one under Settings, Home Assistant.`,
+    };
   }
 
   let forecast;
@@ -119,10 +121,14 @@ async function syncSite(
 
 /**
  * Fetches the current feed-in window from Home Assistant and upserts it, one
- * site at a time — each site reads its own configured entity (`Site.
- * dynamicTariffEntityId`), falling back to HA_DYNAMIC_TARIFF_ENTITY_ID.
- * Re-running this naturally picks up revised prices via onConflictDoUpdate,
- * same pattern as upsertReadings in modules/readings/service.ts.
+ * site at a time, each from its own configured entity
+ * (`Site.dynamicTariffEntityId`). Re-running this naturally picks up revised
+ * prices via onConflictDoUpdate, same pattern as upsertReadings in
+ * modules/readings/service.ts.
+ *
+ * Called from the Home Assistant sync timer in index.ts rather than one of
+ * its own: the rates come from the same place as the statistics, on the same
+ * schedule.
  *
  * Sourced from a Home Assistant entity (see haClient.ts), not a direct call
  * to BKW's own API — a household running this already has Home Assistant

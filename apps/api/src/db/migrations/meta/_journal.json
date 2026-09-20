@@ -162,6 +162,13 @@
       "when": 1789926710798,
       "tag": "0022_clumsy_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789930736460,
+      "tag": "0023_brief_calypso",
+      "breakpoints": true
     }
   ]
 }

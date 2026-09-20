@@ -16,6 +16,11 @@ function toDomain(row: Row): Site {
     productionStartDate: row.productionStartDate,
     batteryConversionLoss: Number(row.batteryConversionLoss),
     dynamicTariffEntityId: row.dynamicTariffEntityId,
+    liveExportPowerEntityId: row.liveExportPowerEntityId,
+    livePvPowerEntityId: row.livePvPowerEntityId,
+    forecastTodayEntityId: row.forecastTodayEntityId,
+    forecastRemainingEntityId: row.forecastRemainingEntityId,
+    forecastTomorrowEntityId: row.forecastTomorrowEntityId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -46,6 +51,11 @@ export async function siteRoutes(app: FastifyInstance) {
         productionStartDate: d.productionStartDate ?? null,
         ...set("batteryConversionLoss", d.batteryConversionLoss?.toString()),
         ...set("dynamicTariffEntityId", d.dynamicTariffEntityId),
+        ...set("liveExportPowerEntityId", d.liveExportPowerEntityId),
+        ...set("livePvPowerEntityId", d.livePvPowerEntityId),
+        ...set("forecastTodayEntityId", d.forecastTodayEntityId),
+        ...set("forecastRemainingEntityId", d.forecastRemainingEntityId),
+        ...set("forecastTomorrowEntityId", d.forecastTomorrowEntityId),
         updatedAt: new Date(),
       })
       .where(eq(sites.id, req.params.id))

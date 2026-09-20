@@ -202,6 +202,23 @@ function DayBlocks({ day }: { day: SavingsDayDetail }) {
         })),
       },
       {
+        // The mirror of the battery's "export forgone": these kWh were sold to
+        // participants instead of the grid, so the feed-in the grid would have
+        // paid is what the sale had to beat. Shown, never summed — the sale
+        // above is the revenue, and the export row below already excludes
+        // these kWh.
+        key: "party-forgone",
+        label: "calc.partyForgone",
+        note: "calc.partyForgoneNote",
+        kwh: totals.neighborConsumptionKwh,
+        chf: -totals.neighborExportForgoneChf,
+        slot: (s) => ({
+          kwh: s.neighborConsumptionKwh,
+          chf: -s.neighborExportForgoneChf,
+          rateChfPerKwh: s.sellRateChfPerKwh,
+        }),
+      },
+      {
         key: "export",
         label: "calc.exportGrid",
         note: "calc.exportGridNote",
@@ -282,8 +299,11 @@ function DayBlocks({ day }: { day: SavingsDayDetail }) {
     );
   }
 
+  // `items-start`: the two cards hold different numbers of flows, and
+  // stretching the shorter one to match left a band of empty card under its
+  // last row that read as a missing figure.
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+    <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
       <Block title="calc.solar" subtitle="calc.solarSub" lines={solar} slots={day.slots} />
       <Block title="calc.battery" subtitle="calc.batterySub" lines={battery} slots={day.slots} />
     </div>

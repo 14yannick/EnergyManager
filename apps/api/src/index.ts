@@ -33,29 +33,14 @@ if (env.AUTH_ENABLED) {
   );
 }
 
-// Sourced from a Home Assistant entity now, not BKW directly (see
-// dynamicTariffs/service.ts) — so, like the statistics sync below, it needs
-// HA_URL/HA_TOKEN to do anything at all. Warned rather than silently
-// skipped: unlike the statistics sync, a stalled dynamic-tariff feed quietly
-// degrades every savings figure that depends on it.
-if (env.BKW_SYNC_ENABLED && env.HA_URL && env.HA_TOKEN) {
-  const runSync = () => {
-    syncDynamicTariffs()
-      .then((result) => app.log.info(result, "dynamic tariff sync completed"))
-      .catch((err) => app.log.error(err, "dynamic tariff sync failed"));
-  };
-  runSync();
-  setInterval(runSync, env.BKW_SYNC_INTERVAL_MINUTES * 60 * 1000);
-} else if (env.BKW_SYNC_ENABLED) {
-  app.log.warn(
-    "BKW_SYNC_ENABLED is true but HA_URL/HA_TOKEN are not set — the dynamic feed-in sync needs Home Assistant now and will not run.",
-  );
-}
-
 // Home Assistant only keeps 5-minute statistics for ~10 days, so the ongoing
 // pull is what turns them into durable quarter-hour history before they age
 // out. The lookback re-reads recent windows so late or revised statistics are
 // corrected rather than missed.
+//
+// Dynamic feed-in rates ride along on the same timer: they come from a Home
+// Assistant entity too, and its `today`/`tomorrow` window is just as
+// perishable as the statistics — nothing about them needs its own schedule.
 if (env.HA_SYNC_ENABLED && env.HA_URL && env.HA_TOKEN) {
   const runHaSync = () => {
     void (async () => {
@@ -71,6 +56,8 @@ if (env.HA_SYNC_ENABLED && env.HA_URL && env.HA_TOKEN) {
             "home assistant sync completed",
           );
         }
+        const tariffs = await syncDynamicTariffs();
+        app.log.info(tariffs, "dynamic tariff sync completed");
       } catch (err) {
         app.log.error(err, "home assistant sync failed");
       }

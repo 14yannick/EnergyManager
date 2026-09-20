@@ -38,7 +38,6 @@ const AUTH_ENV = {
   CF_ACCESS_TEAM_DOMAIN: "example.cloudflareaccess.com",
   CF_ACCESS_AUD: "aud-tag-for-this-app",
   AUTH_ADMIN_EMAILS: "owner@example.com",
-  BKW_SYNC_ENABLED: "false",
   HA_SYNC_ENABLED: "false",
 };
 

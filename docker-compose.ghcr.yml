@@ -27,23 +27,25 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       PORT: 3000
-      # Still named BKW_SYNC_* — reads a rolling window of feed-in prices from
-      # a Home Assistant entity now (HA_DYNAMIC_TARIFF_ENTITY_ID below), not by
-      # calling BKW directly. No history endpoint exists either way, so
-      # anything missed while this (and Home Assistant) are down is lost
-      # permanently.
-      BKW_SYNC_ENABLED: ${BKW_SYNC_ENABLED:-true}
-      BKW_SYNC_INTERVAL_MINUTES: ${BKW_SYNC_INTERVAL_MINUTES:-30}
-      # An unset HA_URL disables Home Assistant sync *silently* — including the
-      # dynamic feed-in sync above, which now depends on it. Use the VM's IP,
+      # An unset HA_URL disables Home Assistant sync *silently* — including
+      # dynamic feed-in rates, which ride on the same sync. Use the VM's IP,
       # not homeassistant.local — containers resolve via DNS, which returns
-      # NXDOMAIN for mDNS names.
+      # NXDOMAIN for mDNS names. No history endpoint exists, so anything
+      # missed while this is down is lost permanently.
       HA_URL: ${HA_URL:-}
       HA_TOKEN: ${HA_TOKEN:-}
       HA_SYNC_ENABLED: ${HA_SYNC_ENABLED:-true}
       HA_SYNC_INTERVAL_MINUTES: ${HA_SYNC_INTERVAL_MINUTES:-15}
       HA_SYNC_LOOKBACK_HOURS: ${HA_SYNC_LOOKBACK_HOURS:-48}
-      HA_DYNAMIC_TARIFF_ENTITY_ID: ${HA_DYNAMIC_TARIFF_ENTITY_ID:-sensor.dynamic_tariff}
+      # Authentication. These were missing, which meant the container always
+      # ran with auth off — and off means every request is treated as admin,
+      # whatever Cloudflare Access decided at the door. AUTH_DEV_AS is local
+      # only; the API refuses to start if it is set while AUTH_ENABLED=true.
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      AUTH_ADMIN_EMAILS: ${AUTH_ADMIN_EMAILS:-}
+      AUTH_DEV_AS: ${AUTH_DEV_AS:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

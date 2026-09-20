@@ -12,7 +12,6 @@ const AUTH_KEYS = [
   "CF_ACCESS_AUD",
   "AUTH_ADMIN_EMAILS",
   "AUTH_DEV_AS",
-  "HA_DYNAMIC_TARIFF_ENTITY_ID",
 ];
 
 async function loadEnv(overrides: Record<string, string> = {}) {
@@ -53,7 +52,6 @@ describe("boolean env flags", () => {
   it("defaults auth off and the syncs on when unset", async () => {
     const { env } = await loadEnv();
     expect(env.AUTH_ENABLED).toBe(false);
-    expect(env.BKW_SYNC_ENABLED).toBe(true);
     expect(env.HA_SYNC_ENABLED).toBe(true);
   });
 
@@ -84,22 +82,5 @@ describe("AUTH_DEV_AS", () => {
 
   it("refuses something that is not an address", async () => {
     await expect(loadEnv({ AUTH_DEV_AS: "neighbour" })).rejects.toThrow(/AUTH_DEV_AS/);
-  });
-});
-
-describe("HA_DYNAMIC_TARIFF_ENTITY_ID", () => {
-  it("defaults to this household's own sensor when unset", async () => {
-    const { env } = await loadEnv();
-    expect(env.HA_DYNAMIC_TARIFF_ENTITY_ID).toBe("sensor.dynamic_tariff");
-  });
-
-  it("takes an explicit entity id", async () => {
-    const { env } = await loadEnv({ HA_DYNAMIC_TARIFF_ENTITY_ID: "sensor.my_own_tariff" });
-    expect(env.HA_DYNAMIC_TARIFF_ENTITY_ID).toBe("sensor.my_own_tariff");
-  });
-
-  it("reads blank as unset, which turns the sync off rather than pointing it at nothing", async () => {
-    const { env } = await loadEnv({ HA_DYNAMIC_TARIFF_ENTITY_ID: "" });
-    expect(env.HA_DYNAMIC_TARIFF_ENTITY_ID).toBeUndefined();
   });
 });

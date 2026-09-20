@@ -284,7 +284,7 @@ no toolchain.
    ```bash
    docker compose -f docker-compose.ghcr.yml pull
    docker compose -f docker-compose.ghcr.yml up -d
-   docker compose -f docker-compose.ghcr.yml exec api env | grep -E 'HA_URL|HA_DYNAMIC_TARIFF|BKW_SYNC'
+   docker compose -f docker-compose.ghcr.yml exec api env | grep -E 'HA_URL|HA_SYNC'
    docker compose -f docker-compose.ghcr.yml logs -f api
    ```
 
@@ -344,9 +344,8 @@ docker run -d --name EnergyManager-web --network energymanager \
   ghcr.io/14yannick/energymanager-web:latest
 ```
 
-Everything else has a working default: `PORT`, `BKW_SYNC_ENABLED`,
-`BKW_SYNC_INTERVAL_MINUTES`, `HA_SYNC_ENABLED`, `HA_SYNC_INTERVAL_MINUTES`,
-`HA_SYNC_LOOKBACK_HOURS` and `HA_DYNAMIC_TARIFF_ENTITY_ID`. Pass them only to
+Everything else has a working default: `PORT`, `HA_SYNC_ENABLED`,
+`HA_SYNC_INTERVAL_MINUTES` and `HA_SYNC_LOOKBACK_HOURS`. Pass them only to
 change them.
 
 `AUTH_ENABLED` defaults to `false`, so the api container above accepts every
@@ -380,17 +379,16 @@ diverges from the cruder approximations the app started out with.
 ### Currency
 
 Everything stored and displayed by the app is **CHF**: tariff periods, surcharges,
-and the dynamic feed-in rates read from the Home Assistant entity configured as
-`HA_DYNAMIC_TARIFF_ENTITY_ID` (its `price` attributes, in CHF/kWh).
+and the dynamic feed-in rates read from the Home Assistant sensor chosen for the
+site under Settings → Home Assistant (its `price` attributes, in CHF/kWh).
 
 The app does no EUR→CHF conversion of its own on this path — it trusts that
 entity's own values, whatever produced them. That used to be a direct call to
-BKW's API, which does the conversion described below; a household pointing
-`HA_DYNAMIC_TARIFF_ENTITY_ID` at a sensor with a different source, or a
-misconfigured one, would have its dynamic feed-in rates silently wrong. The
-sync does refuse to write anything if the entity's `price_component` isn't
-`"feed_in"` — but it cannot tell a correctly-labelled bad price from a good
-one.
+BKW's API, which does the conversion described below; pointing the setting at a
+sensor with a different source, or a misconfigured one, would have its dynamic
+feed-in rates silently wrong. The sync does refuse to write anything if the
+entity's `price_component` isn't `"feed_in"` — but it cannot tell a
+correctly-labelled bad price from a good one.
 
 The public day-ahead spot sources are **EUR/MWh**, not CHF/kWh — both the BFE open
 data series (`ogd106_preise_strom_boerse.csv`, daily baseload) and the

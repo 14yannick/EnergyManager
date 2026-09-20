@@ -7,6 +7,8 @@ import {
   ReferenceLine,
   Line,
   Legend,
+  Rectangle,
+  type RectangleProps,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -15,16 +17,15 @@ import {
 import { api } from "../api/client";
 import { useT, type Translate } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
+import { useSelectedPeriod } from "../lib/usePeriod";
 import { PeriodControls } from "../components/PeriodControls";
 import { StatCard } from "../components/StatCard";
 import { NeighbourSalesChart } from "../components/NeighbourSalesChart";
 import {
-  INITIAL_GRANULARITY,
   MAX_HOURLY_DAYS,
   PERIODS_PER_YEAR,
   PERIOD_UNIT,
   PERIOD_UNITS,
-  initialRange,
   axisTick,
   clampRange,
   inclusiveDays,
@@ -67,10 +68,7 @@ const seriesNames = (unit: RevenueUnit, t: Translate) => ({
 export function DashboardPage() {
   const { site } = useDefaultSite();
   const t = useT();
-  const initial = useMemo(initialRange, []);
-  const [from, setFrom] = useState(initial.from);
-  const [to, setTo] = useState(initial.to);
-  const [granularity, setGranularity] = useState<Granularity>(INITIAL_GRANULARITY);
+  const { from, to, granularity, set: setPeriod } = useSelectedPeriod();
   const unit = t(PERIOD_UNIT[granularity]);
   const avgSuffix =
     granularity === "overall"
@@ -97,10 +95,14 @@ export function DashboardPage() {
   // production did. Pull it back once they are known; guarded on a real change
   // so this settles in one pass.
   useEffect(() => {
+    // Not before the bounds are real. The range query has not answered on the
+    // first render and `latestDay(null)` is today, so clamping then would drag
+    // a shared range that legitimately runs into the future — the other page
+    // may hold one — back to this morning, and nothing would restore it.
+    if (!rangeQuery.data) return;
     const c = clampRange({ from, to }, bounds);
-    if (c.from !== from) setFrom(c.from);
-    if (c.to !== to) setTo(c.to);
-  }, [bounds.min, bounds.max, from, to]);
+    if (c.from !== from || c.to !== to) setPeriod(c, granularity);
+  }, [rangeQuery.data, bounds.min, bounds.max, from, to, granularity]);
 
   const summaryQuery = useQuery({
     queryKey: ["savings-summary", site?.id, from, to, granularity],
@@ -122,11 +124,7 @@ export function DashboardPage() {
           <PeriodControls
             range={{ from, to }}
             granularity={granularity}
-            onChange={(r, g) => {
-              setGranularity(g);
-              setFrom(r.from);
-              setTo(r.to);
-            }}
+            onChange={setPeriod}
             dataRange={dataRange}
             bounds={bounds}
           />
@@ -160,7 +158,6 @@ export function DashboardPage() {
         />
         <StatCard
           label={t("dash.soldPrice")}
-          hint={t("dash.soldPriceHint")}
           value={summary?.soldPricePerKwhChf}
           format={(v) => ct(v)}
           sub={
@@ -230,20 +227,18 @@ export function DashboardPage() {
   );
 }
 
-// Categorical slots 4, 1, 2, 3 — in the order the segments stack, so slot 4
-// (yellow) never touches slot 2 (orange), the one pair that fails the
-// colour-blindness floor. Validated with the palette checker in both orders.
-// Categorical slots 4, 1, 2, 3 — in the order the segments stack, so slot 4
-// (yellow) never touches slot 2 (orange), the one pair that fails the
-// colour-blindness floor. Validated with the palette checker in both orders.
+// Categorical slots 7, 4, 1, 2, 3 — listed in the order the segments stack,
+// which is what the adjacency checks apply to: slot 4 (yellow) never touches
+// slot 2 (orange), the one pair that fails the colour-blindness floor.
+// Validated with the palette checker in this order.
 const REVENUE_COLORS = {
+  // Slot 7 (violet) at the foot of the stack, under yellow — a pair it
+  // clears comfortably.
+  rcp: "#4a3aa7",
   consumption: "#eda100",
   direct: "#2a78d6",
   battery: "#eb6834",
   neighbor: "#1baf7a",
-  // Slot 7 (violet): next to aqua on top of the stack, validated with the
-  // other four in stack order.
-  rcp: "#4a3aa7",
 };
 
 /**
@@ -255,6 +250,111 @@ const REVENUE_COLORS = {
  * glance, and reads as the cost it represents.
  */
 const BATTERY_CHARGING_COLOR = "#8c3f1d";
+
+/**
+ * Export forgone on participant sales — the same idea as charging cost, so it
+ * is drawn the same way: a darker shade of the flow it belongs to, hanging
+ * below zero.
+ *
+ * It sits directly under the charging bar, and dark green against dark brown
+ * is the pairing deuteranopia handles worst, so the shade is not simply the
+ * neighbour green dimmed. It was picked to clear the colour-blindness floor
+ * against that brown while staying far enough from the neighbour green above
+ * the axis to read as a different series.
+ */
+const NEIGHBOR_FORGONE_COLOR = "#007c64";
+
+/**
+ * A hollow bar whose border sits inside its slot.
+ *
+ * An SVG stroke straddles the edge it is painted on, so a 2px outline makes a
+ * bar a pixel wider on each side than the solid ones beside it — visible as
+ * soon as the two are stacked in the same column. Insetting the rectangle by
+ * half the stroke keeps the whole border within the width every other bar
+ * gets, and leaves a hairline between the two outlined bars instead of
+ * merging their touching edges into one thick line.
+ */
+const OUTLINE_WIDTH = 2;
+
+/** The two series drawn as an outline rather than a fill. */
+const HOLLOW_SERIES = new Set(["batteryChargingChf", "neighborForgoneChf"]);
+
+interface LegendEntry {
+  value?: string;
+  color?: string;
+  type?: string;
+  dataKey?: string | number;
+}
+
+/**
+ * The chart's own legend, so the hollow bars get a hollow swatch.
+ *
+ * Recharts paints its default icon with the series' `fill`, which is still a
+ * solid colour on those two — they are outlined by their shape, not by their
+ * fill. A legend showing them solid would say they are part of the stack when
+ * the whole point of the outline is that they are not.
+ *
+ * The swatch stays an inline `<svg>` rather than a styled `<span>` so a fill
+ * of `url(#kwhHatch-…)` still resolves against the chart's own defs — that is
+ * how the kWh series keep their hatching here.
+ */
+function RevenueLegend({ payload }: { payload?: readonly LegendEntry[] }) {
+  return (
+    <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-2 pt-3">
+      {(payload ?? []).map((entry) => {
+        const hollow = HOLLOW_SERIES.has(String(entry.dataKey));
+        return (
+          <li
+            key={String(entry.dataKey ?? entry.value)}
+            className="flex items-center gap-1.5 text-xs text-slate-600"
+          >
+            <svg width={12} height={12} aria-hidden="true" className="shrink-0">
+              {entry.type === "line" ? (
+                <line x1={0} y1={6} x2={12} y2={6} stroke={entry.color} strokeWidth={2} />
+              ) : hollow ? (
+                <rect x={1} y={1} width={10} height={10} rx={2} fill="none" stroke={entry.color} strokeWidth={2} />
+              ) : (
+                <rect width={12} height={12} rx={2} fill={entry.color} />
+              )}
+            </svg>
+            {entry.value}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function OutlinedBar(props: unknown) {
+  const rect = props as RectangleProps;
+  const inset = OUTLINE_WIDTH / 2;
+  // A bar below the axis arrives with a negative height, which `Rectangle`
+  // normalises itself. Insetting has to happen on the normalised box, or the
+  // subtraction runs the wrong way and the bar collapses to nothing.
+  const rawWidth = rect.width ?? 0;
+  const rawHeight = rect.height ?? 0;
+  const left = (rect.x ?? 0) + Math.min(rawWidth, 0);
+  const top = (rect.y ?? 0) + Math.min(rawHeight, 0);
+  // Normalising also rights the frame the corner radii are read in, so a
+  // flipped bar needs them flipped back to keep the rounding on the same edge.
+  const radius = Array.isArray(rect.radius) && rawHeight < 0
+    ? [rect.radius[3] ?? 0, rect.radius[2] ?? 0, rect.radius[1] ?? 0, rect.radius[0] ?? 0]
+    : rect.radius;
+
+  return (
+    <Rectangle
+      {...rect}
+      x={left + inset}
+      y={top + inset}
+      width={Math.max(Math.abs(rawWidth) - OUTLINE_WIDTH, 0)}
+      height={Math.max(Math.abs(rawHeight) - OUTLINE_WIDTH, 0)}
+      radius={radius as RectangleProps["radius"]}
+      strokeWidth={OUTLINE_WIDTH}
+      fillOpacity={0}
+    />
+  );
+}
+
 
 /** The four flows, in whichever unit the field name says. */
 interface RevenueFlows {
@@ -280,6 +380,9 @@ interface RevenuePeriod extends RevenueFlows {
   directChf: number;
   batteryChf: number;
   neighborChf: number;
+  /** What the participants' share would have earned exported, and the sale net of it. */
+  neighborExportForgoneChf: number;
+  neighborNetChf: number;
   rcpChf: number;
   /**
    * Gross PV yield plus energy into the battery, as one line when enabled.
@@ -316,6 +419,7 @@ interface RevenuePeriod extends RevenueFlows {
    * cancelling to nothing.
    */
   batteryChargingChf: number;
+  neighborForgoneChf: number;
 }
 
 interface RevenueTooltipEntry {
@@ -363,12 +467,15 @@ function RevenueTooltip({
   // Built from the row rather than the chart's payload entries: the payload
   // holds whichever bars happen to be rendered, which changes with the mode
   // while the row always carries both units.
+  // The very same labels the legend uses. They were written out twice, and
+  // drifted: the legend said "Neighbour sale" where this said "Neighbour".
+  const names = seriesNames(unit, t);
   const flows = [
-    { key: "consumption", name: t("dash.flow.consumption"), chf: row.consumptionChf, kwh: row.consumptionKwh },
-    { key: "direct", name: t("dash.flow.direct"), chf: row.directChf, kwh: row.directKwh },
-    { key: "battery", name: t("dash.flow.battery"), chf: row.batteryChf, kwh: row.batteryKwh },
-    { key: "neighbor", name: t("dash.flow.neighbor"), chf: row.neighborChf, kwh: row.neighborKwh },
-    { key: "rcp", name: t("dash.flow.rcpFixed"), chf: row.rcpChf, kwh: null },
+    { key: "rcp", name: names.rcp, chf: row.rcpChf, kwh: null },
+    { key: "consumption", name: names.consumption, chf: row.consumptionChf, kwh: row.consumptionKwh },
+    { key: "direct", name: names.direct, chf: row.directChf, kwh: row.directKwh },
+    { key: "battery", name: names.battery, chf: row.batteryChf, kwh: row.batteryKwh },
+    { key: "neighbor", name: names.neighbor, chf: row.neighborChf, kwh: row.neighborKwh },
   ] as const;
   const totalChf = flows.reduce((sum, f) => sum + f.chf, 0);
   const totalKwh = flows.reduce((sum, f) => sum + (f.kwh ?? 0), 0);
@@ -435,7 +542,7 @@ function RevenueTooltip({
         {(row.batteryChargingCostChf !== 0 || row.batteryNetChf !== 0) && (
           <>
             <div className="flex items-center justify-between gap-6">
-              <span className="text-slate-600">{t("dash.chargingForgone")}</span>
+              <span className="text-slate-600">{t("dash.chargingCostSeries")}</span>
               <span className="font-semibold tabular-nums text-slate-900">
                 {row.batteryChargingCostChf > 0 ? "−" : row.batteryChargingCostChf < 0 ? "+" : ""}
                 {formatRevenue(Math.abs(row.batteryChargingCostChf), "chf")}
@@ -445,6 +552,33 @@ function RevenueTooltip({
               <span className="text-slate-600">{t("dash.batteryNet")}</span>
               <span className="font-semibold tabular-nums text-slate-900">
                 {formatRevenue(row.batteryNetChf, "chf")}
+              </span>
+            </div>
+          </>
+        )}
+        {/* The same reading for the RCP. Its gross is both of the things
+            belonging to it — the sales to participants and the fixed charges
+            shared with them — so its net has to carry the fixed charges too;
+            only the sales gave up an export. */}
+        {(row.neighborExportForgoneChf !== 0 || row.neighborChf !== 0 || row.rcpChf !== 0) && (
+          <>
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-slate-600">{t("dash.rcpGross")}</span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                {formatRevenue(row.rcpChf + row.neighborChf, "chf")}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-slate-600">{t("dash.neighborForgone")}</span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                {row.neighborExportForgoneChf > 0 ? "−" : row.neighborExportForgoneChf < 0 ? "+" : ""}
+                {formatRevenue(Math.abs(row.neighborExportForgoneChf), "chf")}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-slate-600">{t("dash.rcpNet")}</span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                {formatRevenue(row.rcpChf + row.neighborNetChf, "chf")}
               </span>
             </div>
           </>
@@ -475,6 +609,10 @@ function RevenueBreakdownChart({
 }) {
   const t = useT();
   const [showProduction, setShowProduction] = useState(false);
+  // Off by default: these two are annotations on the revenue, not part of it,
+  // and a chart that opens with bars hanging below the axis invites reading
+  // the total as net of them.
+  const [showForgone, setShowForgone] = useState(false);
   const [unit, setUnit] = useState<RevenueUnit>("chf");
 
   const query = useQuery({
@@ -521,6 +659,8 @@ function RevenueBreakdownChart({
         directChf: chf.direct,
         batteryChf: chf.battery,
         neighborChf: chf.neighbor,
+        neighborExportForgoneChf: row?.neighborExportForgoneChf ?? 0,
+        neighborNetChf: row?.neighborNetChf ?? 0,
         rcpChf: chf.rcp,
         batteryChargingCostChf: row?.batteryChargingCostChf ?? 0,
         batteryNetChf: row?.batteryRevenueChf ?? 0,
@@ -532,6 +672,9 @@ function RevenueBreakdownChart({
         // Direct consumption and neighbour sales don't involve the battery, so
         // they carry over into the counterfactual unchanged.
         batteryChargingChf: -(row?.batteryChargingCostChf ?? 0),
+        // Negative for the same reason: it is value given up, drawn below the
+        // axis rather than subtracted silently from the stack above it.
+        neighborForgoneChf: -(row?.neighborExportForgoneChf ?? 0),
       };
     });
   }, [query.data, from, to, granularity, unit]);
@@ -571,7 +714,16 @@ function RevenueBreakdownChart({
       Math.max(d.consumption, 0) + Math.max(d.direct, 0) + Math.max(d.battery, 0) + Math.max(d.neighbor, 0) +
       Math.max(d.rcp, 0);
     const maxLeft = Math.max(0, ...chartData.map(posOf));
-    const minLeft = Math.min(0, ...chartData.map((d) => (barUnit(unit) === "chf" ? d.batteryChargingChf : 0)));
+    // Both below-zero bars stack downward, so the axis has to clear their sum —
+    // and reclaim that space when they are switched off.
+    const minLeft = Math.min(
+      0,
+      ...chartData.map((d) =>
+        barUnit(unit) === "chf" && showForgone
+          ? d.batteryChargingChf + d.neighborForgoneChf
+          : 0,
+      ),
+    );
     const maxRight = Math.max(
       0,
       ...chartData.map((d) =>
@@ -593,7 +745,7 @@ function RevenueBreakdownChart({
       left: [Math.min(minLeft, extend(maxLeft)), maxLeft] as [number, number],
       right: [extend(maxRight), maxRight] as [number, number],
     };
-  }, [chartData, unit, showProduction]);
+  }, [chartData, unit, showProduction, showForgone]);
 
   /**
    * Hatched means energy, solid means money — in every mode, not just when the
@@ -619,7 +771,7 @@ function RevenueBreakdownChart({
           {t("dash.revenueNote", { unit: t(PERIOD_UNIT[granularity]) })}
           {unit === "kwh" && t("dash.revenueKwh")}
           {unit === "both" && t("dash.revenueBoth")}.
-          {barUnit(unit) === "chf" && t("dash.revenueCharging")}
+          {barUnit(unit) === "chf" && showForgone && t("dash.revenueCharging")}
         </p>
       </div>
 
@@ -652,6 +804,16 @@ function RevenueBreakdownChart({
             />
             {t("dash.production")}
           </label>
+          {barUnit(unit) === "chf" && (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={showForgone}
+                onChange={(e) => setShowForgone(e.target.checked)}
+              />
+              {t("dash.showForgone")}
+            </label>
+          )}
           <span className="ml-auto text-sm text-slate-600">
             {barUnit(unit) === "chf" ? t("dash.totalRevenue") : t("dash.totalEnergy")}{" "}
             <span className="font-semibold text-slate-900">{formatRevenue(total, unit)}</span>
@@ -721,7 +883,20 @@ function RevenueBreakdownChart({
                 />
               }
             />
-            <Legend />
+            <Legend content={<RevenueLegend />} />
+            {barUnit(unit) === "chf" && (
+              // The foot of the money stack: what the household keeps before
+              // any kWh moves at all. No energy behind it, so it is absent
+              // from the kWh view entirely.
+              <Bar
+                yAxisId="bars"
+                dataKey="rcp"
+                name={names.rcp}
+                stackId="revenue"
+                fill={REVENUE_COLORS.rcp}
+                maxBarSize={barSize}
+              />
+            )}
             <Bar
               yAxisId="bars"
               dataKey="consumption"
@@ -756,16 +931,6 @@ function RevenueBreakdownChart({
               strokeWidth={1}
               maxBarSize={barSize}
             />
-            {barUnit(unit) === "chf" && (
-              <Bar
-                yAxisId="bars"
-                dataKey="batteryChargingChf"
-                name={t("dash.chargingCostSeries")}
-                stackId="revenue"
-                fill={BATTERY_CHARGING_COLOR}
-                maxBarSize={barSize}
-              />
-            )}
             <Bar
               yAxisId="bars"
               dataKey="neighbor"
@@ -775,18 +940,45 @@ function RevenueBreakdownChart({
               stroke={flowStroke("neighbor")}
               strokeWidth={1}
               maxBarSize={barSize}
-              radius={barUnit(unit) === "kwh" ? [4, 4, 0, 0] : undefined}
+              radius={[4, 4, 0, 0]}
             />
-            {barUnit(unit) === "chf" && (
-              // Top of the money stack: what sharing the connection saves on
-              // standing charges. No kWh behind it, so absent from the energy view.
+            {barUnit(unit) === "chf" && showForgone && (
               <Bar
                 yAxisId="bars"
-                dataKey="rcp"
-                name={names.rcp}
+                shape={OutlinedBar}
+                dataKey="batteryChargingChf"
+                name={t("dash.chargingCostSeries")}
                 stackId="revenue"
-                fill={REVENUE_COLORS.rcp}
+                // Outlined, not filled. These two are not revenue given up out
+                // of the total above — the total does not subtract them — they
+                // are what the same energy would have earned taking the other
+                // route, shown so the battery's and the participants' real
+                // gain can be read off the chart. A hollow bar says "memo"
+                // where a solid one would say "deduction".
+                fill={BATTERY_CHARGING_COLOR}
+                fillOpacity={0}
+                stroke={BATTERY_CHARGING_COLOR}
+                strokeWidth={2}
                 maxBarSize={barSize}
+              />
+            )}
+            {barUnit(unit) === "chf" && showForgone && (
+              <Bar
+                yAxisId="bars"
+                shape={OutlinedBar}
+                dataKey="neighborForgoneChf"
+                name={t("dash.neighborForgone")}
+                stackId="revenue"
+                // Hollow for the same reason as the charging bar above.
+                fill={NEIGHBOR_FORGONE_COLOR}
+                fillOpacity={0}
+                stroke={NEIGHBOR_FORGONE_COLOR}
+                strokeWidth={2}
+                maxBarSize={barSize}
+                // The foot of the below-zero stack, so this is where the
+                // rounded data-end belongs. Recharts applies the radius in the
+                // bar's own frame, which a negative value flips, so the array
+                // is upside down relative to what lands on screen.
                 radius={[4, 4, 0, 0]}
               />
             )}

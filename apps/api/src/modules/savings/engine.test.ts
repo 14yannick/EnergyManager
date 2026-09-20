@@ -35,6 +35,13 @@ import {
 interface Scenario {
   date: string;
   producedKwh: number;
+  /**
+   * What went in, metered DC. The counterfactual is built on this — without a
+   * battery this energy would have been inverted and exported — so a scenario
+   * that discharges without charging would have the battery inventing energy.
+   * Each one charges more than it gives back, as a real round trip does.
+   */
+  batteryChargeKwh: number;
   batteryDischargeKwh: number;
   exportedKwh: number;
   purchaseRateChfPerKwh: number;
@@ -42,10 +49,13 @@ interface Scenario {
 }
 
 const scenarios: Scenario[] = [
-  { date: "2024-01-31", producedKwh: 100, batteryDischargeKwh: 20, exportedKwh: 30, purchaseRateChfPerKwh: 0.3, sellRateChfPerKwh: 0.1 },
-  { date: "2024-02-29", producedKwh: 200, batteryDischargeKwh: 50, exportedKwh: 80, purchaseRateChfPerKwh: 0.25, sellRateChfPerKwh: 0.08 },
-  { date: "2024-03-31", producedKwh: 400, batteryDischargeKwh: 60, exportedKwh: 250, purchaseRateChfPerKwh: 0.28, sellRateChfPerKwh: 0.12 },
+  { date: "2024-01-31", producedKwh: 100, batteryChargeKwh: 25, batteryDischargeKwh: 20, exportedKwh: 30, purchaseRateChfPerKwh: 0.3, sellRateChfPerKwh: 0.1 },
+  { date: "2024-02-29", producedKwh: 200, batteryChargeKwh: 60, batteryDischargeKwh: 50, exportedKwh: 80, purchaseRateChfPerKwh: 0.25, sellRateChfPerKwh: 0.08 },
+  { date: "2024-03-31", producedKwh: 400, batteryChargeKwh: 70, batteryDischargeKwh: 60, exportedKwh: 250, purchaseRateChfPerKwh: 0.28, sellRateChfPerKwh: 0.12 },
 ];
+
+/** The charge as AC — what the grid would have been offered instead. */
+const chargeAc = (s: Scenario) => chargeAcEquivalentKwh(s.batteryChargeKwh);
 
 /**
  * Prices one scenario through the engine the way the discharge-based model
@@ -56,7 +66,7 @@ function priceScenario(s: Scenario): DailySavings {
     date: s.date,
     producedKwh: s.producedKwh,
     directUseKwh: computeDirectUseKwh(s),
-    batteryChargeKwh: 0,
+    batteryChargeKwh: s.batteryChargeKwh,
     batteryDischargeKwh: s.batteryDischargeKwh,
     exportedKwh: s.exportedKwh,
     exportLocalKwh: 0,
@@ -106,39 +116,52 @@ describe("computeSavingsFromInputs", () => {
   );
 
   it.each(scenarios)(
-    "$date: the no-battery counterfactual re-prices discharged energy at the sell rate",
+    "$date: the no-battery counterfactual exports the charge instead of storing it",
     (s) => {
       const row = priceScenario(s);
       const directUseKwh = computeDirectUseKwh(s);
 
-      // Without a battery the discharged kWh could not have been stored, so it
-      // would have left for the grid alongside whatever was already exported.
+      // Without a battery, what went in would have been inverted and sold, and
+      // what came back out never happens. Direct use is untouched: PV consumed
+      // as produced never involved the battery.
       expect(row.savingsWithoutBatteryChf).toBeCloseTo(
         directUseKwh * s.purchaseRateChfPerKwh +
-          (s.batteryDischargeKwh + s.exportedKwh) * s.sellRateChfPerKwh,
+          (s.exportedKwh - row.batteryDischargeExportedKwh + chargeAc(s)) * s.sellRateChfPerKwh,
         10,
       );
     },
   );
 
-  it.each(scenarios)("$date: battery-only savings reduce to discharge x rate spread", (s) => {
+  it.each(scenarios)("$date: battery-only savings are what the battery earned", (s) => {
     const row = priceScenario(s);
 
-    // Everything else cancels between the two counterfactuals: all the battery
-    // does is move a kWh from the sell price to the purchase price.
-    expect(row.batteryOnlySavingsChf).toBeCloseTo(
-      s.batteryDischargeKwh * (s.purchaseRateChfPerKwh - s.sellRateChfPerKwh),
-      10,
-    );
+    // The gap between the two counterfactuals is the battery and nothing else,
+    // so it must equal the battery's own net — one figure, not two that drift.
+    expect(row.batteryOnlySavingsChf).toBeCloseTo(row.batteryRevenueChf, 10);
     expect(row.batteryOnlySavingsChf).toBeCloseTo(
       row.savingsWithBatteryChf - row.savingsWithoutBatteryChf,
       10,
     );
+    // What it kept, less what storing it gave up.
+    expect(row.batteryOnlySavingsChf).toBeCloseTo(
+      row.batteryDischargeConsumedKwh * s.purchaseRateChfPerKwh +
+        row.batteryDischargeExportedKwh * s.sellRateChfPerKwh -
+        chargeAc(s) * s.sellRateChfPerKwh,
+      10,
+    );
   });
 
-  it("is worthless to have a battery when buying and selling cost the same", () => {
-    const row = priceScenario({ ...scenarios[0]!, purchaseRateChfPerKwh: 0.2, sellRateChfPerKwh: 0.2 });
-    expect(row.batteryOnlySavingsChf).toBeCloseTo(0, 10);
+  it("loses exactly the round trip when buying and selling cost the same", () => {
+    const s = { ...scenarios[0]!, purchaseRateChfPerKwh: 0.2, sellRateChfPerKwh: 0.2 };
+    const row = priceScenario(s);
+
+    // With no spread to arbitrage, storing can only cost: what comes back out
+    // is less than what went in, and both sides are worth the same per kWh.
+    expect(row.batteryOnlySavingsChf).toBeCloseTo(
+      (s.batteryDischargeKwh - chargeAc(s)) * 0.2,
+      10,
+    );
+    expect(row.batteryOnlySavingsChf).toBeLessThan(0);
   });
 
   it("treats an unknown rate as zero contribution rather than throwing", () => {
@@ -701,7 +724,9 @@ describe("no-battery counterfactual revenue", () => {
     // Production alone could export 100-10=90 > 70, so none of the discharge is
     // credited to export; the counterfactual is simply export + charge.
     expect(r.batteryDischargeExportedKwh).toBe(0);
-    expect(r.noBatteryDirectExportRevenueChf).toBeCloseTo((70 + 10) * 0.09, 6);
+    // The charge counts as AC, not as metered DC: 10 kWh stored is 9 kWh the
+    // inverter could have offered the grid.
+    expect(r.noBatteryDirectExportRevenueChf).toBeCloseTo((70 + 10 * 0.9) * 0.09, 6);
   });
 
   it("removes battery-sourced export from the counterfactual", () => {
@@ -976,5 +1001,52 @@ describe("the owner's gain from sharing the connection", () => {
     expect(days).toEqual([1 / 24]);
     const daily = addOwnerFixedAdvantage(rows, perDay);
     expect(aggregateDailyToOverall(daily)[0]!.rcpFixedAdvantageChf).toBeCloseTo(0.3 * rows.length, 10);
+  });
+});
+
+describe("what selling to participants gave up", () => {
+  const sold = (localKwh: number, feedIn: number | null, neighbourRate: number | null) =>
+    computeSavingsFromInputs({
+      date: "2027-02-01",
+      producedKwh: 100,
+      directUseKwh: 40,
+      batteryChargeKwh: 0,
+      batteryDischargeKwh: 0,
+      exportedKwh: 60 - localKwh,
+      exportLocalKwh: 60,
+      neighborConsumptionKwh: localKwh,
+      purchaseRateChfPerKwh: 0.25,
+      sellRateChfPerKwh: feedIn,
+      neighborSellRateChfPerKwh: neighbourRate,
+    });
+
+  it("prices the forgone export at the same feed-in rate the grid would have paid", () => {
+    const row = sold(15, 0.08, 0.14);
+    expect(row.neighborExportForgoneChf).toBeCloseTo(15 * 0.08, 10);
+    expect(row.neighborNetChf).toBeCloseTo(15 * 0.14 - 15 * 0.08, 10);
+  });
+
+  it("nets out the same way the battery's charging cost does", () => {
+    const row = sold(15, 0.08, 0.14);
+    expect(row.neighborNetChf).toBeCloseTo(row.neighborSellRevenueChf - row.neighborExportForgoneChf, 10);
+  });
+
+  it("leaves the savings totals alone — it is context, not a charge", () => {
+    const withRate = sold(15, 0.08, 0.14);
+    // Same sale, but nothing to compare it against.
+    const withoutRate = sold(15, null, 0.14);
+    expect(withRate.savingsWithBatteryChf - withoutRate.savingsWithBatteryChf).toBeCloseTo(
+      // Only the grid-export leg differs; the neighbour sale is priced the same in both.
+      (60 - 15) * 0.08,
+      10,
+    );
+    expect(withoutRate.neighborExportForgoneChf).toBe(0);
+    expect(withoutRate.neighborNetChf).toBeCloseTo(withoutRate.neighborSellRevenueChf, 10);
+  });
+
+  it("turns a negative feed-in price into a gain on top of the sale", () => {
+    const row = sold(15, -0.05, 0.14);
+    expect(row.neighborExportForgoneChf).toBeCloseTo(-0.75, 10);
+    expect(row.neighborNetChf).toBeGreaterThan(row.neighborSellRevenueChf);
   });
 });

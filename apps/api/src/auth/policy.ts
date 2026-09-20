@@ -48,7 +48,6 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   "/api/sites/:siteId/savings/neighbours": { GET: READ },
 
   "/api/sites/:siteId/dynamic-tariffs": { GET: READ },
-  "/api/sites/:siteId/dynamic-tariffs/sync": { POST: ADMIN },
 
   "/api/sites/:siteId/parties": { GET: READ, POST: ADMIN },
   "/api/parties/:id": { PATCH: ADMIN, DELETE: ADMIN },
@@ -56,6 +55,10 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   "/api/home-assistant/status": { GET: READ },
   "/api/home-assistant/statistics": { GET: READ },
   "/api/home-assistant/dynamic-tariff-entities": { GET: READ },
+  "/api/home-assistant/sensors": { GET: READ },
+  // The participants' live view — this is the one Home Assistant route they
+  // reach, and it carries site-level power only, never anyone's own figures.
+  "/api/sites/:siteId/home-assistant/live": { GET: PARTICIPANT_READ },
   "/api/sites/:siteId/home-assistant/entities": { GET: READ, PUT: ADMIN },
   "/api/home-assistant/entities/:id": { DELETE: ADMIN },
   "/api/sites/:siteId/home-assistant/sync": { POST: ADMIN },

@@ -194,26 +194,6 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
   const { purchaseRateChfPerKwh: purchaseRate, sellRateChfPerKwh: sellRate, neighborSellRateChfPerKwh: neighborSellRate } = inputs;
   const { directUseKwh, batteryChargeKwh, batteryDischargeKwh, exportedKwh, neighborConsumptionKwh } = inputs;
 
-  const selfConsumptionValueChf =
-    purchaseRate != null ? (batteryDischargeKwh + directUseKwh) * purchaseRate : 0;
-  const exportRevenueChf = sellRate != null ? exportedKwh * sellRate : 0;
-  // Priced off what neighbours actually consumed, not off export_local: the
-  // latter is everything leaving the household, of which the grid share is
-  // already priced as export revenue.
-  const neighborSellRevenueChf = neighborSellRate != null ? neighborConsumptionKwh * neighborSellRate : 0;
-  // Every kWh the site produced ends up in exactly one of these: used at home
-  // (directly or through the battery), sold to a participant, or exported.
-  const savingsWithBatteryChf = selfConsumptionValueChf + exportRevenueChf + neighborSellRevenueChf;
-
-  // Counterfactual: without a battery, energy that was discharged from it would
-  // instead have been exported at the sell rate (it couldn't have been stored).
-  // Neighbour sales don't involve the battery, so they are the same in both.
-  const savingsWithoutBatteryChf =
-    (purchaseRate != null ? directUseKwh * purchaseRate : 0) +
-    (sellRate != null ? (batteryDischargeKwh + exportedKwh) * sellRate : 0) +
-    neighborSellRevenueChf;
-
-  const batteryOnlySavingsChf = savingsWithBatteryChf - savingsWithoutBatteryChf;
   const revenue = computeBatteryRevenue({
     producedKwh: inputs.producedKwh,
     batteryConversionLoss: inputs.batteryConversionLoss,
@@ -223,6 +203,50 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
     purchaseRateChfPerKwh: purchaseRate,
     sellRateChfPerKwh: sellRate,
   });
+
+  // Only the discharge that actually covered load is self-consumption. Pricing
+  // the whole discharge at the purchase rate counted the slice that went to
+  // the grid twice — once here, and again inside `exportRevenueChf`, which
+  // prices the meter's total export. Harmless while the battery never
+  // exported; wrong the moment it is discharged on purpose.
+  const selfConsumptionValueChf =
+    purchaseRate != null ? (revenue.dischargeConsumedKwh + directUseKwh) * purchaseRate : 0;
+  const exportRevenueChf = sellRate != null ? exportedKwh * sellRate : 0;
+  // Priced off what neighbours actually consumed, not off export_local: the
+  // latter is everything leaving the household, of which the grid share is
+  // already priced as export revenue.
+  const neighborSellRevenueChf = neighborSellRate != null ? neighborConsumptionKwh * neighborSellRate : 0;
+  // The same shape as the battery's charging cost: energy that left the house
+  // priced at what the grid would have paid for it. Selling locally is worth
+  // the difference, not the whole sale.
+  const neighborExportForgoneChf = sellRate != null ? neighborConsumptionKwh * sellRate : 0;
+  // Every kWh the site produced ends up in exactly one of these: used at home
+  // (directly or through the battery), sold to a participant, or exported.
+  const savingsWithBatteryChf = selfConsumptionValueChf + exportRevenueChf + neighborSellRevenueChf;
+
+  /*
+   * Counterfactual: the same site without a battery.
+   *
+   * Direct consumption and participant sales are untouched by it, and the
+   * export that production made on its own still happens. What changes is the
+   * energy that went into the battery: with nowhere to store it, it would
+   * have been inverted and exported, which is exactly the opportunity cost
+   * `chargingCostChf` already prices (the DC charge less the conversion loss,
+   * at the feed-in rate of the moment).
+   *
+   * Written as the with-battery figure less the battery's own net, which is
+   * the same sum rearranged — and makes the identity explicit: the difference
+   * between the two totals IS what the battery earned, so the dashboard's
+   * "battery revenue" and this page's "battery only" can no longer disagree.
+   *
+   * The previous version assumed the *discharge* would have been exported.
+   * That is the energy after round-trip losses, so it understated what the
+   * grid would have paid; and it added that discharge to the meter's total
+   * export, double-counting any discharge that had itself been exported.
+   */
+  const savingsWithoutBatteryChf = savingsWithBatteryChf - revenue.batteryRevenueChf;
+
+  const batteryOnlySavingsChf = revenue.batteryRevenueChf;
 
   // Revenue breakdown for the "Umsatz" chart: exportRevenueChf already prices
   // *all* grid export (production- and battery-sourced combined) at the
@@ -240,8 +264,13 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
   // export that actually came *out* of it never happens (- dischargeExported).
   // Direct consumption is untouched: PV used as it was produced never involved
   // the battery, so removing the battery doesn't change it.
+  // The charge as AC, not as metered DC: what the grid would have been offered
+  // is what the inverter could have delivered. Matches `chargingCostChf`, so
+  // this and `savingsWithoutBatteryChf` describe one counterfactual, not two.
   const noBatteryExportedKwh = Math.max(
-    exportedKwh - revenue.dischargeExportedKwh + batteryChargeKwh,
+    exportedKwh -
+      revenue.dischargeExportedKwh +
+      chargeAcEquivalentKwh(batteryChargeKwh, inputs.batteryConversionLoss ?? DEFAULT_BATTERY_CONVERSION_LOSS),
     0,
   );
   const noBatteryDirectExportRevenueChf = sellRate != null ? noBatteryExportedKwh * sellRate : 0;
@@ -262,6 +291,8 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
     directExportRevenueChf,
     directConsumptionRevenueChf,
     neighborSellRevenueChf,
+    neighborExportForgoneChf,
+    neighborNetChf: neighborSellRevenueChf - neighborExportForgoneChf,
     exportedPricedKwh: sellRate != null ? exportedKwh : 0,
     neighborPricedKwh: neighborSellRate != null ? neighborConsumptionKwh : 0,
     // Per day, not per interval: filled in by addOwnerFixedAdvantage once the
@@ -295,6 +326,8 @@ const SUMMABLE_FIELDS = [
   "directExportRevenueChf",
   "directConsumptionRevenueChf",
   "neighborSellRevenueChf",
+  "neighborExportForgoneChf",
+  "neighborNetChf",
   "exportedPricedKwh",
   "neighborPricedKwh",
   "ownerFixedAloneChf",

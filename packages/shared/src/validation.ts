@@ -80,9 +80,15 @@ export const siteUpdateInputSchema = z.object({
   // A fraction, not a percentage — the form divides before sending.
   batteryConversionLoss: z.coerce.number().min(0).max(0.9).optional(),
   // Omitted entirely: leave the stored value untouched (so saving one
-  // Settings section never blanks another). Explicit null: clear it, falling
-  // back to the api's own HA_DYNAMIC_TARIFF_ENTITY_ID.
+  // Settings section never blanks another). Explicit null: clear it, which
+  // leaves the site with no dynamic feed-in rates to sync.
   dynamicTariffEntityId: z.string().trim().min(1).max(200).nullable().optional(),
+  // Same three states as above, one per live-view entity.
+  liveExportPowerEntityId: z.string().trim().min(1).max(200).nullable().optional(),
+  livePvPowerEntityId: z.string().trim().min(1).max(200).nullable().optional(),
+  forecastTodayEntityId: z.string().trim().min(1).max(200).nullable().optional(),
+  forecastRemainingEntityId: z.string().trim().min(1).max(200).nullable().optional(),
+  forecastTomorrowEntityId: z.string().trim().min(1).max(200).nullable().optional(),
 });
 export type SiteUpdateInput = z.infer<typeof siteUpdateInputSchema>;
 

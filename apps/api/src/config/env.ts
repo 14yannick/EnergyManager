@@ -32,15 +32,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default("0.0.0.0"),
-  // Still named BKW_SYNC_* — it once called BKW's own dyntariffs API
-  // directly. It now reads the same prices from a Home Assistant entity
-  // instead (this household's own HA already polls BKW), so the name is a
-  // historical artifact; what it gates is unchanged: "periodically refresh
-  // dynamic feed-in rates".
-  BKW_SYNC_ENABLED: boolFlag("BKW_SYNC_ENABLED", true),
-  BKW_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(30),
   // Home Assistant. Unset simply disables the integration — the rest of the
-  // app runs fine without it.
+  // app runs fine without it. Dynamic feed-in rates come from here too, on
+  // the same schedule as the statistics: there is nothing left that is
+  // specific to them to configure.
   HA_URL: z
     .string()
     .optional()
@@ -50,17 +45,6 @@ const envSchema = z.object({
   HA_SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(15),
   /** How far back each scheduled sync re-reads, to pick up late-arriving statistics. */
   HA_SYNC_LOOKBACK_HOURS: z.coerce.number().int().positive().default(48),
-  /**
-   * The price-forecast entity the dynamic feed-in sync reads — the household's
-   * own Home Assistant sensor, not a stock integration (see haClient.ts). It
-   * has to publish `today`/`tomorrow` attributes of {start, price} slots in
-   * CHF/kWh and a `price_component` of "feed_in", or the sync refuses to
-   * write anything rather than mis-price the wrong tariff.
-   */
-  HA_DYNAMIC_TARIFF_ENTITY_ID: z
-    .string()
-    .optional()
-    .transform((v) => (v === undefined ? "sensor.dynamic_tariff" : v.trim() || undefined)),
 
   // ---- Authentication (Cloudflare Access) -------------------------------
   // Off by default so local development and existing deployments keep

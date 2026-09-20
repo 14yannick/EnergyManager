@@ -12,16 +12,15 @@ import {
 } from "recharts";
 import type { PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { useSelectedPeriod } from "../lib/usePeriod";
 import { useT, type MessageKey } from "../i18n/context";
 import { useIdentity } from "../lib/useIdentity";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { PeriodControls } from "../components/PeriodControls";
 import { StatCard } from "../components/StatCard";
 import {
-  INITIAL_GRANULARITY,
   MAX_HOURLY_DAYS,
   PERIOD_UNIT,
-  initialRange,
   axisTick,
   clampRange,
   periodKeys,
@@ -82,10 +81,7 @@ export function PartyDashboardPage() {
     ? identity.data?.partyId
     : (pickedId ?? members.find((p) => p.role === "rcp_admin")?.id ?? members[0]?.id);
 
-  const initial = useMemo(initialRange, []);
-  const [from, setFrom] = useState(initial.from);
-  const [to, setTo] = useState(initial.to);
-  const [granularity, setGranularity] = useState<Granularity>(INITIAL_GRANULARITY);
+  const { from, to, granularity, set: setPeriod } = useSelectedPeriod();
 
   const query = useQuery({
     queryKey: ["party-consumption", siteId, partyId, from, to, granularity],
@@ -103,10 +99,13 @@ export function PartyDashboardPage() {
   const bounds = { min: null, max: latestDay(data?.dataTo) };
   const dataRange: DataRange = { from: data?.dataFrom ?? null, to: data?.dataTo ?? null };
   useEffect(() => {
+    // See the dashboard's copy: until this party's own range has loaded,
+    // `bounds.max` is only today, and clamping against it would throw away a
+    // period carried over from the other page.
+    if (!data) return;
     const c = clampRange({ from, to }, bounds);
-    if (c.from !== from) setFrom(c.from);
-    if (c.to !== to) setTo(c.to);
-  }, [bounds.max, from, to]);
+    if (c.from !== from || c.to !== to) setPeriod(c, granularity);
+  }, [data, bounds.max, from, to, granularity]);
 
   if (identity.isLoading || (!isParticipant && !site)) {
     return <p className="text-slate-500">{t("common.loading")}</p>;
@@ -121,6 +120,10 @@ export function PartyDashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Above the title on purpose: it is the one thing on this page that is
+          true only right now, so it should not need scrolling past to reach. */}
+      <LiveSection siteId={siteId} />
+
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">{t("party.title")}</h1>
@@ -148,16 +151,13 @@ export function PartyDashboardPage() {
           <PeriodControls
             range={{ from, to }}
             granularity={granularity}
-            onChange={(r, g) => {
-              setGranularity(g);
-              setFrom(r.from);
-              setTo(r.to);
-            }}
+            onChange={setPeriod}
             dataRange={dataRange}
             bounds={bounds}
           />
         </div>
       </div>
+
 
       {granularity === "hourly" && (
         <p className="text-xs text-slate-500">{t("dash.hourlyCap", { days: MAX_HOURLY_DAYS })}</p>
@@ -219,6 +219,115 @@ export function PartyDashboardPage() {
         granularity={granularity}
         empty={!!data && totalKwh === 0}
       />
+    </div>
+  );
+}
+
+/**
+ * What the site is doing right now, and what the day still holds — the
+ * question a participant actually acts on: is there cheap local energy
+ * about, now or later today.
+ *
+ * Read live from Home Assistant on each poll and never stored; the history
+ * below it is what the metering already records. Figures are shown only
+ * where their sensor is configured and readable, so a partial setup shows
+ * what it has rather than a row of dashes.
+ */
+/**
+ * Below this, feed-in is meter noise rather than something a participant could
+ * actually use — a few tens of watts drift across zero all night. Calling that
+ * "surplus available" would send somebody to start a machine on nothing.
+ */
+const SURPLUS_FLOOR_W = 100;
+
+function LiveSection({ siteId }: { siteId: string | null | undefined }) {
+  const t = useT();
+  const query = useQuery({
+    queryKey: ["ha-live", siteId],
+    queryFn: () => api.homeAssistant.live(siteId!),
+    enabled: !!siteId,
+    // Inverter readings move by the second; a minute is close enough to
+    // "now" for deciding whether to put the washing on, and gentle on both
+    // Home Assistant and the browser.
+    refetchInterval: 60 * 1000,
+  });
+
+  const live = query.data;
+  // Nothing configured is not a failure worth shouting about — the view just
+  // isn't set up, and the admin is told where to do it.
+  if (!live || !live.configured) return null;
+
+  const hasAny =
+    live.exportW != null ||
+    live.pvW != null ||
+    live.forecastTodayKwh != null ||
+    live.forecastRemainingKwh != null ||
+    live.forecastTomorrowKwh != null;
+  if (!hasAny) return null;
+
+  const kw = (w: number) => `${(w / 1000).toFixed(2)} kW`;
+  const kwh = (v: number) => `${v.toFixed(1)} kWh`;
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">{t("party.live")}</h2>
+        <p className="text-xs text-slate-500">{t("party.liveNote")}</p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {live.exportW != null && (
+          <LiveCard
+            label={t("party.live.exporting")}
+            // The feed-in sensor swings negative when the house is drawing from
+            // the grid, but a card titled "exporting" cannot show a negative:
+            // nothing is leaving, so nothing is what it says.
+            value={kw(Math.max(live.exportW, 0))}
+            sub={
+              live.exportW >= SURPLUS_FLOOR_W
+                ? t("party.live.exportingSub")
+                : t("party.live.exportingNone")
+            }
+            highlight={live.exportW >= SURPLUS_FLOOR_W}
+          />
+        )}
+        {live.pvW != null && <LiveCard label={t("party.live.pv")} value={kw(live.pvW)} />}
+        {live.forecastRemainingKwh != null && (
+          <LiveCard
+            label={t("party.live.remaining")}
+            value={kwh(live.forecastRemainingKwh)}
+            sub={
+              live.forecastTodayKwh != null
+                ? t("party.live.ofToday", { total: live.forecastTodayKwh.toFixed(1) })
+                : undefined
+            }
+          />
+        )}
+        {live.forecastTomorrowKwh != null && (
+          <LiveCard label={t("party.live.tomorrow")} value={kwh(live.forecastTomorrowKwh)} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LiveCard({
+  label,
+  value,
+  sub,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border bg-white p-4">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold ${highlight ? "text-emerald-700" : "text-slate-900"}`}>
+        {value}
+      </p>
+      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
     </div>
   );
 }

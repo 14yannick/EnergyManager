@@ -21,21 +21,24 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       PORT: 3000
-      # Polling settings. Still named BKW_SYNC_* — it reads a rolling window of
-      # feed-in prices from a Home Assistant entity now (HA_DYNAMIC_TARIFF_ENTITY_ID
-      # below), not by calling BKW directly, but the reason to run on a server at
-      # all is unchanged: no history endpoint exists, so a rate not captured while
-      # the app (and Home Assistant) were down is gone for good.
-      BKW_SYNC_ENABLED: ${BKW_SYNC_ENABLED:-true}
-      BKW_SYNC_INTERVAL_MINUTES: ${BKW_SYNC_INTERVAL_MINUTES:-30}
       # Home Assistant. HA_URL unset disables the integration *silently*, so if
       # HA data stops arriving after a deploy, check these reached the container.
+      # Dynamic feed-in rates ride on this same sync; no history endpoint
+      # exists, so a rate not captured while this was down is gone for good.
       HA_URL: ${HA_URL:-}
       HA_TOKEN: ${HA_TOKEN:-}
       HA_SYNC_ENABLED: ${HA_SYNC_ENABLED:-true}
       HA_SYNC_INTERVAL_MINUTES: ${HA_SYNC_INTERVAL_MINUTES:-15}
       HA_SYNC_LOOKBACK_HOURS: ${HA_SYNC_LOOKBACK_HOURS:-48}
-      HA_DYNAMIC_TARIFF_ENTITY_ID: ${HA_DYNAMIC_TARIFF_ENTITY_ID:-sensor.dynamic_tariff}
+      # Authentication. These were missing, which meant the container always
+      # ran with auth off — and off means every request is treated as admin,
+      # whatever Cloudflare Access decided at the door. AUTH_DEV_AS is local
+      # only; the API refuses to start if it is set while AUTH_ENABLED=true.
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      AUTH_ADMIN_EMAILS: ${AUTH_ADMIN_EMAILS:-}
+      AUTH_DEV_AS: ${AUTH_DEV_AS:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

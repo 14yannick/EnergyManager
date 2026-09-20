@@ -283,6 +283,12 @@ function formatLocal(iso: string): string {
   });
 }
 
+/**
+ * Read-only: the rates arrive with the Home Assistant sync now, on its
+ * schedule, so there is nothing here to trigger. What is worth showing is
+ * whether they are actually arriving — the sensor itself is chosen under
+ * Settings → Home Assistant.
+ */
 function DynamicTariffStatus({ siteId }: { siteId: string }) {
   const t = useT();
   const now = new Date();
@@ -294,11 +300,6 @@ function DynamicTariffStatus({ siteId }: { siteId: string }) {
     queryFn: () => api.dynamicTariffs.list(siteId, from, to, "feed_in"),
   });
 
-  const syncMutation = useMutation({
-    mutationFn: () => api.dynamicTariffs.sync(siteId),
-    onSuccess: () => void ratesQuery.refetch(),
-  });
-
   const rates = ratesQuery.data ?? [];
   const latestPublication = rates.reduce<string | null>(
     (latest, r) => (!latest || r.publicationTimestamp > latest ? r.publicationTimestamp : latest),
@@ -307,34 +308,15 @@ function DynamicTariffStatus({ siteId }: { siteId: string }) {
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-medium text-slate-700">{t("tariff.dynamic")}</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            {rates.length > 0
-              ? t("tariff.dynamicLoaded", {
-                  count: rates.length,
-                  published: latestPublication ? formatLocal(latestPublication) : "—",
-                })
-              : t("tariff.dynamicEmpty")}
-          </p>
-        </div>
-        <button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          {syncMutation.isPending ? t("settings.syncing") : t("settings.syncNow")}
-        </button>
-      </div>
-      {syncMutation.isError && (
-        <p className="mt-2 text-sm text-red-600">{(syncMutation.error as Error).message}</p>
-      )}
-      {syncMutation.data?.warnings.map((w, i) => (
-        <p key={i} className="mt-2 text-sm text-amber-700">
-          {w}
-        </p>
-      ))}
+      <h2 className="text-sm font-medium text-slate-700">{t("tariff.dynamic")}</h2>
+      <p className="mt-1 text-xs text-slate-500">
+        {rates.length > 0
+          ? t("tariff.dynamicLoaded", {
+              count: rates.length,
+              published: latestPublication ? formatLocal(latestPublication) : "—",
+            })
+          : t("tariff.dynamicEmpty")}
+      </p>
     </div>
   );
 }
