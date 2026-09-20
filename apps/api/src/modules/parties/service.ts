@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, ne, sql } from "drizzle-orm";
 import type { Party, PartyInput } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { parties } from "../../db/schema/index.js";
@@ -24,12 +24,50 @@ function toDomain(row: Row): Party {
   };
 }
 
+/**
+ * An address already on another party. Sign-in resolves a person to exactly
+ * one party, so the same address on two of them has no answer — and the
+ * person only finds that out as a 403. Refused here, when it is being typed.
+ */
+export class DuplicateEmailError extends Error {
+  constructor(
+    readonly email: string,
+    readonly partyName: string,
+  ) {
+    super(`${email} is already on the party "${partyName}".`);
+    this.name = "DuplicateEmailError";
+  }
+}
+
+/**
+ * The address the identity lookup will compare against: it lower-cases the
+ * verified sign-in and compares `lower(e)`, so a party's own list is matched
+ * the same way here — across every site, since sign-in knows no site yet.
+ */
+async function assertEmailsUnclaimed(emails: string[], exceptPartyId: string | null): Promise<void> {
+  for (const email of emails) {
+    const wanted = email.trim().toLowerCase();
+    if (!wanted) continue;
+    const taken = await db
+      .select({ name: parties.name })
+      .from(parties)
+      .where(
+        exceptPartyId == null
+          ? sql`exists (select 1 from unnest(${parties.emails}) as e where lower(e) = ${wanted})`
+          : sql`${ne(parties.id, exceptPartyId)} and exists (select 1 from unnest(${parties.emails}) as e where lower(e) = ${wanted})`,
+      )
+      .limit(1);
+    if (taken[0]) throw new DuplicateEmailError(email, taken[0].name);
+  }
+}
+
 export async function listParties(siteId: string): Promise<Party[]> {
   const rows = await db.select().from(parties).where(eq(parties.siteId, siteId)).orderBy(parties.name);
   return rows.map(toDomain);
 }
 
 export async function createParty(siteId: string, input: PartyInput): Promise<Party> {
+  await assertEmailsUnclaimed(input.emails ?? [], null);
   const [row] = await db
     .insert(parties)
     .values({
@@ -50,6 +88,7 @@ export async function createParty(siteId: string, input: PartyInput): Promise<Pa
 }
 
 export async function updateParty(id: string, input: PartyInput): Promise<Party | null> {
+  await assertEmailsUnclaimed(input.emails ?? [], id);
   const [row] = await db
     .update(parties)
     .set({

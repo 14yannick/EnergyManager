@@ -16,10 +16,23 @@ import {
   ownerFixedCosts,
   ownerIsMember,
   participantCountOf,
+  positionsChangingWithin,
   positionsValidOn,
+  usageLooksHalfImported,
   type OwnerFixedCosts,
   type ParticipantUsage,
 } from "./engine.js";
+
+/**
+ * The period straddles a tariff change, so no single invoice can be right
+ * for it. Carries what changed, so the caller can say where to split.
+ */
+export class BillingPeriodError extends Error {
+  constructor(readonly reasons: string[]) {
+    super(reasons.join(" "));
+    this.name = "BillingPeriodError";
+  }
+}
 
 type Row = typeof gridTariffPositions.$inferSelect;
 
@@ -157,16 +170,31 @@ export async function runInvoices(
     db.select().from(tariffPeriods).where(eq(tariffPeriods.siteId, siteId)),
   ]);
 
-  // Positions overlapping the period. A position that changes mid-period would
-  // be two lines on the provider's own invoice, so flag it rather than
-  // silently pricing the whole period at one of them.
+  // Positions overlapping the period. Every one handed to the engine is
+  // billed for the whole period, so a position that changes inside it must
+  // stop the run, not decorate it with a warning: both versions would print
+  // at full length and the participant would pay the base charge twice.
   const periodStart = new Date(`${from}T00:00:00Z`).toISOString();
   const periodEnd = new Date(`${to}T23:59:59Z`).toISOString();
   const active = positions.filter((p) => p.validFrom <= periodEnd && p.validTo > periodStart);
-  for (const p of active) {
-    if (p.validFrom > periodStart || p.validTo <= periodEnd) {
-      warnings.push(`"${p.label}" is only valid for part of this period — its rate changed mid-period.`);
-    }
+  const refusals: string[] = [];
+  const changing = positionsChangingWithin(positions, from, to);
+  if (changing.length > 0) {
+    const named = [...new Set(changing.map((p) => `"${p.label}"`))].join(", ");
+    // Positions start at Zurich midnight, which is 23:00 UTC the day before —
+    // naming the change by its UTC face would put it on the wrong day.
+    const zurichDay = (iso: string) =>
+      new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Zurich" });
+    const edges = [...new Set(changing.flatMap((p) => [p.validFrom, p.validTo]))]
+      .filter((ts) => ts > periodStart && ts <= periodEnd)
+      .map(zurichDay)
+      .filter((d, i, all) => all.indexOf(d) === i)
+      .sort();
+    refusals.push(
+      `${named} ${changing.length === 1 ? "changes" : "change"} during this period` +
+        (edges.length > 0 ? ` (on ${edges.join(", ")}).` : ".") +
+        " Bill the stretches on either side separately.",
+    );
   }
   if (active.length === 0) {
     warnings.push("No grid tariff positions are valid for this period.");
@@ -189,8 +217,13 @@ export async function runInvoices(
   } else if (
     findRateForInstant("neighbor_sell", periodEnd, neighbourRates)?.rateChfPerKwh !== localRateChf
   ) {
-    warnings.push("The neighbour-sale rate changes during this period; the rate at its start was used.");
+    // The same rule as the positions: an agreed price that changes inside the
+    // period is two invoices, not one priced at whichever end was picked.
+    refusals.push(
+      "The neighbour-sale rate changes during this period. Bill the stretches on either side separately.",
+    );
   }
+  if (refusals.length > 0) throw new BillingPeriodError(refusals);
 
   const usageByParty = new Map<string, { grid: number; local: number }>();
   for (const row of usageRows) {
@@ -238,6 +271,17 @@ export async function runInvoices(
     warnings.push("No participants defined yet — add the neighbours sharing your connection.");
   } else if (usageByParty.size === 0) {
     warnings.push("No per-participant consumption recorded for this period.");
+  }
+  // Per party, not only when everything is missing: a half-imported party is
+  // the one the total check cannot see, and its invoice is the one that goes
+  // out wrong.
+  for (const party of billable) {
+    const usage = usageByParty.get(party.id);
+    if (usage && usageLooksHalfImported({ localKwh: usage.local, gridKwh: usage.grid })) {
+      warnings.push(
+        `${party.name}: local energy was imported for this period but no grid draw — every per-kWh position bills zero. Import the consumption_grid series before sending this invoice.`,
+      );
+    }
   }
 
   return { from, to, days, participantCount, localRateChf, payee, invoices, warnings };

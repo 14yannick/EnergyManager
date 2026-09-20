@@ -59,13 +59,21 @@ export function splitInverterOutput(input: SplitInput): SplitResult {
   let productionKwh = (inverterAcKwh * pvShare) / total;
 
   // Physical ceiling: the battery cannot deliver more AC than the DC it gave
-  // up, since conversion only loses energy. Without this, winter hours breach
-  // it — the battery is charged from the grid then, so `pvDc - charge` goes to
-  // zero while the panels are still feeding the inverter within the same hour,
-  // and the whole hour's output is credited to the battery. Over February that
+  // up, since conversion only loses energy. Without it, winter hours breach
+  // the bound: whenever charge exceeds PV DC within an hour, `pvDc - charge`
+  // clamps to zero while the panels are still feeding the inverter, and the
+  // whole hour's output is credited to the battery. Over February 2026 that
   // attributed 185 kWh across 167 hours to a battery that had discharged less
-  // than that, giving an impossible 105% conversion. Anything above the
-  // ceiling can only have come from the panels.
+  // than that — an impossible 105% conversion. Anything above the ceiling can
+  // only have come from the panels.
+  //
+  // An earlier version of this note blamed grid charging for those hours.
+  // The import meter says otherwise: over Feb–Sep 2026 the battery took at
+  // most 0.3 kWh from the grid at night, and the hours where charge exceeds
+  // PV DC coincide with the meter importing 2.6 kWh in total — a third of
+  // them while *exporting*. What breaches the bound is the PV and battery
+  // counters ticking at different moments inside the hour, not energy from
+  // the grid. The clamp is right either way; the diagnosis was not.
   const batteryCeiling = batteryShare;
   if (inverterAcKwh - productionKwh > batteryCeiling) {
     productionKwh = inverterAcKwh - batteryCeiling;

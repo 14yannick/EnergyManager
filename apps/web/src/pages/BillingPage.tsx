@@ -444,6 +444,14 @@ function InvoiceSection({ siteId }: { siteId: string }) {
         )}
       </div>
 
+      {/* A refused run, not a failed one: the period straddles a tariff change
+          and the API says where to split it. Shown where the warnings would
+          have been, since it is the same kind of message with a firmer verb. */}
+      {invoicesQuery.error && (
+        <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {invoicesQuery.error.message}
+        </p>
+      )}
       {result?.warnings.map((w, i) => (
         <p key={i} className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 print:hidden">
           {w}

@@ -17,6 +17,8 @@ export const en = {
   "nav.menu": "Menu",
   "nav.consumption": "Consumption",
   "session.signOut": "Sign out",
+  "session.expired": "Your session has ended — taking you back to the sign-in page…",
+  "session.expiredStuck": "Your session has ended, but the sign-in page did not appear. The app loaded without its API: check that the Cloudflare Access application covers the whole hostname, including /api/.",
   "session.preview": "local preview",
   "session.noAccess": "no access",
   "session.language": "Language",

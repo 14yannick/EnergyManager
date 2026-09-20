@@ -55,11 +55,32 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The session behind the request is gone.
+ *
+ * Cloudflare Access answers an unauthenticated call with a 302 to its login
+ * page, never a 401. Left to follow it, `fetch` lands on a cross-origin page
+ * with no CORS headers and rejects with a bare TypeError — the same error a
+ * dead API produces, and one that read as "authentication is off" to the
+ * session hook, which then drew an admin's menu over an empty app. Asking
+ * for redirects to be left alone turns that 302 into a response of type
+ * `opaqueredirect`, which nothing else on `/api` ever produces, so it can be
+ * named for what it is.
+ */
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("Your session has ended. Sign in again.");
+    this.name = "SessionExpiredError";
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
+    redirect: "manual",
     headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
   });
+  if (res.type === "opaqueredirect") throw new SessionExpiredError();
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new ApiError(
@@ -126,7 +147,9 @@ export const api = {
       const res = await fetch(`/api/sites/${siteId}/readings/import`, {
         method: "POST",
         body: form,
+        redirect: "manual",
       });
+      if (res.type === "opaqueredirect") throw new SessionExpiredError();
       if (!res.ok) throw new Error(`Import failed: ${res.status}`);
       return res.json() as Promise<ReadingsImportResult>;
     },

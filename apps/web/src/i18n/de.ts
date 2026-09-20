@@ -22,6 +22,8 @@ export const de: Record<keyof typeof en, string> = {
   "nav.menu": "Menü",
   "nav.consumption": "Verbrauch",
   "session.signOut": "Abmelden",
+  "session.expired": "Ihre Sitzung ist beendet — zurück zur Anmeldeseite…",
+  "session.expiredStuck": "Ihre Sitzung ist beendet, aber die Anmeldeseite erschien nicht. Die App wurde ohne ihre API geladen: Prüfen Sie, ob die Cloudflare-Access-Anwendung den ganzen Hostnamen abdeckt, einschließlich /api/.",
   "session.preview": "lokale Vorschau",
   "session.noAccess": "kein Zugriff",
   "session.language": "Sprache",

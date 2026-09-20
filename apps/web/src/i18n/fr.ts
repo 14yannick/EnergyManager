@@ -17,6 +17,8 @@ export const fr: Record<keyof typeof en, string> = {
   "nav.menu": "Menu",
   "nav.consumption": "Consommation",
   "session.signOut": "Se déconnecter",
+  "session.expired": "Votre session est terminée — retour à la page de connexion…",
+  "session.expiredStuck": "Votre session est terminée, mais la page de connexion n'est pas apparue. L'application s'est chargée sans son API : vérifiez que l'application Cloudflare Access couvre tout le nom d'hôte, y compris /api/.",
   "session.preview": "aperçu local",
   "session.noAccess": "aucun accès",
   "session.language": "Langue",

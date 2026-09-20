@@ -4,6 +4,7 @@ import { db } from "../../db/client.js";
 import { dynamicTariffRates, sites } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { fetchHaEntityDynamicTariff } from "../homeAssistant/haClient.js";
+import { EXPECTED_UNIT, isChfPerKwh } from "./unit.js";
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -73,11 +74,25 @@ async function syncSite(
       warning: `${site.name}: ${entityId} is publishing "${forecast.priceComponent ?? "unknown"}", not "feed_in".`,
     };
   }
+  // The same refusal for the unit: the table's column is CHF per kWh by name,
+  // and a feed in EUR/MWh with the right component label would otherwise write
+  // rates a thousand times off without a word. A sensor that states no unit
+  // at all is let through — nothing to compare — but the run says so.
+  if (forecast.unit != null && !isChfPerKwh(forecast.unit)) {
+    return {
+      ...empty,
+      warning: `${site.name}: ${entityId} publishes prices in "${forecast.unit}", not ${EXPECTED_UNIT}. Nothing written.`,
+    };
+  }
+  const unitWarning =
+    forecast.unit == null
+      ? `${site.name}: ${entityId} states no unit; its prices were taken as ${EXPECTED_UNIT} unchecked.`
+      : null;
 
   const source = `${HA_SOURCE}:${entityId}`;
   const rows = forecast.slots;
   if (rows.length === 0) {
-    return { inserted: 0, updated: 0, source, publicationTimestamp: forecast.publicationTimestamp, warning: null };
+    return { inserted: 0, updated: 0, source, publicationTimestamp: forecast.publicationTimestamp, warning: unitWarning };
   }
 
   let inserted = 0;
@@ -116,7 +131,7 @@ async function syncSite(
     }
   }
 
-  return { inserted, updated, source, publicationTimestamp: forecast.publicationTimestamp, warning: null };
+  return { inserted, updated, source, publicationTimestamp: forecast.publicationTimestamp, warning: unitWarning };
 }
 
 /**

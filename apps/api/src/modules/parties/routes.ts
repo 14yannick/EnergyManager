@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { partyInputSchema } from "@energy-manager/shared";
-import { createParty, deleteParty, listParties, updateParty } from "./service.js";
+import { DuplicateEmailError, createParty, deleteParty, listParties, updateParty } from "./service.js";
 import { isUniqueViolation, violatedConstraint } from "../../lib/pgErrors.js";
 
 export async function partyRoutes(app: FastifyInstance) {
@@ -17,6 +17,9 @@ export async function partyRoutes(app: FastifyInstance) {
       const created = await createParty(req.params.siteId, parsed.data);
       return reply.status(201).send(created);
     } catch (err) {
+      if (err instanceof DuplicateEmailError) {
+        return reply.status(409).send({ error: "duplicate_email", message: err.message });
+      }
       if (violatedConstraint(err, "parties_one_admin_idx")) {
         return reply.status(409).send({
           error: "admin_exists",
@@ -40,6 +43,9 @@ export async function partyRoutes(app: FastifyInstance) {
       if (!updated) return reply.status(404).send({ error: "not_found" });
       return updated;
     } catch (err) {
+      if (err instanceof DuplicateEmailError) {
+        return reply.status(409).send({ error: "duplicate_email", message: err.message });
+      }
       if (violatedConstraint(err, "parties_one_admin_idx")) {
         return reply.status(409).send({
           error: "admin_exists",

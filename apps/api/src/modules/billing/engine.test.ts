@@ -1,7 +1,18 @@
 import type { PartyRole } from "@energy-manager/shared";
 import { describe, expect, it } from "vitest";
 import type { GridTariffPosition } from "@energy-manager/shared";
-import { buildParticipantInvoice, consumptionCosts, inclusiveDays, ownerFixedCosts, ownerIsMember, isBilledParty, participantCountOf, type InvoiceInputs } from "./engine.js";
+import {
+  buildParticipantInvoice,
+  consumptionCosts,
+  inclusiveDays,
+  ownerFixedCosts,
+  ownerIsMember,
+  isBilledParty,
+  participantCountOf,
+  positionsChangingWithin,
+  usageLooksHalfImported,
+  type InvoiceInputs,
+} from "./engine.js";
 
 // The 2026 tariff as the provider bills it, gross (VAT passed through).
 const G = 1.081;
@@ -247,5 +258,54 @@ describe("the owner's share of the standing charges", () => {
     expect(ownerIsMember([{ role: "rcp_admin" }, { role: "rcp_party" }])).toBe(true);
     expect(ownerIsMember([{ role: "rcp_party" }])).toBe(true); // unlisted owner
     expect(ownerIsMember([{ role: "rcp_admin_only" }, { role: "rcp_party" }])).toBe(false);
+  });
+});
+
+describe("positionsChangingWithin", () => {
+  const spanning = (label: string, validFrom: string, validTo: string): GridTariffPosition => ({
+    ...position(label, "energie", "pool_shared", 39),
+    validFrom,
+    validTo,
+  });
+
+  it("is empty when every overlapping position covers the whole period", () => {
+    const year = spanning("base", "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+    expect(positionsChangingWithin([year], "2026-04-01", "2026-06-30")).toEqual([]);
+  });
+
+  it("names both halves of a tariff that changed inside the period", () => {
+    const before = spanning("base v1", "2026-01-01T00:00:00.000Z", "2026-07-01T00:00:00.000Z");
+    const after = spanning("base v2", "2026-07-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+    const hit = positionsChangingWithin([before, after], "2026-06-15", "2026-07-15");
+    expect(hit.map((p) => p.label).sort()).toEqual(["base v1", "base v2"]);
+  });
+
+  it("ignores a position that ends exactly where the period starts, or starts where it ends", () => {
+    const ended = spanning("old", "2025-01-01T00:00:00.000Z", "2026-04-01T00:00:00.000Z");
+    const current = spanning("now", "2026-04-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+    expect(positionsChangingWithin([ended, current], "2026-04-01", "2026-06-30")).toEqual([]);
+  });
+
+  it("ignores positions entirely outside the period", () => {
+    const far = spanning("far", "2028-01-01T00:00:00.000Z", "2029-01-01T00:00:00.000Z");
+    expect(positionsChangingWithin([far], "2026-04-01", "2026-06-30")).toEqual([]);
+  });
+});
+
+describe("usageLooksHalfImported", () => {
+  it("flags local energy with no grid draw at all — the missing series", () => {
+    expect(usageLooksHalfImported({ localKwh: 42, gridKwh: 0 })).toBe(true);
+  });
+
+  it("is quiet for a party with both series, however small the grid share", () => {
+    expect(usageLooksHalfImported({ localKwh: 42, gridKwh: 0.3 })).toBe(false);
+  });
+
+  it("is quiet for a party with grid draw only — the owner's own local use is not a sale", () => {
+    expect(usageLooksHalfImported({ localKwh: 0, gridKwh: 400 })).toBe(false);
+  });
+
+  it("is quiet for a party with nothing at all, which the total check already covers", () => {
+    expect(usageLooksHalfImported({ localKwh: 0, gridKwh: 0 })).toBe(false);
   });
 });

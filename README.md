@@ -50,8 +50,12 @@ or a flat charge per participant — and the app produces a per-participant invo
 a comparison against what the same consumption would have cost billed directly by the
 grid operator. Invoices print to PDF from the browser.
 
-The billing UI is in **French**, unlike the rest of the app: it is the one screen a
-participant actually reads, and the participants here are French-speaking.
+The per-participant figures — what each party drew from the local pool and from
+the grid — arrive **by CSV import only**. The Home Assistant sync deliberately
+cannot map them: one statistic cannot say which party it belongs to. Until the
+grid operator's own metering feed (ebIX) is imported, billing is fed by hand,
+and a party whose grid series was not imported is invoiced for local energy and
+standing charges alone.
 
 ## Language
 
@@ -104,7 +108,7 @@ Three roles, resolved from the verified address:
 |---|---|
 | `admin` | Everything, read and write. |
 | `viewer` | Everything, read only — no writes anywhere. |
-| `participant` | **Rates: yes. Consumption: only their own.** Two pages — **Consumption** (their own, split local/grid, with what the RCP saved them) and **Billing** (their own invoices, plus the rates those invoices are built from: every grid provider tariff position, and the RCP rate for locally produced energy). Never another participant's consumption or invoice, and never your production, battery, grid export, feed-in tariff or investment data. |
+| `participant` | **Rates: yes. Consumption: only their own.** Two pages — **Consumption** (their own, split local/grid, with what the RCP saved them, and the site's live export and solar forecast) and **Billing** (their own invoices, plus the rates those invoices are built from: every grid provider tariff position, and the RCP rate for locally produced energy). One site-level figure besides: how much the site produced and how much of it went into the local pool, so a participant can see where their local share came from — with no per-party breakdown, no battery, no export, no money. Never another participant's consumption or invoice, and never your production detail, battery, grid export, feed-in tariff or investment data. |
 
 The API is the enforcement point — every route is denied by default and listed
 explicitly in `apps/api/src/auth/policy.ts`. The web app follows it where a
@@ -375,6 +379,34 @@ See the doc comments in
 [`apps/api/src/modules/savings/engine.ts`](apps/api/src/modules/savings/engine.ts)
 for how the savings formulas work, and where the interval-data model deliberately
 diverges from the cruder approximations the app started out with.
+
+### Does the battery charge from the grid?
+
+Every stored kWh is priced as export forgone — what the grid would have paid
+for it — which is only right if it came from the panels. A kWh that came *in*
+through the meter cost the purchase rate instead, roughly three times as much.
+The engine cannot tell the two apart, so before pricing it that way, the
+question was checked against the data.
+
+It doesn't, or not measurably. Over Feb–Sep 2026 (232 days, 1,884 kWh
+charged) the battery took **0.3 kWh** from the grid with the panels dark, and
+the hours in which charge exceeded PV output coincided with the import meter
+recording 2.6 kWh in total — a third of them while the site was exporting.
+Those hours are the PV and battery counters ticking at different moments
+within the hour, not grid energy. The earlier CSV-imported winter (Oct 2025 –
+Jan 2026) carries no `pv_dc` series, so it cannot be answered either way.
+
+So the pricing stands as it is. Two things follow from it:
+
+- **Revisit this the day the battery is charged on purpose** — a cheap-tariff
+  schedule, or arbitrage against the day-ahead price. The mispricing that is
+  immaterial today becomes the whole story then, and `import_grid` per
+  interval is what would let charge be split between the two sources.
+- **`import_grid` is synced and, for now, read by nothing.** It was the meter
+  that could say no here, which is a reason to keep it. It may yet be replaced
+  by the import figure the grid operator submits through ebIX, which is the
+  number the invoice reconciles against — at which point the Home Assistant
+  mapping for it can go.
 
 ### Currency
 

@@ -30,7 +30,22 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 
+    # Vite names every built asset by its content hash, so a file at a given
+    # path never changes: cache it as long as the browser likes. A new deploy
+    # is a new name, referenced by a fresh index.html.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
     location / {
+        # The shell itself must never come from cache. Behind Cloudflare Access
+        # a browser that reused a cached index.html after signing out would
+        # boot the app without ever passing the login page, then watch every
+        # API call be turned away — a menu with nothing in it instead of the
+        # sign-in it was owed. `no-store` sends every navigation to the edge,
+        # where Access decides.
+        add_header Cache-Control "no-store";
         try_files $uri /index.html;
     }
 }

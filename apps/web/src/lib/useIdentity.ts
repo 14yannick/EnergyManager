@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { AuthIdentity } from "@energy-manager/shared";
-import { ApiError, api } from "../api/client";
+import { ApiError, SessionExpiredError, api } from "../api/client";
 
 /**
  * Who the current user is, according to the API.
@@ -47,12 +47,18 @@ export type SessionState =
   /** No session to end: authentication is off, or the call never resolved. */
   | { kind: "none" }
   | { kind: "active"; identity: AuthIdentity }
-  | { kind: "rejected"; email: string | null; status: number };
+  | { kind: "rejected"; email: string | null; status: number }
+  /** Cloudflare turned `/api/me` away: the cookie is gone. Sign in again. */
+  | { kind: "expired" };
 
 export function useSession(): SessionState {
   const { data, error, isLoading } = useIdentity();
 
   if (isLoading) return { kind: "loading" };
+  // Checked before anything else: this is the one failure that must not be
+  // mistaken for "no session to speak of". It used to fall through to `none`,
+  // and `none` means anonymous admin.
+  if (error instanceof SessionExpiredError) return { kind: "expired" };
   // 401 is an absent or expired token, 403 an address with no role here.
   // Signing out and back in is the remedy for the first and a way to switch
   // accounts for the second, so both get the badge.

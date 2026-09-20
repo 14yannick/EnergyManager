@@ -201,6 +201,20 @@ export function buildDirectComparison(
   return { lines, totalChf, savingChf: round2(totalChf - vzevTotalChf) };
 }
 
+/**
+ * A party whose local draw was imported but whose grid draw was not.
+ *
+ * The two arrive as separate CSV series under the same party name, and
+ * nothing ties them together. With the grid series missing, every per-kWh
+ * position multiplies by zero and prints a CHF 0.00 line — an invoice that
+ * looks like a quiet month rather than a half-imported one. Local energy
+ * without a single grid kWh over a whole billing period is not how a
+ * household behaves, so it is the signature of the missing file.
+ */
+export function usageLooksHalfImported(usage: Pick<ParticipantUsage, "localKwh" | "gridKwh">): boolean {
+  return usage.localKwh > 0 && usage.gridKwh === 0;
+}
+
 export function buildParticipantInvoice(inputs: InvoiceInputs): ParticipantInvoice {
   const lines = buildInvoiceLines(inputs);
   const totalChf = round2(lines.reduce((sum, l) => sum + l.amountChf, 0));
@@ -257,13 +271,41 @@ export function consumptionCosts(inputs: InvoiceInputs): ConsumptionCosts {
 }
 
 /**
- * Positions in force on a calendar day. Tested at local noon: positions are
- * stored from local midnights, so noon sits safely inside whichever one
- * covers the day, whatever the UTC offset.
+ * Positions in force on a calendar day. Tested at 12:00 UTC — 13:00 or 14:00
+ * in Zurich, either way inside the day: positions are stored from local
+ * midnights, so any instant that far from both edges sits safely inside
+ * whichever one covers the day.
  */
 export function positionsValidOn(positions: GridTariffPosition[], day: string): GridTariffPosition[] {
   const noon = `${day}T12:00:00.000Z`;
   return positions.filter((p) => p.validFrom <= noon && p.validTo > noon);
+}
+
+/**
+ * Positions that overlap the period without covering all of it — a tariff
+ * that changed somewhere between `from` and `to`.
+ *
+ * An invoice run must refuse these rather than bill them. Every position it
+ * is handed is charged for the whole period, so two versions of "Tarif de
+ * base" that each overlap it would both appear at full length: the provider
+ * would print two pro-rated lines, this would print two whole ones. The
+ * consumption view prices day by day and is untroubled; an invoice is one
+ * document for one set of rates, and the honest answer is to split the
+ * period at the change.
+ */
+export function positionsChangingWithin(
+  positions: GridTariffPosition[],
+  from: string,
+  to: string,
+): GridTariffPosition[] {
+  const periodStart = `${from}T00:00:00.000Z`;
+  const periodEnd = `${to}T23:59:59.999Z`;
+  return positions.filter(
+    (p) =>
+      p.validFrom <= periodEnd &&
+      p.validTo > periodStart &&
+      (p.validFrom > periodStart || p.validTo <= periodEnd),
+  );
 }
 
 /**

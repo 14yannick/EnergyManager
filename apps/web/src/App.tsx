@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { useI18n, useT, type MessageKey } from "./i18n/context";
 import { useSession, type SessionState } from "./lib/useIdentity";
@@ -86,7 +86,7 @@ function logoutHref(): string {
  */
 function SessionBadge({ session }: { session: SessionState }) {
   const t = useT();
-  if (session.kind === "loading" || session.kind === "none") return null;
+  if (session.kind === "loading" || session.kind === "none" || session.kind === "expired") return null;
 
   const email = session.kind === "active" ? session.identity.email : session.email;
   const label =
@@ -163,6 +163,49 @@ function LanguageSwitch() {
 }
 
 /**
+ * The session ended under the app — signed out in another tab, or a cookie
+ * that expired while a page sat open. Cloudflare turned `/api/me` away, and
+ * the only way back is a full navigation so Access can show its login.
+ *
+ * A fresh URL rather than `reload()`, so no cached copy of the shell can
+ * answer it: the whole point is to reach the edge. And once only, guarded in
+ * `sessionStorage` — if the page that comes back still cannot reach the API,
+ * Access is letting the UI through but not `/api/`, and looping on it would
+ * hide exactly the misconfiguration the README warns about.
+ */
+const RELOGIN_KEY = "energymanager.relogin";
+
+function SessionExpired() {
+  const t = useT();
+  const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    let previous: string | null = null;
+    try {
+      previous = sessionStorage.getItem(RELOGIN_KEY);
+    } catch {
+      /* storage unavailable: fall through and try once */
+    }
+    if (previous && Date.now() - Number(previous) < 60_000) {
+      setStuck(true);
+      return;
+    }
+    try {
+      sessionStorage.setItem(RELOGIN_KEY, String(Date.now()));
+    } catch {
+      /* same */
+    }
+    window.location.assign(`/?signin=${Date.now()}`);
+  }, []);
+
+  return (
+    <div className="mx-auto max-w-xl rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">
+      <p>{stuck ? t("session.expiredStuck") : t("session.expired")}</p>
+    </div>
+  );
+}
+
+/**
  * What a rejected session sees instead of the app.
  *
  * Every page would otherwise render a wall of failed requests, which says
@@ -227,7 +270,7 @@ export function App() {
               there, so the menu button takes over. */}
           <nav
             className={`order-last hidden w-full gap-1 overflow-x-auto sm:flex xl:order-none xl:w-auto xl:overflow-x-visible ${
-              session.kind === "rejected" ? "sm:hidden" : ""
+              session.kind === "rejected" || session.kind === "expired" ? "sm:hidden" : ""
             }`}
           >
             {items.map((item) => (
@@ -239,7 +282,7 @@ export function App() {
           <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
             <LanguageSwitch />
             <SessionBadge session={session} />
-            {session.kind !== "rejected" && (
+            {session.kind !== "rejected" && session.kind !== "expired" && (
               <button
                 type="button"
                 onClick={() => setMenuOpen((open) => !open)}
@@ -274,7 +317,7 @@ export function App() {
             )}
           </div>
         </div>
-        {menuOpen && session.kind !== "rejected" && (
+        {menuOpen && session.kind !== "rejected" && session.kind !== "expired" && (
           <nav id="nav-menu" className="border-t px-4 pb-3 pt-2 sm:hidden">
             {items.map((item) => (
               <NavLink
@@ -299,6 +342,8 @@ export function App() {
           // meantime had a participant's browser request the site list, which
           // the API refuses them.
           <p className="text-slate-500">{t("common.loading")}</p>
+        ) : session.kind === "expired" ? (
+          <SessionExpired />
         ) : session.kind === "rejected" ? (
           <NoAccess email={session.email} status={session.status} />
         ) : participant ? (
