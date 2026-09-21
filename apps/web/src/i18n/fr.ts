@@ -165,6 +165,8 @@ export const fr: Record<keyof typeof en, string> = {
   "settings.live.shown": "affiché",
   "settings.live.export": "Injection actuelle",
   "settings.live.exportHint": "Puissance quittant la maison vers le réseau",
+  "settings.live.exportNegative": "Négatif en injection",
+  "settings.live.exportNegativeHint": "À cocher si le capteur suit la convention réseau — positif en soutirage, négatif en injection — de sorte que la carte affiche 0 alors que la maison injecte.",
   "settings.live.pv": "Production PV actuelle",
   "settings.live.pvHint": "Ce que les panneaux produisent à cet instant",
   "settings.live.today": "Prévision aujourd'hui",
@@ -391,10 +393,18 @@ export const fr: Record<keyof typeof en, string> = {
   "invoice.yourBenefit": "Votre avantage",
   "invoice.benefitNote":
     "L'avantage a deux origines : les tarifs de base du raccordement sont répartis dans le RCP entre {participants} participants au lieu d'être facturés individuellement, et {local} kWh provenaient de la production locale plutôt que du réseau.",
+  "invoice.benefitNoteOwner": "L'avantage a deux origines : {own} kWh de votre propre production ont remplacé la fourniture du réseau, et les tarifs de base du raccordement sont répartis dans le RCP entre {participants} participants au lieu d'être supportés seul.",
   "invoice.quantity": "Quantité",
   "invoice.price": "Prix",
   "invoice.amountChf": "Montant CHF",
   "invoice.days": "{count} jours",
+  "invoice.line.local": "Énergie issue de la production locale (RCP)",
+  "invoice.line.selfDirect": "Production propre, consommée directement",
+  "invoice.line.selfBattery": "Production propre, via la batterie",
+  "invoice.footnoteOwner": "Consommation {total} kWh : {direct} kWh de production propre consommée directement, {battery} kWh via la batterie, {grid} kWh soutirés du réseau. Seul le soutirage est facturé. Montants TVA incluse (TVA du fournisseur répercutée, aucune TVA supplémentaire).",
+  "invoice.split.directUse": "dont production propre consommée directement",
+  "invoice.split.battery": "dont via la batterie",
+  "invoice.split.rcp": "dont le RCP",
   "billing.intro":
     "Saisissez la facture du gestionnaire de réseau position par position, puis générez une facture pour chaque participant du RCP. Les montants sont TVA incluse : la TVA du fournisseur est répercutée telle quelle, aucune TVA n'est ajoutée.",
   "billing.introParticipant":
@@ -459,8 +469,7 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.withBatteryTotal": "Économies totales — avec batterie",
   "dash.noBatteryTotal": "Économies totales — sans batterie",
   "dash.batteryRevenue": "Revenu de la batterie",
-  "dash.batteryRevenueHint":
-    "valeur de la décharge moins le coût de la charge — le chiffre le plus juste",
+  "dash.batteryRevenueHint": "Décharge − injection perdue",
   "dash.avgSuffix": "CHF {value}/{unit} en moyenne",
 
   "dash.payback": "Amortissement par catégorie",

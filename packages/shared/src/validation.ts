@@ -85,6 +85,7 @@ export const siteUpdateInputSchema = z.object({
   dynamicTariffEntityId: z.string().trim().min(1).max(200).nullable().optional(),
   // Same three states as above, one per live-view entity.
   liveExportPowerEntityId: z.string().trim().min(1).max(200).nullable().optional(),
+  liveExportNegative: z.boolean().optional(),
   livePvPowerEntityId: z.string().trim().min(1).max(200).nullable().optional(),
   forecastTodayEntityId: z.string().trim().min(1).max(200).nullable().optional(),
   forecastRemainingEntityId: z.string().trim().min(1).max(200).nullable().optional(),

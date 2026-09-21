@@ -169,6 +169,13 @@
       "when": 1789930736460,
       "tag": "0023_brief_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789978168138,
+      "tag": "0024_live_export_sign",
+      "breakpoints": true
     }
   ]
 }

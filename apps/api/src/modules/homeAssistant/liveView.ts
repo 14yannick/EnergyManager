@@ -85,6 +85,7 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
   const [site] = await db
     .select({
       exportPower: sites.liveExportPowerEntityId,
+      exportNegative: sites.liveExportNegative,
       pvPower: sites.livePvPowerEntityId,
       forecastToday: sites.forecastTodayEntityId,
       forecastRemaining: sites.forecastRemainingEntityId,
@@ -117,10 +118,14 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
   const states = await fetchHaNumericStates(ids);
   const read = (entityId: string | null) => (entityId ? (states.get(entityId) ?? null) : null);
 
+  // The card means "leaving the house", whichever way the sensor counts it.
+  const rawExport = read(site.exportPower);
+  const exportW = rawExport == null ? null : site.exportNegative ? -rawExport : rawExport;
+
   return {
     today,
     at,
-    exportW: read(site.exportPower),
+    exportW,
     pvW: read(site.pvPower),
     forecastTodayKwh: read(site.forecastToday),
     forecastRemainingKwh: read(site.forecastRemaining),

@@ -162,6 +162,8 @@ export const en = {
   "settings.live.shown": "shown",
   "settings.live.export": "Exporting now",
   "settings.live.exportHint": "Power leaving the house for the grid",
+  "settings.live.exportNegative": "Negative while exporting",
+  "settings.live.exportNegativeHint": "Tick this if the sensor follows the grid convention — positive when drawing, negative when feeding in — so the card reads 0 while the house is exporting.",
   "settings.live.pv": "PV output now",
   "settings.live.pvHint": "What the panels are making at this instant",
   "settings.live.today": "Forecast today",
@@ -383,10 +385,18 @@ export const en = {
   "invoice.yourBenefit": "Your benefit",
   "invoice.benefitNote":
     "The benefit has two sources: the connection's base charges are split across {participants} participants in the RCP instead of being billed individually, and {local} kWh came from local production rather than from the grid.",
+  "invoice.benefitNoteOwner": "The benefit has two sources: {own} kWh of your own production replaced supply from the grid, and the connection's base charges are split across {participants} participants in the RCP instead of being borne alone.",
   "invoice.quantity": "Quantity",
   "invoice.price": "Price",
   "invoice.amountChf": "Amount CHF",
   "invoice.days": "{count} days",
+  "invoice.line.local": "Energy from local production (RCP)",
+  "invoice.line.selfDirect": "Own production, used directly",
+  "invoice.line.selfBattery": "Own production, from the battery",
+  "invoice.footnoteOwner": "Consumption {total} kWh: {direct} kWh own production used directly, {battery} kWh from the battery, {grid} kWh drawn from the grid. Only the grid draw is charged. Amounts include VAT (the supplier's VAT passed through, no additional VAT).",
+  "invoice.split.directUse": "of which own production used directly",
+  "invoice.split.battery": "of which from the battery",
+  "invoice.split.rcp": "of which the RCP",
   "billing.intro":
     "Enter the grid operator's bill position by position, then generate an invoice for each RCP participant. Amounts include VAT: the supplier's VAT is passed through as is, no VAT is added.",
   "billing.introParticipant":
@@ -451,7 +461,7 @@ export const en = {
   "dash.withBatteryTotal": "Total savings — with battery",
   "dash.noBatteryTotal": "Total savings — no battery",
   "dash.batteryRevenue": "Battery revenue",
-  "dash.batteryRevenueHint": "discharge value less what charging cost — the truer figure",
+  "dash.batteryRevenueHint": "Discharge − export forgone",
   "dash.avgSuffix": "CHF {value}/{unit} avg",
 
   "dash.payback": "Payback by category",

@@ -25,6 +25,15 @@ export interface ParticipantUsage {
   gridKwh: number;
   /** Taken from the operator's PV, billed at the agreed neighbour rate. */
   localKwh: number;
+  /**
+   * The owner's own consumption that never touched the meter: PV used as it
+   * was made, and load covered from the battery. Only the owner's invoice
+   * carries them — a participant's local energy is `localKwh`, bought at the
+   * RCP rate. They cost nothing here and are what the comparison shows the
+   * grid would have charged for.
+   */
+  selfDirectKwh?: number;
+  selfBatteryKwh?: number;
 }
 
 export interface InvoiceInputs {
@@ -99,10 +108,32 @@ function rawInvoiceLines(inputs: InvoiceInputs): InvoiceLine[] {
   const { days, participantCount, usage, localRateChf } = inputs;
   const lines: InvoiceLine[] = [];
 
+  // The owner's self-consumption leads the invoice at a price of zero: not
+  // a charge, a statement of the whole consumption, so the grid draw below
+  // is seen as the part of it that had to be bought. The label is a
+  // placeholder — the invoice prints these by `kind`, in its own language.
+  const selfLine = (kind: "self_direct" | "self_battery", kwh: number, label: string): InvoiceLine => ({
+    category: "energie",
+    label,
+    kind,
+    allocation: "per_kwh",
+    quantity: kwh,
+    quantityUnit: "kWh",
+    unitRateChf: 0,
+    amountChf: 0,
+  });
+  if ((usage.selfDirectKwh ?? 0) > 0) {
+    lines.push(selfLine("self_direct", usage.selfDirectKwh!, "Own production, used directly"));
+  }
+  if ((usage.selfBatteryKwh ?? 0) > 0) {
+    lines.push(selfLine("self_battery", usage.selfBatteryKwh!, "Own production, from the battery"));
+  }
+
   if (usage.localKwh > 0 && localRateChf != null) {
     lines.push({
       category: "energie",
       label: "Énergie issue de la production locale (RCP)",
+      kind: "local",
       allocation: "per_kwh",
       quantity: usage.localKwh,
       quantityUnit: "kWh",
@@ -158,9 +189,27 @@ export function buildInvoiceLines(inputs: InvoiceInputs): InvoiceLine[] {
  * VZEV-only positions (the virtual metering fee) are excluded: they wouldn't
  * exist without the pool, so counting them would overstate the saving.
  */
+/** Every kWh the household consumed, wherever it came from. */
+function consumedKwh(usage: ParticipantUsage): number {
+  return usage.gridKwh + usage.localKwh + (usage.selfDirectKwh ?? 0) + (usage.selfBatteryKwh ?? 0);
+}
+
+/**
+ * What the grid charges per kWh on a direct connection: every per-kWh
+ * position that exists without the RCP, whichever of the two kWh
+ * allocations it carries — billed directly, both fall on the same total.
+ */
+function directGridRatePerKwh(positions: GridTariffPosition[]): number {
+  return positions
+    .filter((p) => p.countsInDirectBilling && (p.allocation === "per_kwh" || p.allocation === "per_kwh_total"))
+    .reduce((sum, p) => sum + p.rateChf, 0);
+}
+
 function rawDirectLines(inputs: InvoiceInputs): InvoiceLine[] {
   const { days, usage } = inputs;
-  const totalKwh = usage.gridKwh + usage.localKwh;
+  // Supplied directly there is no own production to draw on: the self-consumed
+  // kWh are bought from the grid like the rest.
+  const totalKwh = consumedKwh(usage);
   const lines: InvoiceLine[] = [];
 
   for (const position of sortPositions(inputs.positions)) {
@@ -198,7 +247,18 @@ export function buildDirectComparison(
 ): DirectBillingComparison {
   const lines = rawDirectLines(inputs).map((line) => ({ ...line, amountChf: round2(line.amountChf) }));
   const totalChf = round2(lines.reduce((sum, l) => sum + l.amountChf, 0));
-  return { lines, totalChf, savingChf: round2(totalChf - vzevTotalChf) };
+  const savingChf = round2(totalChf - vzevTotalChf);
+
+  // Where the saving came from. The owner's own kWh are worth exactly what
+  // the grid would have charged for them; whatever is left is the RCP's
+  // doing — standing charges shared, local energy under the grid's price.
+  // The remainder is taken, not computed, so the three always add up to the
+  // saving printed above them, rounding included.
+  const rate = directGridRatePerKwh(inputs.positions);
+  const directUseChf = round2((inputs.usage.selfDirectKwh ?? 0) * rate);
+  const batteryChf = round2((inputs.usage.selfBatteryKwh ?? 0) * rate);
+  const rcpChf = round2(savingChf - directUseChf - batteryChf);
+  return { lines, totalChf, savingChf, savingSplit: { directUseChf, batteryChf, rcpChf } };
 }
 
 /**
@@ -228,6 +288,8 @@ export function buildParticipantInvoice(inputs: InvoiceInputs): ParticipantInvoi
     participantCount: inputs.participantCount,
     gridKwh: inputs.usage.gridKwh,
     localKwh: inputs.usage.localKwh,
+    selfDirectKwh: inputs.usage.selfDirectKwh ?? 0,
+    selfBatteryKwh: inputs.usage.selfBatteryKwh ?? 0,
     lines,
     totalChf,
     comparison: buildDirectComparison(inputs, totalChf),
@@ -293,18 +355,55 @@ export function positionsValidOn(positions: GridTariffPosition[], day: string): 
  * document for one set of rates, and the honest answer is to split the
  * period at the change.
  */
+const SITE_TZ = "Europe/Zurich";
+
+/**
+ * Local midnight on a calendar day, as the UTC instant positions and tariff
+ * periods are stored at. Zurich is one or two hours ahead of UTC, so it is
+ * 23:00Z or 22:00Z the evening before — which is why a bound written as
+ * `${day}T00:00:00Z` was wrong by an hour or two, and a position ending
+ * exactly on a period's last midnight read as ending inside it.
+ */
+export function localMidnightIso(day: string, tz: string = SITE_TZ): string {
+  for (const offset of ["+01:00", "+02:00"]) {
+    const at = new Date(`${day}T00:00:00${offset}`);
+    const local = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(at);
+    const p = Object.fromEntries(local.map((x) => [x.type, x.value]));
+    if (`${p.year}-${p.month}-${p.day}` === day && p.hour === "00") return at.toISOString();
+  }
+  throw new Error(`${day} has no midnight in ${tz}`);
+}
+
+/** The half-open instant range a billing period covers: [from 00:00, to + 1 day 00:00), local. */
+export function periodBounds(from: string, to: string): { startIso: string; endExclusiveIso: string } {
+  const next = new Date(`${to}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return { startIso: localMidnightIso(from), endExclusiveIso: localMidnightIso(next.toISOString().slice(0, 10)) };
+}
+
+/** Positions in force at any moment of the period. */
+export function positionsOverlapping(positions: GridTariffPosition[], from: string, to: string): GridTariffPosition[] {
+  const { startIso, endExclusiveIso } = periodBounds(from, to);
+  return positions.filter((p) => p.validFrom < endExclusiveIso && p.validTo > startIso);
+}
+
 export function positionsChangingWithin(
   positions: GridTariffPosition[],
   from: string,
   to: string,
 ): GridTariffPosition[] {
-  const periodStart = `${from}T00:00:00.000Z`;
-  const periodEnd = `${to}T23:59:59.999Z`;
-  return positions.filter(
-    (p) =>
-      p.validFrom <= periodEnd &&
-      p.validTo > periodStart &&
-      (p.validFrom > periodStart || p.validTo <= periodEnd),
+  const { startIso, endExclusiveIso } = periodBounds(from, to);
+  // Strictly inside: a position that begins on the period's first midnight
+  // or ends on the midnight after its last day covers it whole.
+  return positionsOverlapping(positions, from, to).filter(
+    (p) => p.validFrom > startIso || p.validTo < endExclusiveIso,
   );
 }
 

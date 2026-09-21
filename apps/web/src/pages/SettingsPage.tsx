@@ -406,7 +406,7 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
                   ? [...options, { entityId: current, friendlyName: null, unit: null, deviceClass: null }]
                   : options;
               return (
-                <tr key={field} className="border-t align-middle">
+                <tr key={field} className="border-t align-top">
                   <td className="py-2 pr-4">
                     <div className="text-slate-900">{t(label)}</div>
                     <div className="text-xs text-slate-500">{t(hint)}</div>
@@ -427,6 +427,25 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
                         </option>
                       ))}
                     </select>
+                    {/* The sign is a property of this one sensor, so it lives
+                        under it: inverters disagree on whether feeding the grid
+                        reads positive or negative, and guessing showed 0 kW
+                        while the house was exporting 4.8. */}
+                    {field === "liveExportPowerEntityId" && current && (
+                      <label className="mt-2 flex max-w-md items-start gap-2 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={site.liveExportNegative}
+                          disabled={!canEdit || save.isPending}
+                          onChange={(e) => save.mutate({ liveExportNegative: e.target.checked })}
+                        />
+                        <span>
+                          <span className="font-medium text-slate-700">{t("settings.live.exportNegative")}</span>
+                          <span className="block text-slate-400">{t("settings.live.exportNegativeHint")}</span>
+                        </span>
+                      </label>
+                    )}
                   </td>
                   <td className="py-2 text-right text-xs text-slate-400">
                     {current ? t("settings.live.shown") : ""}

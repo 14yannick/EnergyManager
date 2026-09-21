@@ -16,7 +16,9 @@ import {
   ownerFixedCosts,
   ownerIsMember,
   participantCountOf,
+  periodBounds,
   positionsChangingWithin,
+  positionsOverlapping,
   positionsValidOn,
   usageLooksHalfImported,
   type OwnerFixedCosts,
@@ -174,9 +176,13 @@ export async function runInvoices(
   // billed for the whole period, so a position that changes inside it must
   // stop the run, not decorate it with a warning: both versions would print
   // at full length and the participant would pay the base charge twice.
-  const periodStart = new Date(`${from}T00:00:00Z`).toISOString();
-  const periodEnd = new Date(`${to}T23:59:59Z`).toISOString();
-  const active = positions.filter((p) => p.validFrom <= periodEnd && p.validTo > periodStart);
+  // Local midnights, as positions and tariff periods are stored. A UTC
+  // `${to}T23:59:59Z` overshoots the period by an hour or two, which let the
+  // next period's positions in and read a boundary as a mid-period change.
+  const { startIso: periodStart, endExclusiveIso: periodEndExclusive } = periodBounds(from, to);
+  // The last instant that is still inside the period.
+  const periodLast = new Date(new Date(periodEndExclusive).getTime() - 1).toISOString();
+  const active = positionsOverlapping(positions, from, to);
   const refusals: string[] = [];
   const changing = positionsChangingWithin(positions, from, to);
   if (changing.length > 0) {
@@ -186,7 +192,7 @@ export async function runInvoices(
     const zurichDay = (iso: string) =>
       new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Zurich" });
     const edges = [...new Set(changing.flatMap((p) => [p.validFrom, p.validTo]))]
-      .filter((ts) => ts > periodStart && ts <= periodEnd)
+      .filter((ts) => ts > periodStart && ts < periodEndExclusive)
       .map(zurichDay)
       .filter((d, i, all) => all.indexOf(d) === i)
       .sort();
@@ -215,7 +221,7 @@ export async function runInvoices(
   if (localRateChf === null) {
     warnings.push("No neighbour-sale tariff covers this period — locally supplied energy isn't priced.");
   } else if (
-    findRateForInstant("neighbor_sell", periodEnd, neighbourRates)?.rateChfPerKwh !== localRateChf
+    findRateForInstant("neighbor_sell", periodLast, neighbourRates)?.rateChfPerKwh !== localRateChf
   ) {
     // The same rule as the positions: an agreed price that changes inside the
     // period is two invoices, not one priced at whichever end was picked.
@@ -240,6 +246,24 @@ export async function runInvoices(
   const billable = participants.filter(isBilledParty);
   const participantCount = participantCountOf(participants);
 
+  // The owner's own consumption that never crossed the meter — PV used as
+  // made, load covered from the battery — comes from the savings engine, so
+  // the invoice cannot disagree with the dashboard about it. Only the owner
+  // has it; a participant's local energy is a purchase, already in `local`.
+  // Imported on demand rather than at the top: savings/service imports this
+  // module for the owner's fixed costs, and a static import back would be a
+  // cycle that resolves to `undefined` depending on who loads first.
+  const owner = participants.find((p) => p.role === "rcp_admin");
+  let self = { directKwh: 0, batteryKwh: 0 };
+  if (owner) {
+    const { getDailySavings } = await import("../savings/service.js");
+    const [overall] = await getDailySavings(siteId, from, to, "overall");
+    self = {
+      directKwh: Math.max(overall?.directUseKwh ?? 0, 0),
+      batteryKwh: Math.max(overall?.batteryDischargeConsumedKwh ?? 0, 0),
+    };
+  }
+
   const invoices = billable.map((party) => {
     const usage = usageByParty.get(party.id) ?? { grid: 0, local: 0 };
     const participantUsage: ParticipantUsage = {
@@ -248,6 +272,7 @@ export async function runInvoices(
       partyName: party.name,
       gridKwh: usage.grid,
       localKwh: usage.local,
+      ...(party.id === owner?.id ? { selfDirectKwh: self.directKwh, selfBatteryKwh: self.batteryKwh } : {}),
     };
     const invoice = buildParticipantInvoice({
       from,

@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "live_export_negative" boolean DEFAULT false NOT NULL;

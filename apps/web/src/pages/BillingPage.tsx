@@ -7,6 +7,7 @@ import type {
   BillingRange,
   GridTariffPosition,
   InvoiceLine,
+  InvoiceLineKind,
   InvoicePayee,
   IssuedInvoice,
 } from "@energy-manager/shared";
@@ -16,6 +17,12 @@ import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useCanEdit, useIdentity } from "../lib/useIdentity";
 import { QrBill } from "../components/QrBill";
+
+const LINE_LABELS: Record<InvoiceLineKind, MessageKey> = {
+  local: "invoice.line.local",
+  self_direct: "invoice.line.selfDirect",
+  self_battery: "invoice.line.selfBattery",
+};
 
 const CATEGORY_LABELS: Record<BillingCategory, MessageKey> = {
   energie: "billing.cat.energie",
@@ -523,10 +530,17 @@ function InvoiceDocument({
           <span className="tabular-nums">CHF {chf(invoice.totalChf)}</span>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          {t("invoice.footnote", {
-            grid: invoice.gridKwh.toFixed(1),
-            local: invoice.localKwh.toFixed(1),
-          })}
+          {invoice.selfDirectKwh + invoice.selfBatteryKwh > 0
+            ? t("invoice.footnoteOwner", {
+                total: (invoice.gridKwh + invoice.localKwh + invoice.selfDirectKwh + invoice.selfBatteryKwh).toFixed(1),
+                direct: invoice.selfDirectKwh.toFixed(1),
+                battery: invoice.selfBatteryKwh.toFixed(1),
+                grid: invoice.gridKwh.toFixed(1),
+              })
+            : t("invoice.footnote", {
+                grid: invoice.gridKwh.toFixed(1),
+                local: invoice.localKwh.toFixed(1),
+              })}
         </p>
       </section>
 
@@ -567,13 +581,37 @@ function InvoiceDocument({
             <dt>{t("invoice.yourBenefit")}</dt>
             <dd className="tabular-nums">CHF {chf(invoice.comparison.savingChf)}</dd>
           </div>
+          {/* Only where there is something to split: on the owner's invoice,
+              whose own production is what the benefit is mostly made of. A
+              participant's benefit is the RCP's alone and needs no breakdown. */}
+          {invoice.selfDirectKwh + invoice.selfBatteryKwh > 0 && (
+            <>
+              <div className="flex justify-between pl-4 text-xs text-slate-600">
+                <dt>{t("invoice.split.directUse")}</dt>
+                <dd className="tabular-nums">CHF {chf(invoice.comparison.savingSplit.directUseChf)}</dd>
+              </div>
+              <div className="flex justify-between pl-4 text-xs text-slate-600">
+                <dt>{t("invoice.split.battery")}</dt>
+                <dd className="tabular-nums">CHF {chf(invoice.comparison.savingSplit.batteryChf)}</dd>
+              </div>
+              <div className="flex justify-between pl-4 text-xs text-slate-600">
+                <dt>{t("invoice.split.rcp")}</dt>
+                <dd className="tabular-nums">CHF {chf(invoice.comparison.savingSplit.rcpChf)}</dd>
+              </div>
+            </>
+          )}
         </dl>
 
         <p className="mt-4 text-xs text-slate-500">
-          {t("invoice.benefitNote", {
-            participants: invoice.participantCount,
-            local: invoice.localKwh.toFixed(1),
-          })}
+          {invoice.selfDirectKwh + invoice.selfBatteryKwh > 0
+            ? t("invoice.benefitNoteOwner", {
+                participants: invoice.participantCount,
+                own: (invoice.selfDirectKwh + invoice.selfBatteryKwh).toFixed(1),
+              })
+            : t("invoice.benefitNote", {
+                participants: invoice.participantCount,
+                local: invoice.localKwh.toFixed(1),
+              })}
         </p>
       </section>
 
@@ -611,8 +649,11 @@ function LineTable({ lines }: { lines: InvoiceLine[] }) {
           {/* Energy and grid usage both have a position called "Tarif de base",
               so the label alone is not unique — the section disambiguates. */}
           {lines.map((l) => (
-            <tr key={`${l.category}|${l.label}`} className="border-t">
-              <td className="py-1 pr-3 text-slate-900">{l.label}</td>
+            <tr key={`${l.category}|${l.kind ?? l.label}`} className="border-t">
+              {/* The app's own lines carry a `kind` and are named here, in
+                  the reader's language; a provider position keeps the label
+                  it was entered with, as on the bill it mirrors. */}
+              <td className="py-1 pr-3 text-slate-900">{l.kind ? t(LINE_LABELS[l.kind]) : l.label}</td>
               <td className="py-1 text-right tabular-nums text-slate-600">
                 {l.quantityUnit === "kWh"
                   ? `${l.quantity.toFixed(1)} kWh`

@@ -171,6 +171,8 @@ export const de: Record<keyof typeof en, string> = {
   "settings.live.shown": "angezeigt",
   "settings.live.export": "Aktuelle Einspeisung",
   "settings.live.exportHint": "Leistung, die das Haus Richtung Netz verlässt",
+  "settings.live.exportNegative": "Negativ bei Einspeisung",
+  "settings.live.exportNegativeHint": "Ankreuzen, wenn der Sensor der Netzkonvention folgt — positiv beim Bezug, negativ bei Einspeisung — sodass die Karte 0 zeigt, während das Haus einspeist.",
   "settings.live.pv": "Aktuelle PV-Leistung",
   "settings.live.pvHint": "Was die Panels in diesem Moment erzeugen",
   "settings.live.today": "Prognose heute",
@@ -397,10 +399,18 @@ export const de: Record<keyof typeof en, string> = {
   "invoice.yourBenefit": "Ihr Vorteil",
   "invoice.benefitNote":
     "Der Vorteil hat zwei Quellen: Die Grundtarife des Anschlusses werden im RCP auf {participants} Teilnehmer aufgeteilt, statt einzeln verrechnet zu werden, und {local} kWh stammten aus der lokalen Produktion statt aus dem Netz.",
+  "invoice.benefitNoteOwner": "Der Vorteil hat zwei Quellen: {own} kWh eigene Produktion haben den Netzbezug ersetzt, und die Grundgebühren des Anschlusses werden im ZEV auf {participants} Teilnehmer verteilt statt allein getragen.",
   "invoice.quantity": "Bezug",
   "invoice.price": "Preis",
   "invoice.amountChf": "Betrag in CHF",
   "invoice.days": "{count} Tage",
+  "invoice.line.local": "Energie aus lokaler Produktion (ZEV)",
+  "invoice.line.selfDirect": "Eigene Produktion, direkt verbraucht",
+  "invoice.line.selfBattery": "Eigene Produktion, aus der Batterie",
+  "invoice.footnoteOwner": "Verbrauch {total} kWh: {direct} kWh eigene Produktion direkt verbraucht, {battery} kWh aus der Batterie, {grid} kWh Netzbezug. Nur der Netzbezug wird verrechnet. Beträge inkl. MwSt. (MwSt. des Lieferanten weitergegeben, keine zusätzliche MwSt.).",
+  "invoice.split.directUse": "davon eigene Produktion direkt verbraucht",
+  "invoice.split.battery": "davon aus der Batterie",
+  "invoice.split.rcp": "davon der ZEV",
   "billing.intro":
     "Erfassen Sie die Rechnung des Netzbetreibers Position für Position und erstellen Sie anschliessend für jeden RCP-Teilnehmer eine Rechnung. Die Beträge verstehen sich inkl. MWST: Die MWST des Lieferanten wird unverändert weitergegeben, es kommt keine zusätzliche MWST hinzu.",
   "billing.introParticipant":
@@ -469,8 +479,7 @@ export const de: Record<keyof typeof en, string> = {
   "dash.withBatteryTotal": "Gesamtersparnis — mit Batterie",
   "dash.noBatteryTotal": "Gesamtersparnis — ohne Batterie",
   "dash.batteryRevenue": "Ertrag der Batterie",
-  "dash.batteryRevenueHint":
-    "Wert der Entladung abzüglich der Ladekosten — die zutreffendere Zahl",
+  "dash.batteryRevenueHint": "Entladung − entgangene Einspeisung",
   "dash.avgSuffix": "CHF {value}/{unit} im Schnitt",
 
   "dash.payback": "Amortisation nach Kategorie",

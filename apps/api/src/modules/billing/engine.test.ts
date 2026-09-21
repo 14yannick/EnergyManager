@@ -9,6 +9,8 @@ import {
   ownerIsMember,
   isBilledParty,
   participantCountOf,
+  localMidnightIso,
+  periodBounds,
   positionsChangingWithin,
   usageLooksHalfImported,
   type InvoiceInputs,
@@ -261,7 +263,23 @@ describe("the owner's share of the standing charges", () => {
   });
 });
 
+describe("localMidnightIso and periodBounds", () => {
+  it("is 23:00Z the evening before in winter and 22:00Z in summer", () => {
+    expect(localMidnightIso("2026-01-01")).toBe("2025-12-31T23:00:00.000Z");
+    expect(localMidnightIso("2026-07-01")).toBe("2026-06-30T22:00:00.000Z");
+  });
+
+  it("bounds a period from its first local midnight to the one after its last day", () => {
+    expect(periodBounds("2026-10-01", "2026-12-31")).toEqual({
+      startIso: "2026-09-30T22:00:00.000Z",
+      endExclusiveIso: "2026-12-31T23:00:00.000Z",
+    });
+  });
+});
+
 describe("positionsChangingWithin", () => {
+  // Positions are stored from local midnights, so the fixtures are too.
+  const jan1 = (y: number) => localMidnightIso(`${y}-01-01`);
   const spanning = (label: string, validFrom: string, validTo: string): GridTariffPosition => ({
     ...position(label, "energie", "pool_shared", 39),
     validFrom,
@@ -269,25 +287,30 @@ describe("positionsChangingWithin", () => {
   });
 
   it("is empty when every overlapping position covers the whole period", () => {
-    const year = spanning("base", "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+    const year = spanning("base", jan1(2026), jan1(2027));
     expect(positionsChangingWithin([year], "2026-04-01", "2026-06-30")).toEqual([]);
   });
 
   it("names both halves of a tariff that changed inside the period", () => {
-    const before = spanning("base v1", "2026-01-01T00:00:00.000Z", "2026-07-01T00:00:00.000Z");
-    const after = spanning("base v2", "2026-07-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+    const before = spanning("base v1", jan1(2026), localMidnightIso("2026-07-01"));
+    const after = spanning("base v2", localMidnightIso("2026-07-01"), jan1(2027));
     const hit = positionsChangingWithin([before, after], "2026-06-15", "2026-07-15");
     expect(hit.map((p) => p.label).sort()).toEqual(["base v1", "base v2"]);
   });
 
-  it("ignores a position that ends exactly where the period starts, or starts where it ends", () => {
-    const ended = spanning("old", "2025-01-01T00:00:00.000Z", "2026-04-01T00:00:00.000Z");
-    const current = spanning("now", "2026-04-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
-    expect(positionsChangingWithin([ended, current], "2026-04-01", "2026-06-30")).toEqual([]);
+  it("does not flag a tariff that ends on the period's own last midnight", () => {
+    // Q4 2026 against a 2026 tariff and its 2027 successor: the boundary is
+    // the period's end, not a change inside it. This was a false positive
+    // while the bound was computed in UTC — 23:59:59Z overshoots the local
+    // midnight by an hour, and the 2026 tariff then "ended inside" Q4.
+    const y2026 = spanning("base 2026", jan1(2026), jan1(2027));
+    const y2027 = spanning("base 2027", jan1(2027), jan1(2028));
+    expect(positionsChangingWithin([y2026, y2027], "2026-10-01", "2026-12-31")).toEqual([]);
+    expect(positionsChangingWithin([y2026, y2027], "2027-01-01", "2027-03-31")).toEqual([]);
   });
 
   it("ignores positions entirely outside the period", () => {
-    const far = spanning("far", "2028-01-01T00:00:00.000Z", "2029-01-01T00:00:00.000Z");
+    const far = spanning("far", jan1(2028), jan1(2029));
     expect(positionsChangingWithin([far], "2026-04-01", "2026-06-30")).toEqual([]);
   });
 });
@@ -307,5 +330,81 @@ describe("usageLooksHalfImported", () => {
 
   it("is quiet for a party with nothing at all, which the total check already covers", () => {
     expect(usageLooksHalfImported({ localKwh: 0, gridKwh: 0 })).toBe(false);
+  });
+});
+
+describe("the owner's own consumption on their invoice", () => {
+  // A small tariff: one base charge, one per-kWh energy price, one per-kWh
+  // levy on everything consumed. Rates round, so the split is checkable.
+  const positions = [
+    position("Tarif de base", "netznutzung", "pool_shared", 100),
+    position("Tarif unique", "energie", "per_kwh", 0.2),
+    position("Taxe", "abgaben", "per_kwh_total", 0.05),
+  ];
+  const owner = (): InvoiceInputs => ({
+    from: "2026-01-01",
+    to: "2026-12-31",
+    days: 365,
+    participantCount: 4,
+    positions,
+    localRateChf: 0.14,
+    usage: {
+      partyId: "o",
+      partyReference: null,
+      partyName: "Owner",
+      gridKwh: 1000,
+      localKwh: 0,
+      selfDirectKwh: 400,
+      selfBatteryKwh: 300,
+    },
+  });
+
+  it("leads the invoice with the self-consumed energy at a price of nothing", () => {
+    const inv = buildParticipantInvoice(owner());
+    const [first, second] = inv.lines;
+    expect(first?.kind).toBe("self_direct");
+    expect(first?.quantity).toBe(400);
+    expect(first?.amountChf).toBe(0);
+    expect(second?.kind).toBe("self_battery");
+    expect(second?.quantity).toBe(300);
+    expect(second?.amountChf).toBe(0);
+    expect(inv.selfDirectKwh).toBe(400);
+    expect(inv.selfBatteryKwh).toBe(300);
+  });
+
+  it("charges nothing for it, so the total is the grid draw and the shared base alone", () => {
+    const inv = buildParticipantInvoice(owner());
+    // 1000 kWh at 0.20 + levy on every kWh consumed except the self-consumed
+    // ones, which never crossed the meter: 1000 at 0.05, + 100/4 base.
+    expect(inv.totalChf).toBeCloseTo(1000 * 0.2 + 1000 * 0.05 + 25, 2);
+  });
+
+  it("prices every self-consumed kWh at the grid's rates in the comparison", () => {
+    const inv = buildParticipantInvoice(owner());
+    const perKwh = inv.comparison.lines.filter((l) => l.quantityUnit === "kWh");
+    for (const line of perKwh) expect(line.quantity).toBe(1700);
+    expect(inv.comparison.totalChf).toBeCloseTo(1700 * 0.25 + 100, 2);
+  });
+
+  it("splits the benefit into direct use, battery and RCP, and the three add up", () => {
+    const inv = buildParticipantInvoice(owner());
+    const { directUseChf, batteryChf, rcpChf } = inv.comparison.savingSplit;
+    expect(directUseChf).toBeCloseTo(400 * 0.25, 2);
+    expect(batteryChf).toBeCloseTo(300 * 0.25, 2);
+    // What is left: the base charge borne alone less the shared quarter.
+    expect(rcpChf).toBeCloseTo(100 - 25, 2);
+    expect(directUseChf + batteryChf + rcpChf).toBeCloseTo(inv.comparison.savingChf, 2);
+  });
+
+  it("leaves a participant's invoice exactly as it was", () => {
+    const inputs = owner();
+    inputs.usage = { ...inputs.usage, selfDirectKwh: undefined, selfBatteryKwh: undefined, localKwh: 200 };
+    const inv = buildParticipantInvoice(inputs);
+    expect(inv.lines.some((l) => l.kind === "self_direct" || l.kind === "self_battery")).toBe(false);
+    expect(inv.lines[0]?.kind).toBe("local");
+    expect(inv.selfDirectKwh).toBe(0);
+    expect(inv.comparison.savingSplit.directUseChf).toBe(0);
+    expect(inv.comparison.savingSplit.batteryChf).toBe(0);
+    expect(inv.comparison.savingSplit.rcpChf).toBeCloseTo(inv.comparison.savingChf, 2);
   });
 });

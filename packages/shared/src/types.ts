@@ -17,6 +17,8 @@ export interface Site {
    * Read on demand, never stored. Null leaves that figure off the view.
    */
   liveExportPowerEntityId: string | null;
+  /** True when that sensor reads negative while feeding the grid (grid-sign convention). */
+  liveExportNegative: boolean;
   livePvPowerEntityId: string | null;
   forecastTodayEntityId: string | null;
   forecastRemainingEntityId: string | null;
@@ -278,9 +280,24 @@ export interface GridTariffPosition {
   updatedAt: string;
 }
 
+/**
+ * Lines the app makes itself, as opposed to the provider's positions. Named
+ * so the invoice can print them in the reader's language rather than in
+ * whatever the engine wrote.
+ */
+export type InvoiceLineKind =
+  /** Energy taken from the site's own production at the agreed RCP rate. */
+  | "local"
+  /** The owner's PV used as it was made — worth nothing on the invoice, everything in the comparison. */
+  | "self_direct"
+  /** The owner's load covered from the battery — the same. */
+  | "self_battery";
+
 export interface InvoiceLine {
   category: BillingCategory;
   label: string;
+  /** Set on the app's own lines; absent on a provider position. */
+  kind?: InvoiceLineKind;
   allocation: BillingAllocation;
   /** kWh for per_kwh lines, days for the annual ones. */
   quantity: number;
@@ -295,6 +312,13 @@ export interface DirectBillingComparison {
   lines: InvoiceLine[];
   totalChf: number;
   savingChf: number;
+  /**
+   * Where the saving comes from. Direct use and the battery are the owner's
+   * own kWh priced at what the grid would have charged for them; the RCP
+   * part is the rest — the shared standing charges, and local energy bought
+   * below the grid's price.
+   */
+  savingSplit: { directUseChf: number; batteryChf: number; rcpChf: number };
 }
 
 export interface ParticipantInvoice {
@@ -307,6 +331,10 @@ export interface ParticipantInvoice {
   participantCount: number;
   gridKwh: number;
   localKwh: number;
+  /** The owner's own PV used as produced. Zero on a participant's invoice. */
+  selfDirectKwh: number;
+  /** The owner's load covered from the battery. Zero on a participant's invoice. */
+  selfBatteryKwh: number;
   lines: InvoiceLine[];
   totalChf: number;
   comparison: DirectBillingComparison;

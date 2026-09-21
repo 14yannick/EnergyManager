@@ -1,4 +1,4 @@
-import { date, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const sites = pgTable("sites", {
@@ -45,6 +45,14 @@ export const sites = pgTable("sites", {
    * whatever the household's own inverter reports.
    */
   liveExportPowerEntityId: text("live_export_power_entity_id"),
+  /**
+   * Whether that sensor reads *negative* while feeding the grid. Inverters
+   * disagree: Huawei's "feed-in power" follows the grid convention (positive
+   * is drawing, negative is exporting), others report export as positive.
+   * A property of the sensor, so a setting rather than a guess — the guess
+   * showed 0.00 kW at the moment the house was exporting 4.8 kW.
+   */
+  liveExportNegative: boolean("live_export_negative").notNull().default(false),
   livePvPowerEntityId: text("live_pv_power_entity_id"),
   forecastTodayEntityId: text("forecast_today_entity_id"),
   forecastRemainingEntityId: text("forecast_remaining_entity_id"),
