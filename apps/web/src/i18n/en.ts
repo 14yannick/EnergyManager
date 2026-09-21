@@ -35,6 +35,7 @@ export const en = {
 
   // ---- Shared ------------------------------------------------------------
   "common.loading": "Loading…",
+  "common.moreInfo": "More information",
   "common.from": "From",
   "common.to": "To",
   "common.period": "Period",
@@ -422,10 +423,8 @@ export const en = {
   "dash.g.overall": "overall",
   "dash.hourlyCap":
     "Hourly view shows at most {days} days at a time — a quarter would be over 2,000 bars. Moving one end slides the other to keep the window that long.",
-  "dash.overallNote":
-    "Overall view: the whole range is one period of {days} days. Payback is annualised by that actual length rather than by an assumed whole month or year, so a partial period can't distort it.",
-  "dash.periodNote":
-    "Every figure below is per calendar {unit} — the averages, the payback annualisation ({periods} periods a year rather than 365), and one revenue bar per {unit}. Totals are the same either way; only the period they're divided into changes.",
+  "dash.overallNote": "Overall view: the whole range is one period of {days} days, and payback is annualised by that real length — a partial month or year can't distort it.",
+  "dash.periodNote": "Every figure is per calendar {unit}: the averages, the payback annualisation ({periods} periods a year), and one bar per {unit}. Totals don't change with the view, only how they're divided.",
 
   "dash.unit.hour": "hour",
   "dash.unit.day": "day",
@@ -445,7 +444,7 @@ export const en = {
   "dash.soldPriceSub": "{kwh} kWh left the house · grid {grid} · participants {local}",
   "dash.soldUnpriced": "{kwh} kWh with no rate, left out",
   "dash.neighbours": "Sales to participants",
-  "dash.neighboursNote": "What each participant paid for the solar energy they took, against what the same energy would have earned exported to the grid at the feed-in rate of that quarter-hour. The difference is what selling locally really gained. Below it, your own gain from the RCP: the standing charges you no longer bear alone.",
+  "dash.neighboursNote": "What each participant paid for the solar energy they took, against what the same energy would have earned exported at that quarter-hour's feed-in rate — the difference is the real gain from selling locally. Below: your own gain from the RCP, the standing charges you no longer bear alone.",
   "dash.nb.participant": "Participant",
   "dash.nb.revenue": "Sold to participant",
   "dash.nb.export": "If exported",
@@ -465,8 +464,7 @@ export const en = {
   "dash.avgSuffix": "CHF {value}/{unit} avg",
 
   "dash.payback": "Payback by category",
-  "dash.paybackNote":
-    "Not a measurement — a projection. Investment cost is divided by the average savings per {unit} across the selected range{annualised}. A range that isn't representative of a full year makes it misleading: a summer-only range projects a payback that never arrives, a winter-only one the reverse. Breakeven below is the opposite — an actual date, only reported if cumulative savings crossed the cost inside the range.",
+  "dash.paybackNote": "A projection, not a measurement: cost ÷ average savings per {unit}{annualised}. An unrepresentative range misleads — summer alone projects a payback that never comes, winter the reverse. Breakeven below is a real date instead, shown only once savings cross the cost.",
   "dash.annualisedOverall": ", annualised by the range's actual length ({days} days)",
   "dash.annualisedYearly": ", which is already an annual figure",
   "dash.annualisedOther": ", annualised at {periods} {units} a year",
@@ -478,12 +476,10 @@ export const en = {
   "dash.notReached": "not reached in range",
 
   "dash.revenue": "Revenue",
-  "dash.revenueNote":
-    "Direct consumption (avoided import), direct export, battery, neighbour sales and the fixed charges shared in the RCP, by {unit}",
-  "dash.revenueKwh": " — the energy behind each revenue figure",
-  "dash.revenueBoth": " — with the same split in kWh hatched beside it, on the right axis",
-  "dash.revenueCharging":
-    " Below the axis sits what the energy gave up to be where it is: the battery taking energy that would have earned the feed-in rate, and the participants' share, which would have earned it too.",
+  "dash.revenueNote": "Direct consumption (avoided import), direct export, battery, participant sales and the fixed charges shared in the RCP, by {unit}",
+  "dash.revenueKwh": " — the energy behind each figure",
+  "dash.revenueBoth": " — with the same split in kWh, hatched, on the right axis",
+  "dash.revenueCharging": " Below the axis: what the energy gave up to be where it is — the battery's charge and the participants' share, each at the feed-in rate it would have earned exported.",
   "dash.production": "Production",
   "dash.showForgone": "Export forgone",
   "dash.totalRevenue": "Total revenue",
@@ -528,12 +524,12 @@ export const en = {
   "billing.centsPerKwh": "ct./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
   "party.title": "Consumption & savings",
-  "party.intro": "How much {name} consumed, how much of it came from the RCP's own solar production rather than the grid, and what that saved against being supplied directly by the grid operator. Costs are the invoice's own figures, network charges and fees included.",
+  "party.intro": "{name}'s consumption, split between the RCP's own solar and the grid, and what that saved against direct supply.",
   "party.pick": "Participant",
   "party.none": "No participants yet — add them in Settings.",
   "party.noData": "No consumption recorded in this range.",
   "party.live": "Right now",
-  "party.liveNote": "Live from the installation, refreshed every minute — how much is leaving the house at this instant, and how much sun the day still holds.",
+  "party.liveNote": "Live from the installation, refreshed every minute: what is leaving the house right now, and how much sun the day still holds.",
   "party.live.exporting": "Exporting now",
   "party.live.exportingSub": "Surplus is available locally",
   "party.live.exportingNone": "Nothing spare at the moment",
@@ -542,7 +538,7 @@ export const en = {
   "party.live.ofToday": "of {total} kWh forecast for the day",
   "party.live.tomorrow": "Forecast tomorrow",
   "party.live.chart": "Today, hour by hour",
-  "party.live.chartNote": "What the panels made in each hour so far, against what the forecast expected for the day.",
+  "party.live.chartNote": "What the panels made in each hour so far, against the forecast for the day. The hour in progress is partial until it ends.",
   "party.live.chartTotals": "{produced} kWh so far · {forecast} kWh forecast",
   "party.live.produced": "Produced",
   "party.live.forecast": "Forecast",
@@ -559,8 +555,7 @@ export const en = {
   "party.kpi.savedHint": "Shared connection charges, and local energy cheaper than the grid",
   "party.chart.title": "Consumption by source",
   "party.chart.noteKwh": "Local production and grid draw, by {unit}.",
-  "party.chart.noteChf":
-    "What was paid through the RCP, by {unit}: local energy, grid energy and levies per kWh, and the fixed charges — the invoice's annual rates, spread over the days each bar covers.",
+  "party.chart.noteChf": "What was paid through the RCP, by {unit}: local energy, grid energy and levies per kWh, and the fixed charges — the invoice's annual rates spread over the days each bar covers.",
   "party.series.local": "Local production",
   "party.series.grid": "Grid",
   "party.series.localEnergy": "Local energy",

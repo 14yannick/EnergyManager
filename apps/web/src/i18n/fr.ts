@@ -36,6 +36,7 @@ export const fr: Record<keyof typeof en, string> = {
 
   // ---- Shared ------------------------------------------------------------
   "common.loading": "Chargement…",
+  "common.moreInfo": "Plus d'informations",
   "common.from": "Du",
   "common.to": "Au",
   "common.period": "Période",
@@ -430,10 +431,8 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.g.overall": "total",
   "dash.hourlyCap":
     "La vue horaire n'affiche que {days} jours à la fois — un trimestre représenterait plus de 2000 barres. Déplacer une extrémité fait glisser l'autre pour conserver cette durée.",
-  "dash.overallNote":
-    "Vue globale : toute la plage forme une seule période de {days} jours. L'amortissement est annualisé d'après cette durée réelle plutôt que d'après un mois ou une année supposés entiers, de sorte qu'une période partielle ne peut pas le fausser.",
-  "dash.periodNote":
-    "Chaque chiffre ci-dessous est par {unit} calendaire — les moyennes, l'annualisation de l'amortissement ({periods} périodes par an plutôt que 365), et une barre de revenu par {unit}. Les totaux sont identiques dans les deux cas ; seule la période de découpage change.",
+  "dash.overallNote": "Vue globale : toute la plage forme une période de {days} jours, et l'amortissement est annualisé sur cette durée réelle — un mois ou une année partiels ne le faussent pas.",
+  "dash.periodNote": "Chaque chiffre est par {unit} civil : les moyennes, l'annualisation de l'amortissement ({periods} périodes par an) et une barre par {unit}. Les totaux ne changent pas avec la vue, seulement leur découpage.",
 
   "dash.unit.hour": "heure",
   "dash.unit.day": "jour",
@@ -453,7 +452,7 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.soldPriceSub": "{kwh} kWh sortis de la maison · réseau {grid} · participants {local}",
   "dash.soldUnpriced": "{kwh} kWh sans tarif, non comptés",
   "dash.neighbours": "Ventes aux participants",
-  "dash.neighboursNote": "Ce que chaque participant a payé pour l'énergie solaire prélevée, comparé à ce que cette même énergie aurait rapporté injectée dans le réseau au tarif de reprise du quart d'heure concerné. La différence est le gain réel de la vente locale. En dessous, votre propre gain du RCP : les frais fixes que vous ne supportez plus seul.",
+  "dash.neighboursNote": "Ce que chaque participant a payé pour l'énergie solaire prise, face à ce que la même énergie aurait rapporté en injection au tarif de reprise de ce quart d'heure — la différence est le vrai gain de la vente locale. En dessous : votre propre gain du RCP, les frais fixes que vous ne portez plus seul.",
   "dash.nb.participant": "Participant",
   "dash.nb.revenue": "Vendu au participant",
   "dash.nb.export": "Si injecté",
@@ -473,8 +472,7 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.avgSuffix": "CHF {value}/{unit} en moyenne",
 
   "dash.payback": "Amortissement par catégorie",
-  "dash.paybackNote":
-    "Ce n'est pas une mesure mais une projection. Le coût d'investissement est divisé par les économies moyennes par {unit} sur la plage sélectionnée{annualised}. Une plage non représentative d'une année complète la rend trompeuse : une plage estivale projette un amortissement qui n'arrivera jamais, une plage hivernale l'inverse. Le seuil de rentabilité ci-dessous est l'opposé — une date réelle, indiquée seulement si les économies cumulées ont dépassé le coût à l'intérieur de la plage.",
+  "dash.paybackNote": "Une projection, pas une mesure : coût ÷ économies moyennes par {unit}{annualised}. Une plage non représentative trompe — l'été seul projette un amortissement qui n'arrive jamais, l'hiver l'inverse. Le seuil de rentabilité est une date réelle, indiquée seulement si les économies ont dépassé le coût.",
   "dash.annualisedOverall": ", annualisées d'après la durée réelle de la plage ({days} jours)",
   "dash.annualisedYearly": ", ce qui est déjà un chiffre annuel",
   "dash.annualisedOther": ", annualisées sur {periods} {units} par an",
@@ -486,12 +484,10 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.notReached": "non atteint dans la plage",
 
   "dash.revenue": "Revenus",
-  "dash.revenueNote":
-    "Consommation directe (achat évité), injection directe, batterie, ventes aux participants et frais fixes partagés dans le RCP, par {unit}",
-  "dash.revenueKwh": " — l'énergie derrière chaque montant",
-  "dash.revenueBoth": " — avec la même répartition en kWh hachurée à côté, sur l'axe de droite",
-  "dash.revenueCharging":
-    " Sous l'axe figure ce que l'énergie a renoncé à gagner : la batterie qui absorbe de l'énergie rémunérée au tarif de reprise, et la part des participants, qui l'aurait été aussi.",
+  "dash.revenueNote": "Consommation directe (achat évité), injection directe, batterie, ventes aux participants et frais fixes partagés dans le RCP, par {unit}",
+  "dash.revenueKwh": " — l'énergie derrière chaque chiffre",
+  "dash.revenueBoth": " — avec le même découpage en kWh, hachuré, sur l'axe de droite",
+  "dash.revenueCharging": " Sous l'axe : ce que l'énergie a abandonné pour être là où elle est — la charge de la batterie et la part des participants, chacune au tarif de reprise qu'elle aurait gagné en injection.",
   "dash.production": "Production",
   "dash.showForgone": "Injection perdue",
   "dash.totalRevenue": "Revenu total",
@@ -536,12 +532,12 @@ export const fr: Record<keyof typeof en, string> = {
   "billing.centsPerKwh": "ct./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
   "party.title": "Consommation et économies",
-  "party.intro": "Ce que {name} a consommé, la part venue de la production solaire du RCP plutôt que du réseau, et l'économie réalisée par rapport à un approvisionnement direct par le gestionnaire de réseau. Les coûts sont ceux de la facture, utilisation du réseau et redevances comprises.",
+  "party.intro": "La consommation de {name}, répartie entre le solaire du RCP et le réseau, et l'économie réalisée par rapport à une fourniture directe.",
   "party.pick": "Participant",
   "party.none": "Aucun participant pour l'instant — ajoutez-les dans les Paramètres.",
   "party.noData": "Aucune consommation enregistrée sur cette période.",
   "party.live": "En ce moment",
-  "party.liveNote": "En direct de l'installation, actualisé chaque minute — ce qui quitte la maison à cet instant, et le soleil qu'il reste pour la journée.",
+  "party.liveNote": "En direct de l'installation, actualisé chaque minute : ce qui quitte la maison en ce moment, et le soleil qu'il reste pour la journée.",
   "party.live.exporting": "Injection actuelle",
   "party.live.exportingSub": "Du surplus est disponible localement",
   "party.live.exportingNone": "Aucun surplus pour l'instant",
@@ -550,7 +546,7 @@ export const fr: Record<keyof typeof en, string> = {
   "party.live.ofToday": "sur {total} kWh prévus pour la journée",
   "party.live.tomorrow": "Prévision demain",
   "party.live.chart": "Aujourd'hui, heure par heure",
-  "party.live.chartNote": "Ce que les panneaux ont produit chaque heure jusqu'ici, face à ce que la prévision attendait pour la journée.",
+  "party.live.chartNote": "Ce que les panneaux ont produit chaque heure jusqu'ici, face à la prévision du jour. L'heure en cours est partielle jusqu'à sa fin.",
   "party.live.chartTotals": "{produced} kWh jusqu'ici · {forecast} kWh prévus",
   "party.live.produced": "Produit",
   "party.live.forecast": "Prévision",
@@ -567,8 +563,7 @@ export const fr: Record<keyof typeof en, string> = {
   "party.kpi.savedHint": "Frais de raccordement partagés, et énergie locale moins chère que le réseau",
   "party.chart.title": "Consommation par provenance",
   "party.chart.noteKwh": "Production locale et soutirage du réseau, par {unit}.",
-  "party.chart.noteChf":
-    "Montant payé via le RCP, par {unit} : énergie locale, réseau et taxes au kWh, et frais fixes — les tarifs annuels de la facture, répartis sur les jours de chaque barre.",
+  "party.chart.noteChf": "Ce qui a été payé via le RCP, par {unit} : énergie locale, énergie du réseau et taxes par kWh, et les frais fixes — les tarifs annuels de la facture répartis sur les jours de chaque barre.",
   "party.series.local": "Production locale",
   "party.series.grid": "Réseau",
   "party.series.localEnergy": "Énergie locale",
@@ -578,7 +573,7 @@ export const fr: Record<keyof typeof en, string> = {
   "party.series.directPerKwh": "Approvisionnement direct, au kWh",
   "party.series.directFixed": "Approvisionnement direct, frais fixes",
   "party.compareDirect": "Comparer avec l'approvisionnement direct",
-  "party.chart.noteDirect": "La barre hachurée à côté est la même consommation en approvisionnement direct : chaque kWh du réseau, et les frais fixes supportés seul.",
+  "party.chart.noteDirect": "La barre hachurée à côté est la même consommation en fourniture directe : chaque kWh du réseau, et les frais fixes portés seul.",
   "party.localShare": "Part locale",
   "party.paid": "Payé via le RCP",
   "party.saved": "Économie",

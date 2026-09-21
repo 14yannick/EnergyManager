@@ -19,6 +19,7 @@ import { useT, type Translate } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useSelectedPeriod } from "../lib/usePeriod";
 import { PeriodControls } from "../components/PeriodControls";
+import { InfoTip } from "../components/InfoTip";
 import { StatCard } from "../components/StatCard";
 import { NeighbourSalesChart } from "../components/NeighbourSalesChart";
 import {
@@ -68,7 +69,7 @@ const seriesNames = (unit: RevenueUnit, t: Translate) => ({
 export function DashboardPage() {
   const { site } = useDefaultSite();
   const t = useT();
-  const { from, to, granularity, set: setPeriod } = useSelectedPeriod();
+  const { from, to, granularity, mode, set: setPeriod } = useSelectedPeriod();
   const unit = t(PERIOD_UNIT[granularity]);
   const avgSuffix =
     granularity === "overall"
@@ -124,6 +125,7 @@ export function DashboardPage() {
           <PeriodControls
             range={{ from, to }}
             granularity={granularity}
+            mode={mode}
             onChange={setPeriod}
             dataRange={dataRange}
             bounds={bounds}
@@ -135,16 +137,21 @@ export function DashboardPage() {
         <p className="text-xs text-slate-500">{t("dash.hourlyCap", { days: MAX_HOURLY_DAYS })}</p>
       )}
 
-      {granularity !== "daily" && granularity !== "hourly" && (
-        <p className="text-xs text-slate-500">
-          {granularity === "overall"
-            ? t("dash.overallNote", { days: inclusiveDays(from, to) })
-            : t("dash.periodNote", { unit, periods: PERIODS_PER_YEAR[granularity] })}
-        </p>
-      )}
-
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-slate-700">{t("dash.kpi")}</h2>
+        <h2 className="text-sm font-medium text-slate-700">
+          {t("dash.kpi")}
+          {/* How the period divides the figures — worth knowing once, not
+              re-reading on every visit, so it lives behind the ⓘ. */}
+          {granularity !== "daily" && granularity !== "hourly" && (
+            <InfoTip
+              text={
+                granularity === "overall"
+                  ? t("dash.overallNote", { days: inclusiveDays(from, to) })
+                  : t("dash.periodNote", { unit, periods: PERIODS_PER_YEAR[granularity] })
+              }
+            />
+          )}
+        </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label={t("dash.withBatteryTotal")}
@@ -188,10 +195,10 @@ export function DashboardPage() {
       <NeighbourSalesChart siteId={site.id} from={from} to={to} />
 
       <section className="space-y-3">
-        <div>
-          <h2 className="text-sm font-medium text-slate-700">{t("dash.payback")}</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            {t("dash.paybackNote", {
+        <h2 className="text-sm font-medium text-slate-700">
+          {t("dash.payback")}
+          <InfoTip
+            text={t("dash.paybackNote", {
               unit,
               annualised:
                 granularity === "overall"
@@ -203,8 +210,8 @@ export function DashboardPage() {
                         units: t(PERIOD_UNITS[granularity]),
                       }),
             })}
-          </p>
-        </div>
+          />
+        </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <PaybackCard
             label={t("dash.withBattery")}
@@ -770,15 +777,17 @@ function RevenueBreakdownChart({
 
   return (
     <section className="space-y-3">
-      <div>
-        <h2 className="text-sm font-medium text-slate-700">{t("dash.revenue")}</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          {t("dash.revenueNote", { unit: t(PERIOD_UNIT[granularity]) })}
-          {unit === "kwh" && t("dash.revenueKwh")}
-          {unit === "both" && t("dash.revenueBoth")}.
-          {barUnit(unit) === "chf" && showForgone && t("dash.revenueCharging")}
-        </p>
-      </div>
+      <h2 className="text-sm font-medium text-slate-700">
+        {t("dash.revenue")}
+        <InfoTip
+          text={
+            t("dash.revenueNote", { unit: t(PERIOD_UNIT[granularity]) }) +
+            (unit === "kwh" ? t("dash.revenueKwh") : unit === "both" ? t("dash.revenueBoth") : "") +
+            "." +
+            (barUnit(unit) === "chf" && showForgone ? t("dash.revenueCharging") : "")
+          }
+        />
+      </h2>
 
       <div className="rounded-lg border bg-white p-4">
         <div className="flex flex-wrap items-center gap-4">

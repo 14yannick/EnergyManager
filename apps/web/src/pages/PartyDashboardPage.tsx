@@ -20,6 +20,7 @@ import { useT, type MessageKey } from "../i18n/context";
 import { useIdentity } from "../lib/useIdentity";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { PeriodControls } from "../components/PeriodControls";
+import { InfoTip } from "../components/InfoTip";
 import { StatCard } from "../components/StatCard";
 import {
   MAX_HOURLY_DAYS,
@@ -84,7 +85,7 @@ export function PartyDashboardPage() {
     ? identity.data?.partyId
     : (pickedId ?? members.find((p) => p.role === "rcp_admin")?.id ?? members[0]?.id);
 
-  const { from, to, granularity, set: setPeriod } = useSelectedPeriod();
+  const { from, to, granularity, mode, set: setPeriod } = useSelectedPeriod();
 
   const query = useQuery({
     queryKey: ["party-consumption", siteId, partyId, from, to, granularity],
@@ -154,6 +155,7 @@ export function PartyDashboardPage() {
           <PeriodControls
             range={{ from, to }}
             granularity={granularity}
+            mode={mode}
             onChange={setPeriod}
             dataRange={dataRange}
             bounds={bounds}
@@ -277,8 +279,10 @@ function LiveSection({ siteId }: { siteId: string | null | undefined }) {
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{t("party.live")}</h2>
-        <p className="text-xs text-slate-500">{t("party.liveNote")}</p>
+        <h2 className="text-lg font-semibold text-slate-900">
+          {t("party.live")}
+          <InfoTip text={t("party.liveNote")} />
+        </h2>
       </div>
       {hasCards && (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -389,8 +393,10 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
     <div className="rounded-lg border bg-white p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-sm font-medium text-slate-900">{t("party.live.chart")}</p>
-          <p className="text-xs text-slate-500">{t("party.live.chartNote")}</p>
+          <p className="text-sm font-medium text-slate-900">
+            {t("party.live.chart")}
+            <InfoTip text={t("party.live.chartNote")} />
+          </p>
         </div>
         <p className="text-sm text-slate-600">
           {t("party.live.chartTotals", { produced: producedKwh.toFixed(1), forecast: forecastKwh.toFixed(1) })}
@@ -567,15 +573,16 @@ function ConsumptionChart({
 
   return (
     <section className="space-y-3">
-      <div>
-        <h2 className="text-sm font-medium text-slate-700">{t("party.chart.title")}</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          {unit === "kwh"
-            ? t("party.chart.noteKwh", { unit: periodUnit })
-            : t("party.chart.noteChf", { unit: periodUnit })}
-          {showDirect && ` ${t("party.chart.noteDirect")}`}
-        </p>
-      </div>
+      <h2 className="text-sm font-medium text-slate-700">
+        {t("party.chart.title")}
+        <InfoTip
+          text={
+            (unit === "kwh"
+              ? t("party.chart.noteKwh", { unit: periodUnit })
+              : t("party.chart.noteChf", { unit: periodUnit })) + (showDirect ? ` ${t("party.chart.noteDirect")}` : "")
+          }
+        />
+      </h2>
 
       <div className="rounded-lg border bg-white p-4">
         <div className="flex flex-wrap items-center gap-4">

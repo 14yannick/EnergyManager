@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { useI18n, type MessageKey } from "../i18n/context";
 import {
   GRANULARITY_LABEL,
-  INITIAL_MODE,
   PERIOD_MODES,
   DEFAULT_VIEW,
   VIEWS_FOR,
@@ -83,37 +81,43 @@ function periodName(mode: PeriodMode, range: Range, locale: keyof typeof INTL_TA
  *
  * Every range goes through `fitRange`, so the bounds and snapping rules are
  * the same whichever control produced it.
+ *
+ * The mode is the caller's, not this component's: it belongs with the range
+ * it describes, and the two pages share both. Kept here as local state, a
+ * selector mounted on the other page opened on its default unit over a range
+ * chosen in another — "Quarter" in the dropdown, one month on the chart.
  */
 export function PeriodControls({
   range,
   granularity,
+  mode,
   onChange,
   dataRange,
   bounds,
 }: {
   range: Range;
   granularity: Granularity;
-  onChange: (range: Range, granularity: Granularity) => void;
+  mode: PeriodMode;
+  onChange: (range: Range, granularity: Granularity, mode: PeriodMode) => void;
   dataRange: DataRange;
   bounds: { min: string | null; max: string };
 }) {
   const { t, locale } = useI18n();
-  const [mode, setMode] = useState<PeriodMode>(INITIAL_MODE);
   const views = VIEWS_FOR[mode];
 
-  const apply = (r: Range, g: Granularity, anchor?: "from" | "to") => onChange(fitRange(r, g, bounds, anchor), g);
+  const apply = (r: Range, g: Granularity, anchor?: "from" | "to", m: PeriodMode = mode) =>
+    onChange(fitRange(r, g, bounds, anchor), g, m);
 
   const selectMode = (next: PeriodMode) => {
-    setMode(next);
     // Each period opens on its own default view; Custom keeps the current one,
     // since it starts from the range already shown.
-    if (next === "custom") return apply(range, granularity);
+    if (next === "custom") return apply(range, granularity, undefined, next);
     const g = DEFAULT_VIEW[next];
     if (next === "all") {
-      return apply({ from: dataRange.from ?? bounds.min ?? range.from, to: dataRange.to ?? bounds.max }, g);
+      return apply({ from: dataRange.from ?? bounds.min ?? range.from, to: dataRange.to ?? bounds.max }, g, undefined, next);
     }
     // Stay where the reader is: the unit containing the day the range ends on.
-    apply(cutAtToday(periodRange(next, range.to)), g);
+    apply(cutAtToday(periodRange(next, range.to)), g, undefined, next);
   };
   const setCustom = (next: Range, anchor: "from" | "to" = "to") => apply(next, granularity, anchor);
 

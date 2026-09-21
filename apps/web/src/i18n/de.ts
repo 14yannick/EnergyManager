@@ -42,6 +42,7 @@ export const de: Record<keyof typeof en, string> = {
 
   // ---- Shared ------------------------------------------------------------
   "common.loading": "Wird geladen…",
+  "common.moreInfo": "Mehr Informationen",
   "common.from": "Von",
   "common.to": "Bis",
   "common.period": "Zeitperiode",
@@ -436,14 +437,12 @@ export const de: Record<keyof typeof en, string> = {
   "dash.g.overall": "gesamt",
   "dash.hourlyCap":
     "Die stündliche Ansicht zeigt höchstens {days} Tage auf einmal — ein Quartal wären über 2000 Balken. Wird ein Ende verschoben, wandert das andere mit, damit das Fenster gleich lang bleibt.",
-  "dash.overallNote":
-    "Gesamtansicht: Der ganze Zeitraum bildet eine einzige Periode von {days} Tagen. Die Amortisation wird auf diese tatsächliche Länge hochgerechnet statt auf einen angenommenen ganzen Monat oder ein ganzes Jahr, sodass eine angebrochene Periode sie nicht verfälschen kann.",
+  "dash.overallNote": "Gesamtansicht: Der ganze Bereich ist eine Periode von {days} Tagen, und die Amortisation wird auf diese tatsächliche Länge hochgerechnet — ein angebrochener Monat oder ein angebrochenes Jahr verzerrt sie nicht.",
   // "pro {unit}" rather than "Kalender{unit}": the interpolated word would
   // otherwise have to form a compound (Kalendermonat, Kalenderquartal) and a
   // hyphen there reads as a typo. "pro" also needs no article, so the unit's
   // gender never has to agree with anything.
-  "dash.periodNote":
-    "Jede Zahl unten gilt jeweils pro {unit} — die Durchschnitte, die Hochrechnung der Amortisation ({periods} Perioden pro Jahr statt 365), und ein Ertragsbalken pro {unit}. Die Totale sind in beiden Fällen gleich; nur die Periode der Aufteilung ändert sich.",
+  "dash.periodNote": "Jede Zahl gilt pro Kalender-{unit}: die Durchschnitte, die Annualisierung der Amortisation ({periods} Perioden pro Jahr) und ein Balken pro {unit}. Die Summen ändern sich mit der Ansicht nicht, nur ihre Aufteilung.",
 
   "dash.unit.hour": "Stunde",
   "dash.unit.day": "Tag",
@@ -463,7 +462,7 @@ export const de: Record<keyof typeof en, string> = {
   "dash.soldPriceSub": "{kwh} kWh aus dem Haus · Netz {grid} · Teilnehmer {local}",
   "dash.soldUnpriced": "{kwh} kWh ohne Tarif, nicht berücksichtigt",
   "dash.neighbours": "Verkauf an Teilnehmer",
-  "dash.neighboursNote": "Was jeder Teilnehmer für den bezogenen Solarstrom bezahlt hat, verglichen mit dem, was dieselbe Energie bei Einspeisung ins Netz zum Rücklieferungstarif der jeweiligen Viertelstunde eingebracht hätte. Die Differenz ist der effektive Gewinn des lokalen Verkaufs. Darunter Ihr eigener Gewinn aus dem RCP: die Grundtarife, die Sie nicht mehr allein tragen.",
+  "dash.neighboursNote": "Was jeder Teilnehmer für den bezogenen Solarstrom zahlte, gegenüber dem, was dieselbe Energie eingespeist zum Einspeisetarif dieser Viertelstunde gebracht hätte — die Differenz ist der echte Gewinn des lokalen Verkaufs. Darunter: Ihr eigener Gewinn aus dem ZEV, die Grundgebühren, die Sie nicht mehr allein tragen.",
   "dash.nb.participant": "Teilnehmer",
   "dash.nb.revenue": "Verkauf an Teilnehmer",
   "dash.nb.export": "Bei Einspeisung",
@@ -483,8 +482,7 @@ export const de: Record<keyof typeof en, string> = {
   "dash.avgSuffix": "CHF {value}/{unit} im Schnitt",
 
   "dash.payback": "Amortisation nach Kategorie",
-  "dash.paybackNote":
-    "Keine Messung, sondern eine Hochrechnung. Die Investitionskosten werden durch die durchschnittliche Ersparnis pro {unit} im gewählten Zeitraum geteilt{annualised}. Ein Zeitraum, der kein ganzes Jahr abbildet, macht die Zahl irreführend: Ein reiner Sommerzeitraum rechnet eine Amortisation hoch, die nie eintritt, ein reiner Winterzeitraum das Gegenteil. Der Break-even unten ist das Gegenstück — ein tatsächliches Datum, das nur ausgewiesen wird, wenn die kumulierte Ersparnis die Kosten innerhalb des Zeitraums überschritten hat.",
+  "dash.paybackNote": "Eine Projektion, keine Messung: Kosten ÷ durchschnittliche Ersparnis pro {unit}{annualised}. Ein unrepräsentativer Zeitraum täuscht — nur Sommer projiziert eine Amortisation, die nie kommt, nur Winter das Gegenteil. Die Gewinnschwelle ist stattdessen ein echtes Datum, nur gezeigt, wenn die Ersparnis die Kosten überschritten hat.",
   "dash.annualisedOverall": ", hochgerechnet auf die tatsächliche Länge des Zeitraums ({days} Tage)",
   "dash.annualisedYearly": ", was bereits eine Jahreszahl ist",
   "dash.annualisedOther": ", hochgerechnet auf {periods} {units} pro Jahr",
@@ -496,12 +494,10 @@ export const de: Record<keyof typeof en, string> = {
   "dash.notReached": "im Zeitraum nicht erreicht",
 
   "dash.revenue": "Erträge",
-  "dash.revenueNote":
-    "Direktverbrauch (vermiedener Bezug), direkte Einspeisung, Batterie, Verkauf an Teilnehmer und im RCP geteilte Grundtarife, pro {unit}",
-  "dash.revenueKwh": " — die Energie hinter jeder Ertragszahl",
-  "dash.revenueBoth": " — mit derselben Aufteilung in kWh schraffiert daneben, auf der rechten Achse",
-  "dash.revenueCharging":
-    " Unterhalb der Achse steht, worauf die Energie verzichtet hat: die Batterie, die Energie aufnimmt, die zum Rücklieferungstarif vergütet worden wäre, und der Anteil der Teilnehmer, der es ebenso gewesen wäre.",
+  "dash.revenueNote": "Direktverbrauch (vermiedener Bezug), Direkteinspeisung, Batterie, Verkäufe an Teilnehmer und die im ZEV geteilten Fixkosten, pro {unit}",
+  "dash.revenueKwh": " — die Energie hinter jeder Zahl",
+  "dash.revenueBoth": " — mit derselben Aufteilung in kWh, schraffiert, auf der rechten Achse",
+  "dash.revenueCharging": " Unterhalb der Achse: worauf die Energie verzichtet hat — die Batterieladung und der Anteil der Teilnehmer, jeweils zum Einspeisetarif, den sie eingespeist erzielt hätten.",
   "dash.production": "Produktion",
   "dash.showForgone": "Entgangene Einspeisung",
   "dash.totalRevenue": "Gesamtertrag",
@@ -547,12 +543,12 @@ export const de: Record<keyof typeof en, string> = {
   "billing.centsPerKwh": "Rp./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
   "party.title": "Verbrauch und Ersparnis",
-  "party.intro": "Wie viel {name} verbraucht hat, welcher Anteil aus der Solarproduktion des RCP statt aus dem Netz stammte und was das gegenüber einer direkten Belieferung durch den Netzbetreiber gespart hat. Die Kosten entsprechen der Rechnung, inklusive Netznutzung und Abgaben.",
+  "party.intro": "Der Verbrauch von {name}, aufgeteilt in ZEV-Solarstrom und Netz, und die Ersparnis gegenüber der Direktversorgung.",
   "party.pick": "Teilnehmer",
   "party.none": "Noch keine Teilnehmer — erfassen Sie sie in den Einstellungen.",
   "party.noData": "In diesem Zeitraum wurde kein Verbrauch erfasst.",
   "party.live": "Gerade jetzt",
-  "party.liveNote": "Live aus der Anlage, jede Minute aktualisiert — was in diesem Moment das Haus verlässt und wie viel Sonne der Tag noch bringt.",
+  "party.liveNote": "Live aus der Anlage, jede Minute aktualisiert: was das Haus gerade verlässt, und wie viel Sonne der Tag noch bringt.",
   "party.live.exporting": "Einspeisung jetzt",
   "party.live.exportingSub": "Lokal ist Überschuss verfügbar",
   "party.live.exportingNone": "Im Moment kein Überschuss",
@@ -561,7 +557,7 @@ export const de: Record<keyof typeof en, string> = {
   "party.live.ofToday": "von {total} kWh Tagesprognose",
   "party.live.tomorrow": "Prognose morgen",
   "party.live.chart": "Heute, Stunde für Stunde",
-  "party.live.chartNote": "Was die Panels bisher in jeder Stunde erzeugt haben, gegenüber dem, was die Prognose für den Tag erwartete.",
+  "party.live.chartNote": "Was die Panels bisher in jeder Stunde erzeugt haben, gegenüber der Tagesprognose. Die laufende Stunde ist bis zu ihrem Ende unvollständig.",
   "party.live.chartTotals": "{produced} kWh bisher · {forecast} kWh prognostiziert",
   "party.live.produced": "Erzeugt",
   "party.live.forecast": "Prognose",
@@ -578,8 +574,7 @@ export const de: Record<keyof typeof en, string> = {
   "party.kpi.savedHint": "Geteilte Grundtarife des Anschlusses und lokale Energie günstiger als das Netz",
   "party.chart.title": "Verbrauch nach Herkunft",
   "party.chart.noteKwh": "Lokale Produktion und Netzbezug, pro {unit}.",
-  "party.chart.noteChf":
-    "Im RCP bezahlter Betrag, pro {unit}: lokale Energie, Netz und Abgaben pro kWh sowie die Grundtarife — die Jahrestarife der Rechnung, auf die Tage jedes Balkens verteilt.",
+  "party.chart.noteChf": "Was über den ZEV bezahlt wurde, pro {unit}: lokale Energie, Netzenergie und Abgaben pro kWh sowie die Fixkosten — die Jahrestarife der Rechnung, verteilt auf die Tage jedes Balkens.",
   "party.series.local": "Lokale Produktion",
   "party.series.grid": "Netzbezug",
   "party.series.localEnergy": "Lokale Energie",
@@ -589,7 +584,7 @@ export const de: Record<keyof typeof en, string> = {
   "party.series.directPerKwh": "Direkte Belieferung, pro kWh",
   "party.series.directFixed": "Direkte Belieferung, Grundtarife",
   "party.compareDirect": "Mit direkter Belieferung vergleichen",
-  "party.chart.noteDirect": "Der schraffierte Balken daneben ist derselbe Verbrauch bei direkter Belieferung: jede kWh aus dem Netz, die Grundtarife allein getragen.",
+  "party.chart.noteDirect": "Der schraffierte Balken daneben ist derselbe Verbrauch bei Direktversorgung: jede kWh aus dem Netz und die Fixkosten allein getragen.",
   "party.localShare": "Lokaler Anteil",
   "party.paid": "Im RCP bezahlt",
   "party.saved": "Ersparnis",

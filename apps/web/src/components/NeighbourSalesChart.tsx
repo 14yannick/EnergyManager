@@ -12,6 +12,7 @@ import {
 import type { NeighbourSale } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useT } from "../i18n/context";
+import { InfoTip } from "./InfoTip";
 import { axisTick } from "../lib/periods";
 
 /**
@@ -50,8 +51,10 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-medium text-slate-700">{t("dash.neighbours")}</h2>
-        <p className="mt-1 max-w-4xl text-xs text-slate-500">{t("dash.neighboursNote")}</p>
+        <h2 className="text-sm font-medium text-slate-700">
+          {t("dash.neighbours")}
+          <InfoTip text={t("dash.neighboursNote")} />
+        </h2>
       </div>
 
       <div className="space-y-4 rounded-lg border bg-white p-4">
