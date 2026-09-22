@@ -52,6 +52,27 @@ const localDate = (iso: string) =>
   });
 
 /**
+ * What <input type="datetime-local"> expects: "YYYY-MM-DDTHH:mm" wall-clock in
+ * Europe/Zurich. Built from the formatted parts rather than slicing toISOString(),
+ * which would hand back UTC and shift an edited position by the offset.
+ */
+function toLocalInput(iso: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Zurich",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  // hour can come back as "24" at midnight in some runtimes.
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}`;
+}
+
+/**
  * The same position exists once per tariff year, so a flat list shows each
  * label repeatedly and they read as duplicates. Grouping by validity makes the
  * period the heading rather than an invisible attribute of the row.
@@ -129,6 +150,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
   const { canEdit } = useCanEdit();
   const [draft, setDraft] = useState({ ...EMPTY_POSITION });
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const positionsQuery = useQuery({
     queryKey: ["billing-positions", siteId],
@@ -139,6 +161,27 @@ function PositionsSection({ siteId }: { siteId: string }) {
     void queryClient.invalidateQueries({ queryKey: ["billing-positions", siteId] });
     void queryClient.invalidateQueries({ queryKey: ["billing-invoices", siteId] });
   };
+  function stopEditing() {
+    setEditingId(null);
+    setError(null);
+    setDraft({ ...EMPTY_POSITION });
+  }
+  function startEditing(p: GridTariffPosition) {
+    setEditingId(p.id);
+    setError(null);
+    setDraft({
+      category: p.category,
+      label: p.label,
+      allocation: p.allocation,
+      rateChf: p.rateChf,
+      // Stored as UTC; <input type="datetime-local"> wants wall-clock time in
+      // the site's zone, which is also how the API reads it back.
+      validFrom: toLocalInput(p.validFrom),
+      validTo: toLocalInput(p.validTo),
+      countsInDirectBilling: p.countsInDirectBilling,
+      sortOrder: p.sortOrder,
+    });
+  }
   const createMutation = useMutation({
     mutationFn: () => api.billing.createPosition(siteId, draft),
     onSuccess: () => {
@@ -148,9 +191,21 @@ function PositionsSection({ siteId }: { siteId: string }) {
     },
     onError: (e: Error) => setError(e.message),
   });
+  const updateMutation = useMutation({
+    mutationFn: () => api.billing.updatePosition(editingId!, draft),
+    onSuccess: () => {
+      stopEditing();
+      invalidate();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.billing.removePosition(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      // The row being edited may be the one just deleted.
+      stopEditing();
+      invalidate();
+    },
   });
 
   const positions = positionsQuery.data ?? [];
@@ -167,7 +222,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          createMutation.mutate();
+          editingId ? updateMutation.mutate() : createMutation.mutate();
         }}
         className="flex flex-wrap items-end gap-3"
       >
@@ -239,11 +294,20 @@ function PositionsSection({ siteId }: { siteId: string }) {
         </label>
         <button
           type="submit"
-          disabled={createMutation.isPending || draft.label.trim() === ""}
+          disabled={createMutation.isPending || updateMutation.isPending || draft.label.trim() === ""}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {t("billing.addPosition")}
+          {editingId ? t("common.save") : t("billing.addPosition")}
         </button>
+        {editingId && (
+          <button
+            type="button"
+            onClick={stopEditing}
+            className="rounded-md border px-4 py-2 text-sm font-medium text-slate-600"
+          >
+            {t("common.cancel")}
+          </button>
+        )}
       </form>
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -278,7 +342,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
               </thead>
               <tbody>
                 {group.items.map((p) => (
-                  <tr key={p.id} className="border-t">
+                  <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50" : "border-t"}>
                     <td className="py-1 pr-3 text-slate-500">{t(CATEGORY_LABELS[p.category])}</td>
                     <td className="py-1 pr-3 text-slate-900">{p.label}</td>
                     <td className="py-1 pr-3 text-slate-500">{t(ALLOCATION_LABELS[p.allocation])}</td>
@@ -292,6 +356,12 @@ function PositionsSection({ siteId }: { siteId: string }) {
                     </td>
                     {canEdit && (
                       <td className="py-1 text-right">
+                        <button
+                          onClick={() => startEditing(p)}
+                          className="mr-3 text-slate-400 hover:text-slate-900"
+                        >
+                          {t("common.edit")}
+                        </button>
                         <button
                           onClick={() => deleteMutation.mutate(p.id)}
                           className="text-slate-400 hover:text-red-600"

@@ -75,6 +75,14 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   "/api/sites/:siteId/community/summary": { GET: PARTICIPANT_READ },
   // A participant only for their own party — see consumption/routes.
   "/api/sites/:siteId/parties/:partyId/consumption": { GET: PARTICIPANT_READ },
+
+  // Whether the Cloudflare Access email sync is configured at all — no
+  // secrets in the answer, just a boolean, so read access is enough.
+  "/api/cloudflare-access/status": { GET: READ },
+  // Pushes local party emails into a Cloudflare Access policy: as
+  // consequential as anything else that changes who can sign in, so admin
+  // only, same as the parties routes that trigger it automatically.
+  "/api/cloudflare-access/sync": { POST: ADMIN },
 };
 
 /**

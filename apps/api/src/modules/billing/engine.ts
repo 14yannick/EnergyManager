@@ -132,7 +132,7 @@ function rawInvoiceLines(inputs: InvoiceInputs): InvoiceLine[] {
   if (usage.localKwh > 0 && localRateChf != null) {
     lines.push({
       category: "energie",
-      label: "Énergie issue de la production locale (RCP)",
+      label: "Energy from local production (vZEV)",
       kind: "local",
       allocation: "per_kwh",
       quantity: usage.localKwh,

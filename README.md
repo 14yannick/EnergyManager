@@ -43,7 +43,7 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
 ## VZEV billing (phase 2, in progress)
 
 Beyond the owner's own payback, the app bills the other participants of a Swiss
-VZEV/RCP. Consumption is tracked per party, grid-tariff positions are configured per
+VZEV/vZEV. Consumption is tracked per party, grid-tariff positions are configured per
 category (énergie, utilisation du réseau, mesure, redevances) with an allocation rule
 each — per kWh drawn from the grid, per kWh consumed in total, shared across the pool,
 or a flat charge per participant — and the app produces a per-participant invoice, with
@@ -74,7 +74,7 @@ The German billing wording follows a real BKW electricity bill — *Energie*,
 *Netznutzung*, *Messung*, *Abgaben & Leistungen* as the sections,
 *Zwischentotal* and *Zu bezahlender Betrag* for the sums, *Bezug* / *Preis* /
 *Betrag in CHF* as the line columns, and *Rp.* for cents. A participant
-reading their RCP invoice therefore meets the same terms as on the bill it
+reading their vZEV invoice therefore meets the same terms as on the bill it
 replaces.
 
 Two things deliberately do not follow it. Dates and amounts stay in Swiss form
@@ -108,7 +108,7 @@ Three roles, resolved from the verified address:
 |---|---|
 | `admin` | Everything, read and write. |
 | `viewer` | Everything, read only — no writes anywhere. |
-| `participant` | **Rates: yes. Consumption: only their own.** Two pages — **Consumption** (their own, split local/grid, with what the RCP saved them, and the site's live export and solar forecast) and **Billing** (their own invoices, plus the rates those invoices are built from: every grid provider tariff position, and the RCP rate for locally produced energy). One site-level figure besides: how much the site produced and how much of it went into the local pool, so a participant can see where their local share came from — with no per-party breakdown, no battery, no export, no money. Never another participant's consumption or invoice, and never your production detail, battery, grid export, feed-in tariff or investment data. |
+| `participant` | **Rates: yes. Consumption: only their own.** Two pages — **Consumption** (their own, split local/grid, with what the vZEV saved them, and the site's live export and solar forecast) and **Billing** (their own invoices, plus the rates those invoices are built from: every grid provider tariff position, and the vZEV rate for locally produced energy). One site-level figure besides: how much the site produced and how much of it went into the local pool, so a participant can see where their local share came from — with no per-party breakdown, no battery, no export, no money. Never another participant's consumption or invoice, and never your production detail, battery, grid export, feed-in tariff or investment data. |
 
 The API is the enforcement point — every route is denied by default and listed
 explicitly in `apps/api/src/auth/policy.ts`. The web app follows it where a
@@ -140,11 +140,11 @@ own data" then has no single answer.
 
 ### Party roles
 
-Each party carries one of four roles. Administering the RCP and being billed
+Each party carries one of four roles. Administering the vZEV and being billed
 by it are independent, which is why there are two admin values: the owner
 normally consumes from the same connection, pays a share of the fixed costs
 and imports from the grid like anybody else, but whoever runs the app might
-instead sit outside the RCP entirely.
+instead sit outside the vZEV entirely.
 
 | Role | App access | Invoiced | Counts towards shared costs |
 |---|---|---|---|
@@ -155,7 +155,7 @@ instead sit outside the RCP entirely.
 
 At most one party per site may hold an admin role, enforced by a partial
 unique index; that party is also the QR-bill's payee. An `rcp_admin` still
-receives their own invoice — running the RCP does not exempt you from paying
+receives their own invoice — running the vZEV does not exempt you from paying
 for what you consumed — but it carries no payment slip, since a slip payable
 from and to the same account is meaningless.
 
@@ -194,6 +194,51 @@ instead of a sign-out button. Clear the variable to be admin again.
 
 The api refuses to start with `AUTH_DEV_AS` and `AUTH_ENABLED=true` together:
 on a real deployment it would make every visitor that person.
+
+### Keeping Cloudflare's allow-list in step (optional)
+
+Access decides who reaches the app before this app ever sees the request, so
+adding a party here doesn't let them in — they also need their address on the
+Access application's policy in Cloudflare, added by hand today.
+
+Set `CF_API_TOKEN` and `CF_ACCOUNT_ID` and that step happens automatically:
+every party save (and every change to `AUTH_ADMIN_EMAILS`, picked up on the
+next sync) pushes the addresses that should be allowed into a Cloudflare
+Access policy, and pulls out any it no longer wants there. A manual "Sync
+now" button on the Settings page covers the case where the automatic push
+failed.
+
+No policy id to configure. The policy is found — or, the very first time,
+created — by a name derived from the first `AUTH_ADMIN_EMAILS` address: e.g.
+`14yannick@gmail.com` names it `em_14yannick`. Once it exists it is entirely
+this app's own, so a sync freely recomputes its *whole* email list from what
+Cloudflare currently has, rather than needing to track locally what it added
+before — there is no local table for this at all. Anything that isn't an
+email rule (a domain restriction, a country requirement added by hand on top
+of it) is left exactly as it was; see the doc comment on `mergeIncludeRules`
+in `apps/api/src/modules/cfAccess/engine.ts`.
+
+**A newly created policy is inert until it's wired to the app — once, by
+hand.** Creating a *reusable* policy through the API doesn't attach it to
+anything: it sits on the account doing nothing until it's added as a rule on
+the actual Access application that gates this app's hostname. After the
+first sync (the Settings page says when it had to create one, naming it), go
+to Zero Trust → Access → Applications → your application → Policies, and add
+the policy by that name. From then on, every sync keeps updating the same
+policy in place — nothing further to wire up.
+
+If a policy already existed before this feature was turned on — created by
+hand, the way onboarding does it — the sync won't find or touch it unless
+its name happens to match exactly. Simplest fix: rename the existing one to
+match (Settings tells you the name it's looking for) rather than ending up
+with two policies, only one of which is actually attached to the app.
+
+**The token is more powerful than this feature strictly needs.** Cloudflare
+has no way to scope an API token to a single Access policy — a token with
+*Access: Apps and Policies* write access can edit or delete any Access app or
+policy on the whole account, not just the one this creates. Leave both
+variables unset and the feature — and that risk — simply doesn't exist; the
+rest of the app is unaffected either way.
 
 ### Turning it on
 

@@ -1,5 +1,7 @@
 import type {
   AuthIdentity,
+  CfAccessStatus,
+  CfAccessSyncResult,
   CostItem,
   CostItemInput,
   CostItemsSummary,
@@ -217,6 +219,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify(body),
       }),
+  },
+  cloudflareAccess: {
+    status: () => request<CfAccessStatus>("/cloudflare-access/status"),
+    /** Manual retry for the sync every party save already triggers automatically. */
+    sync: () => request<CfAccessSyncResult>("/cloudflare-access/sync", { method: "POST" }),
   },
   billing: {
     positions: (siteId: string) => request<GridTariffPosition[]>(`/sites/${siteId}/billing/positions`),

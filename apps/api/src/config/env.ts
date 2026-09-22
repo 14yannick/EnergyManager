@@ -80,6 +80,27 @@ const envSchema = z.object({
     .refine((v) => v === undefined || /^[^@\s]+@[^@\s]+$/.test(v), {
       message: "AUTH_DEV_AS must be an email address",
     }),
+
+  // ---- Cloudflare Access sync (optional) --------------------------------
+  // Keeps one reusable Access policy's allowed-email list in step with the
+  // parties table: adding a party (or AUTH_ADMIN_EMAILS) pushes their address
+  // into the policy, removing one pulls it back out. Entirely optional — with
+  // either unset, the feature is off and nothing about auth changes.
+  //
+  // No policy id to configure: the policy this owns is found (or created,
+  // the first time) by a name derived from the first AUTH_ADMIN_EMAILS
+  // address — see cfAccess/engine.ts's policyNameFor. That also means the
+  // policy is entirely this app's own once created, so a sync can freely
+  // overwrite its whole email list rather than having to preserve entries it
+  // didn't add — see the doc comment on syncCloudflareAccess.
+  //
+  // The token is more powerful than this feature strictly needs: Cloudflare
+  // has no way to scope a token to a single Access policy, so one with
+  // "Access: Apps and Policies" write access can edit or delete *any* Access
+  // app or policy in the account, not just the one this creates. Treat it
+  // like HA_TOKEN's more dangerous sibling.
+  CF_API_TOKEN: z.string().optional(),
+  CF_ACCOUNT_ID: z.string().optional(),
 });
 
 const parsed = envSchema.parse(process.env);
@@ -108,6 +129,16 @@ if (parsed.AUTH_ENABLED) {
   }
 }
 
+// Same "half-configured is worse than off" rule as AUTH_ENABLED above: a
+// token with no account id would fail on the first sync rather than at boot.
+if (Boolean(parsed.CF_API_TOKEN) !== Boolean(parsed.CF_ACCOUNT_ID)) {
+  throw new Error(
+    `Cloudflare Access sync is partially configured — set ${
+      parsed.CF_API_TOKEN ? "CF_ACCOUNT_ID" : "CF_API_TOKEN"
+    } too, or unset the other to leave it off.`,
+  );
+}
+
 /** Comma- or space-separated list to a lowercased set. */
 function emailSet(raw: string): ReadonlySet<string> {
   return new Set(
@@ -120,3 +151,9 @@ function emailSet(raw: string): ReadonlySet<string> {
 
 export const env = parsed;
 export const adminEmails = emailSet(parsed.AUTH_ADMIN_EMAILS);
+// The third condition, not just the two env vars: with no admin email there
+// is nothing to name the policy after, so the feature can't run yet even if
+// the token and account id are both set (e.g. auth still off in local dev).
+export const cfAccessSyncConfigured = Boolean(
+  parsed.CF_API_TOKEN && parsed.CF_ACCOUNT_ID && adminEmails.size > 0,
+);

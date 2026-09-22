@@ -12,6 +12,8 @@ const AUTH_KEYS = [
   "CF_ACCESS_AUD",
   "AUTH_ADMIN_EMAILS",
   "AUTH_DEV_AS",
+  "CF_API_TOKEN",
+  "CF_ACCOUNT_ID",
 ];
 
 async function loadEnv(overrides: Record<string, string> = {}) {
@@ -82,5 +84,32 @@ describe("AUTH_DEV_AS", () => {
 
   it("refuses something that is not an address", async () => {
     await expect(loadEnv({ AUTH_DEV_AS: "neighbour" })).rejects.toThrow(/AUTH_DEV_AS/);
+  });
+});
+
+describe("Cloudflare Access sync config", () => {
+  const CF = { CF_API_TOKEN: "t", CF_ACCOUNT_ID: "a" };
+
+  it("is off by default, with no error", async () => {
+    const { cfAccessSyncConfigured } = await loadEnv();
+    expect(cfAccessSyncConfigured).toBe(false);
+  });
+
+  it("is on once both are set and there is an admin email to name the policy after", async () => {
+    const { cfAccessSyncConfigured } = await loadEnv({ ...CF, ...ENABLED });
+    expect(cfAccessSyncConfigured).toBe(true);
+  });
+
+  it("stays off with the token and account set but no admin email yet", async () => {
+    // A real state, not a misconfiguration: CF_API_TOKEN/CF_ACCOUNT_ID can be
+    // set while AUTH_ENABLED is still off in local dev, before any
+    // AUTH_ADMIN_EMAILS exists to name the policy after.
+    const { cfAccessSyncConfigured } = await loadEnv(CF);
+    expect(cfAccessSyncConfigured).toBe(false);
+  });
+
+  it("refuses to start with only one of the two set", async () => {
+    await expect(loadEnv({ CF_API_TOKEN: "t" })).rejects.toThrow(/CF_ACCOUNT_ID/);
+    await expect(loadEnv({ CF_ACCOUNT_ID: "a" })).rejects.toThrow(/CF_API_TOKEN/);
   });
 });

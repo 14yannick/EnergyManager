@@ -323,11 +323,15 @@ function LiveSection({ siteId }: { siteId: string | null | undefined }) {
   );
 }
 
-// Actual production wears the sun's colour, the forecast a dashed neutral: a
-// measurement and a prediction must not be told apart by hue alone, and a
-// dash reads as "expected" without a legend. The still-to-come area is the
-// same neutral, faint, so it sits under the line it belongs to.
-const PRODUCED_COLOR = "#eda100";
+// What left the house wears the sun's colour, same as the single bar this
+// used to be. What stayed — self-consumed plus whatever charged the battery
+// — is the app's established "direct" blue, the same adjacent-safe pairing
+// already validated on the admin dashboard's revenue chart. The forecast is
+// a dashed neutral: a measurement and a prediction must not be told apart by
+// hue alone, and a dash reads as "expected" without a legend. The
+// still-to-come area is the same neutral, faint, so it sits under the line.
+const EXPORTED_COLOR = "#eda100";
+const KEPT_COLOR = "#2a78d6";
 const FORECAST_COLOR = "#475569";
 // The forecast colour as it looks over white at a tenth of its strength —
 // a real colour rather than the dark one with opacity, because the legend
@@ -338,11 +342,26 @@ const REMAINING_FILL = "#e4e7ec";
 interface CurvePoint {
   hour: number;
   label: string;
-  produced: number | null;
+  /** production_hour + batteryCharge_hour — everything the panels made that hour. */
+  made: number | null;
+  /** What left the house that hour, capped at `made` — see the doc comment below. */
+  exported: number | null;
+  /** made − exported: self-consumed directly, plus whatever charged the battery. */
+  kept: number | null;
   forecast: number | null;
   /** The forecast again, but only from the current hour on — what is still to come. */
   remaining: number | null;
   partial: boolean;
+}
+
+/** One of the small labelled totals beside the chart's own title. */
+function DayStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="text-right" title={hint}>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-sm font-semibold text-slate-900">{value}</p>
+    </div>
+  );
 }
 
 /**
@@ -358,13 +377,15 @@ interface CurvePoint {
 function DayCurveChart({ today }: { today: LiveDayCurve }) {
   const t = useT();
   const points = useMemo<CurvePoint[]>(() => {
-    const actual = new Map(today.actual.map((h) => [h.hour, h.kwh]));
+    const production = new Map(today.actual.map((h) => [h.hour, h.kwh]));
+    const charge = new Map(today.batteryCharge.map((h) => [h.hour, h.kwh]));
+    const exportedLocal = new Map(today.exportedLocal.map((h) => [h.hour, h.kwh]));
     const forecast = new Map(today.forecast.map((h) => [h.hour, h.kwh]));
     // The axis runs from the first hour with anything in it to the last. A
     // night hour that only reports zero — the store says so for every hour
     // since midnight — is not "anything": it would pin the axis to 00:00 and
     // squeeze the day into its right-hand half.
-    const hours = [...actual.entries(), ...forecast.entries()]
+    const hours = [...production.entries(), ...charge.entries(), ...exportedLocal.entries(), ...forecast.entries()]
       .filter(([, kwh]) => kwh > 0)
       .map(([hour]) => hour);
     if (hours.length === 0) return [];
@@ -372,11 +393,21 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
     const last = Math.max(...hours);
     const out: CurvePoint[] = [];
     for (let hour = first; hour <= last; hour++) {
+      const prod = production.get(hour);
+      const made = prod == null ? null : prod + (charge.get(hour) ?? 0);
+      // Capped at `made`, not taken as-is: a heavier-cycling day could
+      // export more in an hour than the panels made in it, by discharging
+      // what an earlier hour charged — see LiveDayCurve.exportedLocal. The
+      // cap is what keeps "kept" (made − exported) from going negative.
+      const exported = made == null ? null : Math.min(exportedLocal.get(hour) ?? 0, made);
+      const kept = made == null || exported == null ? null : made - exported;
       const f = forecast.get(hour) ?? null;
       out.push({
         hour,
         label: `${String(hour).padStart(2, "0")}:00`,
-        produced: actual.get(hour) ?? null,
+        made,
+        exported,
+        kept,
         forecast: f,
         remaining: hour >= today.currentHour ? f : null,
         partial: hour === today.currentHour,
@@ -386,27 +417,38 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
   }, [today]);
   if (points.length === 0) return null;
 
+  // What the panels made today, one figure: production (AC delivered) plus
+  // whatever charged the battery (DC, so production alone never counted it —
+  // see LiveDayCurve.batteryCharge). The same "production + charging" figure
+  // the admin dashboard's own line shows, so the two never disagree.
   const producedKwh = today.actual.reduce((sum, h) => sum + h.kwh, 0);
+  const batteryChargeKwh = today.batteryCharge.reduce((sum, h) => sum + h.kwh, 0);
+  const exportedKwh = today.exportedLocal.reduce((sum, h) => sum + h.kwh, 0);
+  const madeKwh = producedKwh + batteryChargeKwh;
   const forecastKwh = today.forecast.reduce((sum, h) => sum + h.kwh, 0);
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium text-slate-900">
-            {t("party.live.chart")}
-            <InfoTip text={t("party.live.chartNote")} />
-          </p>
-        </div>
-        <p className="text-sm text-slate-600">
-          {t("party.live.chartTotals", { produced: producedKwh.toFixed(1), forecast: forecastKwh.toFixed(1) })}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="text-sm font-medium text-slate-900">
+          {t("party.live.chart")}
+          <InfoTip text={t("party.live.chartNote")} />
         </p>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          <DayStat label={t("party.live.madeToday")} hint={t("party.live.madeTodayHint")} value={`${madeKwh.toFixed(1)} kWh`} />
+          <DayStat label={t("party.live.leftHouse")} value={`${exportedKwh.toFixed(1)} kWh`} />
+          <DayStat label={t("party.live.forecastTotal")} value={`${forecastKwh.toFixed(1)} kWh`} />
+        </div>
       </div>
       <div className="mt-3 h-56 sm:h-64">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={points} barCategoryGap="25%">
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={points.length > 14 ? 2 : 0} />
+            {/* "preserveStartEnd" thins by the space actually rendered, rather
+                than a fixed count: a summer day's 14 hours fit at desktop
+                width and ran together at 390px, where a fixed "show every
+                one under 14" interval showed all of them regardless. */}
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
             <YAxis tick={{ fontSize: 11 }} width={40} domain={[0, "auto"]} tickFormatter={(v: number) => v.toFixed(1)} />
             <Tooltip
               content={({ active, payload }) => {
@@ -419,12 +461,18 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
                       {p.partial ? ` · ${t("party.live.partial")}` : ""}
                     </p>
                     <p className="text-slate-600">
-                      {t("party.live.produced")}:{" "}
+                      {t("party.live.madeToday")}:{" "}
                       <span className="font-semibold text-slate-900">
-                        {p.produced == null ? "—" : `${p.produced.toFixed(2)} kWh`}
+                        {p.made == null ? "—" : `${p.made.toFixed(2)} kWh`}
                       </span>
                     </p>
-                    <p className="text-slate-600">
+                    <p className="pl-2 text-slate-500">
+                      {t("party.live.leftHouse")}: {p.exported == null ? "—" : `${p.exported.toFixed(2)} kWh`}
+                    </p>
+                    <p className="pl-2 text-slate-500">
+                      {t("party.live.keptAtHome")}: {p.kept == null ? "—" : `${p.kept.toFixed(2)} kWh`}
+                    </p>
+                    <p className="mt-1 text-slate-600">
                       {t("party.live.forecast")}:{" "}
                       <span className="font-semibold text-slate-900">
                         {p.forecast == null ? "—" : `${p.forecast.toFixed(2)} kWh`}
@@ -453,10 +501,24 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
               isAnimationActive={false}
               connectNulls={false}
             />
+            {/* Stacked to the height of "Made": what left the house at the
+                foot, the same colour and position the single bar used to
+                have, and what stayed — self-consumed plus whatever charged
+                the battery — on top of it. Only the top segment is rounded,
+                as one bar rather than two independently-cornered blocks. */}
             <Bar
-              dataKey="produced"
-              name={t("party.live.produced")}
-              fill={PRODUCED_COLOR}
+              dataKey="exported"
+              name={t("party.live.leftHouse")}
+              stackId="made"
+              fill={EXPORTED_COLOR}
+              maxBarSize={28}
+              isAnimationActive={false}
+            />
+            <Bar
+              dataKey="kept"
+              name={t("party.live.keptAtHome")}
+              stackId="made"
+              fill={KEPT_COLOR}
               maxBarSize={28}
               radius={[3, 3, 0, 0]}
               isAnimationActive={false}

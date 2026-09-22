@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { HourKwh, LiveDayCurve, LiveEnergyView } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, sites } from "../../db/schema/index.js";
@@ -46,27 +46,38 @@ async function todaysCurve(siteId: string, now: Date): Promise<LiveDayCurve | nu
   // the same and refuses the grouping. A constant of ours, so a literal is safe.
   const zone = sql.raw(`'${SITE_TZ}'`);
   const localHour = sql<number>`extract(hour from ${intervalMetrics.ts} at time zone ${zone})::int`;
+  const dayFilter = and(
+    eq(intervalMetrics.siteId, siteId),
+    isNull(intervalMetrics.partyId),
+    sql`(${intervalMetrics.ts} at time zone ${zone})::date = ${day}::date`,
+  );
   const [rows, sources] = await Promise.all([
+    // All three per hour in one pass, so the chart can draw the split —
+    // made this hour, and how much of it left — not just the day's totals.
     db
-      .select({ hour: localHour, kwh: sql<string>`sum(${intervalMetrics.valueKwh})` })
+      .select({
+        hour: localHour,
+        productionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'production'), 0)`,
+        batteryChargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_charge'), 0)`,
+        exportLocalKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_local'), 0)`,
+      })
       .from(intervalMetrics)
-      .where(
-        and(
-          eq(intervalMetrics.siteId, siteId),
-          isNull(intervalMetrics.partyId),
-          eq(intervalMetrics.metricKind, "production"),
-          sql`(${intervalMetrics.ts} at time zone ${zone})::date = ${day}::date`,
-        ),
-      )
+      .where(and(dayFilter, inArray(intervalMetrics.metricKind, ["production", "battery_charge", "export_local"])))
       .groupBy(localHour)
       .orderBy(localHour),
     cachedForecastSources(),
   ]);
 
-  const actual: HourKwh[] = rows.map((r) => ({ hour: r.hour, kwh: Number(Number(r.kwh).toFixed(3)) }));
+  const round = (v: string) => Number(Number(v).toFixed(3));
+  // An hour with none of the three yet — night, or one not synced yet —
+  // still needs no row at all, same as `production` alone did before.
+  const nonZero = rows.filter((r) => round(r.productionKwh) || round(r.batteryChargeKwh) || round(r.exportLocalKwh));
+  const actual: HourKwh[] = nonZero.map((r) => ({ hour: r.hour, kwh: round(r.productionKwh) }));
+  const batteryCharge: HourKwh[] = nonZero.map((r) => ({ hour: r.hour, kwh: round(r.batteryChargeKwh) }));
+  const exportedLocal: HourKwh[] = nonZero.map((r) => ({ hour: r.hour, kwh: round(r.exportLocalKwh) }));
   const forecast = forecastForDay(mergeForecastSources(sources), day);
   if (actual.length === 0 && forecast.length === 0) return null;
-  return { day, currentHour, actual, forecast };
+  return { day, currentHour, actual, forecast, batteryCharge, exportedLocal };
 }
 
 /**

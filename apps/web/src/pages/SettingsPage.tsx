@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
+import type { CfAccessSyncResult, HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
@@ -152,6 +152,8 @@ export function SettingsPage() {
           <SyncSection siteId={site.id} canEdit={canEdit} />
         </>
       )}
+
+      <CloudflareAccessSection canEdit={canEdit} />
     </div>
   );
 }
@@ -456,6 +458,94 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Whether the Cloudflare Access allow-list stays in step with the parties
+ * table, and a way to push it by hand.
+ *
+ * Every party save already triggers this automatically (see
+ * parties/routes.ts) — the button here exists for when that background push
+ * failed (a bad token, Cloudflare briefly unreachable) and the admin wants
+ * to retry it without re-saving a party. Shown whether or not it's
+ * configured, same as the Home Assistant section above: an unconfigured
+ * integration is useful to see, not just to use.
+ */
+function CloudflareAccessSection({ canEdit }: { canEdit: boolean }) {
+  const t = useT();
+  const statusQuery = useQuery({ queryKey: ["cf-access-status"], queryFn: api.cloudflareAccess.status });
+  const [result, setResult] = useState<CfAccessSyncResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const syncMutation = useMutation({
+    mutationFn: api.cloudflareAccess.sync,
+    onSuccess: (data) => {
+      setError(null);
+      setResult(data);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const configured = statusQuery.data?.configured ?? false;
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-white p-4">
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">{t("settings.cfAccess")}</h2>
+        <p className="mt-1 text-xs text-slate-500">{t("settings.cfAccessNote")}</p>
+      </div>
+
+      {!configured ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          {t("settings.cfAccessUnconfigured")}
+        </p>
+      ) : (
+        <>
+          <button
+            onClick={() => syncMutation.mutate()}
+            disabled={!canEdit || syncMutation.isPending}
+            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {syncMutation.isPending ? t("settings.syncing") : t("settings.cfAccessSyncNow")}
+          </button>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          {result && (
+            <div className="space-y-1.5 border-t pt-3 text-sm">
+              {result.policyName && (
+                <p className="text-xs text-slate-400">
+                  {result.created
+                    ? t("settings.cfAccessCreated", { name: result.policyName })
+                    : t("settings.cfAccessPolicy", { name: result.policyName })}
+                </p>
+              )}
+              {result.added.length === 0 && result.removed.length === 0 ? (
+                <p className="text-slate-500">
+                  {t("settings.cfAccessUnchanged", { count: result.unchangedCount })}
+                </p>
+              ) : (
+                <>
+                  {result.added.length > 0 && (
+                    <p>
+                      <span className="font-medium text-emerald-700">{t("settings.cfAccessAdded")}</span>{" "}
+                      {result.added.join(", ")}
+                    </p>
+                  )}
+                  {result.removed.length > 0 && (
+                    <p>
+                      <span className="font-medium text-amber-700">{t("settings.cfAccessRemoved")}</span>{" "}
+                      {result.removed.join(", ")}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

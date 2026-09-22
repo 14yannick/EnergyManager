@@ -615,6 +615,40 @@ export interface LiveDayCurve {
   actual: HourKwh[];
   /** The forecast per hour, from Home Assistant. Empty when no forecast source is configured. */
   forecast: HourKwh[];
+  /**
+   * What went into the battery each hour, DC side — energy `actual` never
+   * counted, because it never reached the inverter as AC that hour. Added to
+   * `actual`'s own value for the same hour, this is what the panels really
+   * made: the same "production + charging" the admin dashboard's own line
+   * shows (see DashboardPage.tsx). Kept raw and per-hour, like `actual`,
+   * rather than pre-summed, so the frontend combines them the same way in
+   * both places and can draw the split hour by hour, not just as a day total.
+   */
+  batteryCharge: HourKwh[];
+  /** What left the house each hour — to the grid or to a neighbour. */
+  exportedLocal: HourKwh[];
+}
+
+export interface CfAccessStatus {
+  /** True once CF_API_TOKEN and CF_ACCOUNT_ID are both set. */
+  configured: boolean;
+}
+
+/**
+ * What a sync (automatic or the manual button) did to the Cloudflare Access
+ * policy's include list. Addresses only — never what a party is, since this
+ * is shown after any party save, including a participant's own.
+ */
+export interface CfAccessSyncResult {
+  configured: boolean;
+  added: string[];
+  removed: string[];
+  /** Already matched what Cloudflare had; nothing was sent. */
+  unchangedCount: number;
+  /** True the one time this call had to create the policy rather than update it. */
+  created: boolean;
+  /** The policy's name — null only when `configured` is false. */
+  policyName: string | null;
 }
 
 export interface LiveEnergyView {
