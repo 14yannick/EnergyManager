@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes, Navigate } from "react-router-dom";
-import { useI18n, useT, type MessageKey } from "./i18n/context";
-import { useSession, type SessionState } from "./lib/useIdentity";
+import { NavLink, Route, Routes, Navigate, useLocation } from "react-router-dom";
+import { useT, type MessageKey } from "./i18n/context";
+import { useSession } from "./lib/useIdentity";
+import { logoutHref } from "./lib/session";
 import { PeriodProvider } from "./lib/usePeriod";
+import { LanguageSwitch } from "./components/LanguageSwitch";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TariffPeriodsPage } from "./pages/TariffPeriodsPage";
 import { CalculationDetailPage } from "./pages/CalculationDetailPage";
@@ -10,19 +12,14 @@ import { ReadingsImportPage } from "./pages/ReadingsImportPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { BillingPage } from "./pages/BillingPage";
 import { PartyDashboardPage } from "./pages/PartyDashboardPage";
+import { ProfilePage } from "./pages/ProfilePage";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  // `shrink-0` and `whitespace-nowrap`: between `sm` and `xl` the nav has its
-  // own row and scrolls sideways rather than squashing seven labels into two
-  // lines each. Below `sm` it is not this bar at all — see `MenuLinks`.
+  // `shrink-0` and `whitespace-nowrap`: below `xl` the nav has its own row
+  // and scrolls sideways rather than squashing eight labels into two lines
+  // each.
   `shrink-0 whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium ${
     isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-  }`;
-
-/** The same links stacked, where a row would have to be swiped to be read. */
-const menuLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `block rounded-md px-3 py-2 text-sm font-medium ${
-    isActive ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
   }`;
 
 interface NavItem {
@@ -32,17 +29,19 @@ interface NavItem {
 }
 
 /**
- * Where a role may go. One list, rendered twice — as the bar and as the phone
- * menu — so the two can never drift apart.
+ * Where a role may go.
  *
  * A participant sees their own consumption and their own invoices, nothing
- * else: every other page reads site-wide data the API refuses them.
+ * else: every other page reads site-wide data the API refuses them. Profile
+ * follows billing for everyone — it is where the session and the language
+ * live, and on a phone it is the last of the tabs that matter day to day.
  */
 function navItems(participant: boolean): NavItem[] {
   return participant
     ? [
         { to: "/", label: "nav.consumption", end: true },
         { to: "/billing", label: "nav.billing" },
+        { to: "/profile", label: "nav.profile" },
       ]
     : [
         // What the system did, then what it bills, then the inputs that
@@ -51,6 +50,7 @@ function navItems(participant: boolean): NavItem[] {
         { to: "/", label: "nav.dashboard", end: true },
         { to: "/consumption", label: "nav.consumption" },
         { to: "/billing", label: "nav.billing" },
+        { to: "/profile", label: "nav.profile" },
         { to: "/tariff-periods", label: "nav.tariffs" },
         { to: "/readings", label: "nav.readings" },
         { to: "/calculation", label: "nav.calculation" },
@@ -59,106 +59,26 @@ function navItems(participant: boolean): NavItem[] {
 }
 
 /**
- * Cloudflare Access ends a session by clearing its cookie at this path. It is
- * handled at the edge, so it never reaches our nginx or the API — and for the
- * same reason it only exists when the app is actually being served through
- * Cloudflare.
- *
- * `returnTo` sends the browser back to this app rather than leaving the user
- * on Cloudflare's own logout page. It is read from `location.origin` instead
- * of being written down, so the same build works on whatever hostname it is
- * served from — a second domain, a staging tunnel, or a LAN port.
+ * The tabs. One row at every width: on a phone it scrolls sideways, and the
+ * active tab is scrolled into view on arrival so the far end of an admin's
+ * eight links is never silently off-screen.
  */
-function logoutHref(): string {
-  const returnTo = `${window.location.origin}/`;
-  return `/cdn-cgi/access/logout?returnTo=${encodeURIComponent(returnTo)}`;
-}
-
-/**
- * Identity, and a way out of the session — whenever there is one to leave.
- *
- * Deliberately not driven by a successful `/api/me`: somebody Cloudflare let
- * in but this app has no role for gets a 403 from every call, and keying the
- * button on the response would hide it from precisely the person who most
- * needs it — signed in, unable to use the app, unable to sign out and try
- * another account. With authentication off there is no session at all, and
- * the link would only 404 at the edge, so nothing is shown.
- */
-function SessionBadge({ session }: { session: SessionState }) {
+function NavBar({ items }: { items: NavItem[] }) {
   const t = useT();
-  if (session.kind === "loading" || session.kind === "none" || session.kind === "expired") return null;
-
-  const email = session.kind === "active" ? session.identity.email : session.email;
-  const label =
-    session.kind === "active"
-      ? session.identity.role === "participant" && session.identity.partyName
-        ? session.identity.partyName
-        : t(`role.${session.identity.role}`)
-      : t("session.noAccess");
-
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document
+      .querySelector('header nav a[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
   return (
-    <div className="flex min-w-0 items-center gap-2 text-sm sm:gap-3">
-      {/* The address only appears where there is genuinely room for it beside
-          the nav; below that the role chip alone says who you are. Both
-          truncate, so neither a long address nor a long party name can push
-          the sign-out button off the screen. */}
-      <span className="hidden max-w-64 truncate align-middle text-slate-500 2xl:inline-block">
-        {email}
-      </span>
-      <span
-        className={`hidden max-w-40 shrink truncate rounded px-1.5 py-0.5 text-xs sm:inline-block ${
-          session.kind === "active"
-            ? "bg-slate-100 text-slate-600"
-            : "bg-amber-100 text-amber-900"
-        }`}
-      >
-        {label}
-      </span>
-      {session.kind === "active" && session.identity.simulated ? (
-        // AUTH_DEV_AS: no Cloudflare session exists to leave, and the logout
-        // path would only 404 locally. Say what this is instead.
-        <span className="shrink-0 whitespace-nowrap rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-900">
-          {t("session.preview")}
-        </span>
-      ) : (
-        <a
-          href={logoutHref()}
-          className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
-        >
-          {t("session.signOut")}
-        </a>
-      )}
-    </div>
-  );
-}
-
-/**
- * The language switch. Buttons rather than a dropdown: with three choices a
- * select hides the alternatives behind a click, and the whole point of this
- * control is that the other languages are one tap away.
- */
-function LanguageSwitch() {
-  const { locale, setLocale, t } = useI18n();
-  return (
-    <div
-      className="flex overflow-hidden rounded-md border border-slate-300 text-xs"
-      aria-label={t("session.language")}
-    >
-      {(["fr", "de", "en"] as const).map((code) => (
-        <button
-          key={code}
-          onClick={() => setLocale(code)}
-          aria-pressed={locale === code}
-          className={`px-2 py-1 font-medium uppercase ${
-            locale === code
-              ? "bg-slate-900 text-white"
-              : "bg-white text-slate-500 hover:bg-slate-50"
-          } ${code === "de" ? "border-x border-slate-300" : ""}`}
-        >
-          {code}
-        </button>
+    <nav className="order-last flex w-full gap-1 overflow-x-auto xl:order-none xl:w-auto xl:overflow-x-visible">
+      {items.map((item) => (
+        <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
+          {t(item.label)}
+        </NavLink>
       ))}
-    </div>
+    </nav>
   );
 }
 
@@ -209,8 +129,10 @@ function SessionExpired() {
  * What a rejected session sees instead of the app.
  *
  * Every page would otherwise render a wall of failed requests, which says
- * nothing useful and buries the sign-out button. One statement of what
- * happened, and what to do about it.
+ * nothing useful. One statement of what happened, and what to do about it —
+ * with the sign-out right here, since there is no profile page to reach:
+ * somebody Cloudflare let in but this app has no role for is precisely the
+ * person who most needs a way out to try another account.
  */
 function NoAccess({ email, status }: { email: string | null; status: number }) {
   const t = useT();
@@ -227,12 +149,15 @@ function NoAccess({ email, status }: { email: string | null; status: number }) {
       ) : (
         <p className="mt-2">{t("noAccess.unrecognised")}</p>
       )}
-      <a
-        href={logoutHref()}
-        className="mt-4 inline-block rounded-md border border-amber-400 bg-white px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-100"
-      >
-        {t("session.signOut")}
-      </a>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <a
+          href={logoutHref()}
+          className="inline-block rounded-md border border-amber-400 bg-white px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-100"
+        >
+          {t("session.signOut")}
+        </a>
+        <LanguageSwitch />
+      </div>
     </div>
   );
 }
@@ -240,100 +165,25 @@ function NoAccess({ email, status }: { email: string | null; status: number }) {
 export function App() {
   const session = useSession();
   const t = useT();
-  const [menuOpen, setMenuOpen] = useState(false);
   const participant = session.kind === "active" && session.identity.role === "participant";
   const items = navItems(participant);
+  // Hidden for a rejected session: none of it leads anywhere.
+  const showNav = session.kind !== "rejected" && session.kind !== "expired";
 
   return (
     <PeriodProvider>
       <div className="min-h-screen bg-slate-50">
-      {/* Kept out of print: the billing page prints participant invoices,
-          and a nav bar on a document that goes to a neighbour is noise. */}
       {/* Sticky: these pages are long tables, and losing the nav after one
           screen means scrolling back to the top to go anywhere. Kept out of
           print: the billing page prints participant invoices, and a nav bar on
           a document that goes to a neighbour is noise. */}
       <header className="sticky top-0 z-20 border-b bg-white print:hidden">
-        {/* Wraps below `xl`: the seven links plus the language switch and the
-            session badge need about 1260px, so letting them try on anything
-            narrower pushed the sign-out button off the side of the screen and
-            gave every page a horizontal scrollbar. */}
+        {/* The tabs wrap under the brand below `xl` (`order-last w-full` in
+            NavBar) and sit beside it above. */}
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 lg:px-8 xl:flex-nowrap">
           <span className="text-lg font-semibold text-slate-900">{t("app.name")}</span>
-          {/* Hidden for a rejected session: none of it leads anywhere, and it
-              crowds out the one control that does.
-
-              `order-last w-full` puts it on its own line under the brand until
-              there is room beside it; `overflow-x-auto` keeps the overflow
-              inside the bar instead of widening the page. Below `sm` even
-              swiping could not reach the far links, and nothing said they were
-              there, so the menu button takes over. */}
-          <nav
-            className={`order-last hidden w-full gap-1 overflow-x-auto sm:flex xl:order-none xl:w-auto xl:overflow-x-visible ${
-              session.kind === "rejected" || session.kind === "expired" ? "sm:hidden" : ""
-            }`}
-          >
-            {items.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
-                {t(item.label)}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
-            <LanguageSwitch />
-            <SessionBadge session={session} />
-            {session.kind !== "rejected" && session.kind !== "expired" && (
-              <button
-                type="button"
-                onClick={() => setMenuOpen((open) => !open)}
-                aria-expanded={menuOpen}
-                aria-controls="nav-menu"
-                aria-label={t("nav.menu")}
-                className="shrink-0 rounded-md border border-slate-300 p-1.5 text-slate-700 hover:bg-slate-100 sm:hidden"
-              >
-                <svg
-                  viewBox="0 0 20 20"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  aria-hidden="true"
-                >
-                  {menuOpen ? (
-                    <>
-                      <line x1="5" y1="5" x2="15" y2="15" />
-                      <line x1="15" y1="5" x2="5" y2="15" />
-                    </>
-                  ) : (
-                    <>
-                      <line x1="3" y1="6" x2="17" y2="6" />
-                      <line x1="3" y1="10" x2="17" y2="10" />
-                      <line x1="3" y1="14" x2="17" y2="14" />
-                    </>
-                  )}
-                </svg>
-              </button>
-            )}
-          </div>
+          {showNav && <NavBar items={items} />}
         </div>
-        {menuOpen && session.kind !== "rejected" && session.kind !== "expired" && (
-          <nav id="nav-menu" className="border-t px-4 pb-3 pt-2 sm:hidden">
-            {items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                // Closing on the way out: leaving the sheet open over the page
-                // it just navigated to would hide the thing it was opened for.
-                onClick={() => setMenuOpen(false)}
-                className={menuLinkClass}
-              >
-                {t(item.label)}
-              </NavLink>
-            ))}
-          </nav>
-        )}
       </header>
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 lg:px-8">
@@ -350,6 +200,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<PartyDashboardPage />} />
             <Route path="/billing" element={<BillingPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         ) : (
@@ -363,6 +214,7 @@ export function App() {
             <Route path="/readings" element={<ReadingsImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/billing" element={<BillingPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         )}

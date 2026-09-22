@@ -176,7 +176,9 @@ export function PartyDashboardPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-slate-700">{t("dash.kpi")}</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {/* Two abreast even on a phone: four figures in a column is a screen
+            of scrolling for what fits in two rows. */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard
             label={t("party.kpi.saved")}
             // The figure the page exists to answer, so it leads and stands out.
@@ -184,7 +186,6 @@ export function PartyDashboardPage() {
             emphasis={totals != null && totals.savedChf > 0 ? "positive" : "strong"}
             hint={t("party.kpi.savedHint")}
             value={totals?.savedChf}
-            sub={totals ? t("party.kpi.savedSub", { direct: totals.directCostChf.toFixed(2) }) : undefined}
           />
           <StatCard
             label={t("party.kpi.total")}
@@ -196,23 +197,15 @@ export function PartyDashboardPage() {
                 : undefined
             }
           />
-          <StatCard
-            label={t("party.kpi.localShare")}
-            value={share}
-            format={(v) => `${v.toFixed(0)} %`}
-            sub={totals ? t("party.kpi.localShareSub", { kwh: totals.localKwh.toFixed(1) }) : undefined}
-          />
+          {/* No kWh under it: the consumption card beside it already gives
+              the local kWh, and the share is the one thing this adds. */}
+          <StatCard label={t("party.kpi.localShare")} value={share} format={(v) => `${v.toFixed(0)} %`} />
           <StatCard
             label={t("party.kpi.cost")}
             value={totals?.rcpCostChf}
-            sub={
-              totals && totalKwh > 0
-                ? t("party.kpi.costSub", {
-                    rate: ((totals.rcpCostChf / totalKwh) * 100).toFixed(1),
-                    cents: t("billing.cents"),
-                  })
-                : undefined
-            }
+            // The direct-supply figure sits under the cost it is compared
+            // with, leaving the benefit to stand alone as the headline.
+            sub={totals ? t("party.kpi.savedSub", { direct: totals.directCostChf.toFixed(2) }) : undefined}
           />
         </div>
       </section>
@@ -285,7 +278,7 @@ function LiveSection({ siteId }: { siteId: string | null | undefined }) {
         </h2>
       </div>
       {hasCards && (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {live.exportW != null && (
           <LiveCard
             label={t("party.live.exporting")}
@@ -553,9 +546,9 @@ function LiveCard({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="rounded-lg border bg-white p-3 sm:p-4">
       <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold ${highlight ? "text-emerald-700" : "text-slate-900"}`}>
+      <p className={`mt-1 text-xl font-semibold sm:text-2xl ${highlight ? "text-emerald-700" : "text-slate-900"}`}>
         {value}
       </p>
       {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
