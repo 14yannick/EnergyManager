@@ -4,7 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EnergyManager</title>
-    <link rel="manifest" href="/manifest.json" />
+    <!-- Behind Cloudflare Access the whole hostname needs a session cookie.
+         Unlike a navigation, a script, or a stylesheet, a manifest link is
+         fetched without credentials by default even for a same-origin URL —
+         `use-credentials` is what makes it carry the Access cookie, the same
+         way visiting /manifest.json directly in the address bar already did. -->
+    <link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0f172a" />
