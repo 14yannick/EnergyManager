@@ -81,10 +81,9 @@ describe("buildParticipantInvoice", () => {
 
   it("charges grid positions on grid kWh only, and local energy at the agreed rate", () => {
     const inv = buildParticipantInvoice(inputs());
-    expect(inv.lines.find((l) => l.label.includes("production locale"))!.amountChf).toBeCloseTo(
-      2000 * 0.14,
-      2,
-    );
+    // The line's own label is a placeholder never shown — the UI prints by
+    // `kind` in the reader's language — so `kind` is what identifies it here.
+    expect(inv.lines.find((l) => l.kind === "local")!.amountChf).toBeCloseTo(2000 * 0.14, 2);
     // Only the 1000 grid kWh carry the provider's per-kWh positions.
     expect(inv.lines.find((l) => l.label === "Energie Einheitstarif")!.quantity).toBe(1000);
   });
