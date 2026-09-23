@@ -9,6 +9,7 @@ import {
   ownerIsMember,
   isBilledParty,
   participantCountOf,
+  partyValidForPeriod,
   localMidnightIso,
   periodBounds,
   positionsChangingWithin,
@@ -194,6 +195,43 @@ describe("participantCountOf", () => {
     expect(participantCountOf([])).toBe(1);
     expect(participantCountOf([p("viewer")])).toBe(1);
     expect(participantCountOf([p("rcp_admin_only"), p("viewer")])).toBe(0);
+  });
+
+  it("takes the unlisted-owner fallback from whether the site has an admin at all, not from who's billed this period", () => {
+    // An admin party that HAS been entered, but isn't valid for the period
+    // being billed (a caller filtering by partyValidForPeriod, say), must not
+    // be mistaken for "never entered" — that would add a phantom participant
+    // instead of correctly reporting zero.
+    const siteParties = [p("rcp_party"), p("rcp_party"), p("rcp_party"), p("rcp_admin")];
+    expect(participantCountOf([], siteParties)).toBe(0);
+    // With no second argument, the list decides for itself, as before — an
+    // actually-unlisted owner still gets the +1.
+    expect(participantCountOf([p("rcp_party"), p("rcp_party"), p("rcp_party")])).toBe(4);
+  });
+});
+
+describe("partyValidForPeriod", () => {
+  const party = (startDate: string | null, endDate: string | null) => ({ startDate, endDate });
+
+  it("is valid for a period with no bounds set on either side", () => {
+    expect(partyValidForPeriod(party(null, null), "2026-01-01", "2026-01-31")).toBe(true);
+  });
+
+  it("is valid when membership covers the whole period", () => {
+    expect(partyValidForPeriod(party("2025-12-01", "2026-02-01"), "2026-01-01", "2026-01-31")).toBe(true);
+    // The boundary itself counts: starting exactly on the period's first day,
+    // or ending exactly on its last, is still a full period of membership.
+    expect(partyValidForPeriod(party("2026-01-01", "2026-01-31"), "2026-01-01", "2026-01-31")).toBe(true);
+  });
+
+  it("is invalid when membership starts after the period begins", () => {
+    // Joined mid-period — this engine doesn't prorate, so they're left out
+    // entirely rather than billed for a stretch they weren't present for.
+    expect(partyValidForPeriod(party("2026-01-15", null), "2026-01-01", "2026-01-31")).toBe(false);
+  });
+
+  it("is invalid when membership ends before the period closes", () => {
+    expect(partyValidForPeriod(party(null, "2026-01-15"), "2026-01-01", "2026-01-31")).toBe(false);
   });
 });
 
@@ -405,5 +443,38 @@ describe("the owner's own consumption on their invoice", () => {
     expect(inv.comparison.savingSplit.directUseChf).toBe(0);
     expect(inv.comparison.savingSplit.batteryChf).toBe(0);
     expect(inv.comparison.savingSplit.rcpChf).toBeCloseTo(inv.comparison.savingChf, 2);
+  });
+
+  it("leads the invoice with the feed-in credit, ahead of even the self-consumed lines", () => {
+    const inputs = owner();
+    inputs.usage = { ...inputs.usage, feedInKwh: 500, feedInRevenueChf: 60 };
+    const inv = buildParticipantInvoice(inputs);
+    const [first] = inv.lines;
+    expect(first?.kind).toBe("feed_in");
+    expect(first?.quantity).toBe(500);
+    // The revenue is already priced (possibly per interval, for a dynamic
+    // tariff) — the line's rate is only ever derived back from it for
+    // display, never the other way around.
+    expect(first?.unitRateChf).toBeCloseTo(0.12, 4);
+    expect(first?.amountChf).toBe(-60);
+  });
+
+  it("reduces the amount due by exactly the feed-in credit", () => {
+    const withoutFeedIn = buildParticipantInvoice(owner());
+    const inputs = owner();
+    inputs.usage = { ...inputs.usage, feedInKwh: 500, feedInRevenueChf: 60 };
+    const withFeedIn = buildParticipantInvoice(inputs);
+    expect(withFeedIn.totalChf).toBeCloseTo(withoutFeedIn.totalChf - 60, 2);
+  });
+
+  it("does not let the feed-in credit inflate the vZEV's own benefit", () => {
+    // The credit is the owner's income from the grid provider, earned with
+    // or without a shared connection — it must cancel out of the comparison
+    // rather than being counted as part of what the vZEV saved them.
+    const withoutFeedIn = buildParticipantInvoice(owner());
+    const inputs = owner();
+    inputs.usage = { ...inputs.usage, feedInKwh: 500, feedInRevenueChf: 60 };
+    const withFeedIn = buildParticipantInvoice(inputs);
+    expect(withFeedIn.comparison.savingChf).toBeCloseTo(withoutFeedIn.comparison.savingChf, 2);
   });
 });

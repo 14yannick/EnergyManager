@@ -166,6 +166,12 @@ export const partyInputSchema = z.object({
   role: z.enum(["rcp_party", "rcp_admin", "rcp_admin_only", "viewer"]).optional(),
   /** Payable-to account for the QR-bill. Only read for an admin party. */
   iban: optionalWhenBlank(ibanish).nullable(),
+  /** When this party's membership starts/ends — blank means no bound either way. */
+  startDate: optionalWhenBlank(isoDate).nullable(),
+  endDate: optionalWhenBlank(isoDate).nullable(),
+}).refine((v) => !v.startDate || !v.endDate || v.endDate > v.startDate, {
+  message: "End date must be after the start date.",
+  path: ["endDate"],
 });
 export type PartyInput = z.infer<typeof partyInputSchema>;
 
@@ -220,3 +226,17 @@ export const dynamicTariffQuerySchema = dateRangeQuerySchema.extend({
   kind: tariffKindSchema.optional(),
 });
 export type DynamicTariffQuery = z.infer<typeof dynamicTariffQuerySchema>;
+
+/** The PDF's fixed labels follow whichever language the admin generated it in. */
+export const invoiceLocaleSchema = z.enum(["fr", "de", "en"]);
+export type InvoiceLocale = z.infer<typeof invoiceLocaleSchema>;
+
+export const generateInvoicesSchema = dateRangeQuerySchema.extend({
+  locale: invoiceLocaleSchema,
+  /** Which parties to invoice — the checked rows of the Billing page's preview. */
+  partyIds: z.array(z.string()).min(1),
+});
+export type GenerateInvoicesInput = z.infer<typeof generateInvoicesSchema>;
+
+export const markInvoicePaidSchema = z.object({ paidAt: isoDate });
+export type MarkInvoicePaidInput = z.infer<typeof markInvoicePaidSchema>;

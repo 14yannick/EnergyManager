@@ -11,6 +11,7 @@ import { dynamicTariffRoutes } from "./modules/dynamicTariffs/routes.js";
 import { partyRoutes } from "./modules/parties/routes.js";
 import { homeAssistantRoutes } from "./modules/homeAssistant/routes.js";
 import { billingRoutes } from "./modules/billing/routes.js";
+import { invoiceRoutes } from "./modules/invoices/routes.js";
 import { communityRoutes } from "./modules/community/routes.js";
 import { consumptionRoutes } from "./modules/consumption/routes.js";
 import { meRoutes } from "./modules/me/routes.js";
@@ -50,6 +51,7 @@ export async function buildApp() {
   await app.register(partyRoutes);
   await app.register(homeAssistantRoutes);
   await app.register(billingRoutes);
+  await app.register(invoiceRoutes);
   await app.register(communityRoutes);
   await app.register(consumptionRoutes);
   await app.register(meRoutes);

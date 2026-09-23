@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import type { HourKwh, LiveDayCurve, LiveEnergyView } from "@energy-manager/shared";
+import type { HourKwh, LiveDayCurve, LiveEnergyView, TomorrowForecast } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, sites } from "../../db/schema/index.js";
 import { fetchHaNumericStates, fetchSolarForecast } from "./haClient.js";
@@ -80,6 +80,26 @@ async function todaysCurve(siteId: string, now: Date): Promise<LiveDayCurve | nu
   return { day, currentHour, actual, forecast, batteryCharge, exportedLocal };
 }
 
+/** The next local calendar day. Noon UTC as the anchor keeps this safe
+ * across a DST boundary, which midnight would not be. */
+function nextLocalDay(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Tomorrow's forecast, hour by hour — from the same feed as today's, which
+ * publishes several days ahead. Empty until the feed actually covers
+ * tomorrow, which is usually from the evening before.
+ */
+async function tomorrowsForecast(today: string): Promise<TomorrowForecast> {
+  const day = nextLocalDay(today);
+  const sources = await cachedForecastSources();
+  const hourly = forecastForDay(mergeForecastSources(sources), day);
+  return { day, hourly };
+}
+
 /**
  * What the site is doing at this instant, for the participants' view.
  *
@@ -109,13 +129,17 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
   const now = new Date();
   const at = now.toISOString();
   const ids = Object.values(site).filter((v): v is string => typeof v === "string");
-  // The curve needs no entity: production comes from the store and the
+  // Neither needs a live entity: production comes from the store and the
   // forecast from Home Assistant's own energy setup, so a site with no live
-  // sensors mapped can still show its day.
-  const today = await todaysCurve(siteId, now);
+  // sensors mapped can still show its day, or tomorrow's forecast.
+  const [today, tomorrow] = await Promise.all([
+    todaysCurve(siteId, now),
+    tomorrowsForecast(localDayHour(now).day),
+  ]);
   if (ids.length === 0) {
     return {
       today,
+      tomorrow,
       at,
       exportW: null,
       pvW: null,
@@ -135,6 +159,7 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
 
   return {
     today,
+    tomorrow,
     at,
     exportW,
     pvW: read(site.pvPower),

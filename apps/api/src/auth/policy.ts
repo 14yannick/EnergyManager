@@ -73,6 +73,16 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   // Filtered to the caller's own party for `participant` — see billing/routes.
   "/api/sites/:siteId/billing/invoices": { GET: PARTICIPANT_READ },
 
+  // Dated, persisted invoices — the Account tab. Filtered to the caller's
+  // own party for `participant`, same as billing/invoices above; the batch
+  // summary, generating, marking paid and cancelling all change or reveal
+  // billing state site-wide, so those stay admin-only.
+  "/api/sites/:siteId/invoices": { GET: PARTICIPANT_READ },
+  "/api/sites/:siteId/invoices/locks": { GET: ADMIN },
+  "/api/sites/:siteId/invoices/generate": { POST: ADMIN },
+  "/api/invoices/:id/paid": { PATCH: ADMIN },
+  "/api/invoices/batches/:batchId/cancel": { POST: ADMIN },
+
   "/api/sites/:siteId/community/summary": { GET: PARTICIPANT_READ },
   // A participant only for their own party — see consumption/routes.
   "/api/sites/:siteId/parties/:partyId/consumption": { GET: PARTICIPANT_READ },

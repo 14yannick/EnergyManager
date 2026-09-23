@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   intervalMetricKindSchema,
+  swissDate,
   type IntervalMetricKind,
   type ReadingImportMode,
   type ReadingsImportResult,
@@ -232,6 +233,10 @@ const EMPTY_PARTY = {
   // QR-bill is payable to.
   role: "rcp_party" as PartyRole,
   iban: "",
+  // Membership bounds — a tenant moving in or out mid-period, say. Blank
+  // means no bound either way, which is what almost every party has.
+  startDate: "",
+  endDate: "",
 };
 
 /**
@@ -283,6 +288,8 @@ function PartiesSection({ siteId }: { siteId: string }) {
     city: v.city.trim(),
     role: v.role,
     iban: v.iban.trim(),
+    startDate: v.startDate,
+    endDate: v.endDate,
   });
 
   const createMutation = useMutation({
@@ -411,6 +418,24 @@ function PartiesSection({ siteId }: { siteId: string }) {
             ))}
           </select>
         </label>
+        <label className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
+          {t("parties.startDate")}
+          <input
+            type="date"
+            className="input w-40"
+            value={draft.startDate}
+            onChange={(e) => setDraft({ ...draft, startDate: e.target.value })}
+          />
+        </label>
+        <label className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
+          {t("parties.endDate")}
+          <input
+            type="date"
+            className="input w-40"
+            value={draft.endDate}
+            onChange={(e) => setDraft({ ...draft, endDate: e.target.value })}
+          />
+        </label>
         <button
           type="submit"
           disabled={createMutation.isPending || draft.name.trim() === ""}
@@ -431,6 +456,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
               <th className="py-1 pr-3 font-medium">{t("parties.address")}</th>
               <th className="py-1 pr-3 font-medium">{t("parties.emailsShort")}</th>
               <th className="py-1 pr-3 font-medium">{t("parties.roleIban")}</th>
+              <th className="py-1 pr-3 font-medium">{t("parties.membership")}</th>
               <th className="py-1" />
             </tr>
           </thead>
@@ -551,6 +577,30 @@ function PartiesSection({ siteId }: { siteId: string }) {
                       </span>
                     )}
                   </td>
+                  <td className="py-2 pr-3">
+                    {isEditing ? (
+                      <div className="flex flex-col gap-1">
+                        <input
+                          type="date"
+                          className="input w-36"
+                          value={edit.startDate}
+                          onChange={(e) => setEdit({ ...edit, startDate: e.target.value })}
+                        />
+                        <input
+                          type="date"
+                          className="input w-36"
+                          value={edit.endDate}
+                          onChange={(e) => setEdit({ ...edit, endDate: e.target.value })}
+                        />
+                      </div>
+                    ) : p.startDate || p.endDate ? (
+                      <span className="text-slate-600">
+                        {p.startDate ? swissDate(p.startDate) : "…"} – {p.endDate ? swissDate(p.endDate) : "…"}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
                   <td className="py-2 text-right whitespace-nowrap">
                     {isEditing ? (
                       <>
@@ -581,6 +631,8 @@ function PartiesSection({ siteId }: { siteId: string }) {
                               city: p.city ?? "",
                               role: p.role,
                               iban: p.iban ?? "",
+                              startDate: p.startDate ?? "",
+                              endDate: p.endDate ?? "",
                             });
                           }}
                           className="mr-3 text-slate-500 hover:text-slate-900"

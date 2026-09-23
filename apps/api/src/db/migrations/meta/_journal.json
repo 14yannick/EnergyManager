@@ -176,6 +176,20 @@
       "when": 1789978168138,
       "tag": "0024_live_export_sign",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790189401343,
+      "tag": "0025_add_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790191923228,
+      "tag": "0026_add_party_dates",
+      "breakpoints": true
     }
   ]
 }

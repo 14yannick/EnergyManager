@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { FeedInRatePoint, LiveDayCurve } from "@energy-manager/shared";
+import type { FeedInRatePoint, LiveDayCurve, TomorrowForecast } from "@energy-manager/shared";
 import type { PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useSelectedPeriod } from "../lib/usePeriod";
@@ -284,6 +284,7 @@ function LiveSection({
   showFeedInRate: boolean;
 }) {
   const t = useT();
+  const [dayView, setDayView] = useState<"today" | "tomorrow">("today");
   const query = useQuery({
     queryKey: ["ha-live", siteId],
     queryFn: () => api.homeAssistant.live(siteId!),
@@ -294,6 +295,9 @@ function LiveSection({
     refetchInterval: 60 * 1000,
   });
   const live = query.data;
+  // Both the forecast and the day-ahead rate usually publish only from the
+  // evening before, so there is often nothing to switch to yet.
+  const showTomorrow = (live?.tomorrow?.hourly.some((h) => h.kwh > 0)) ?? false;
 
   // Resolved by the same rate resolver the invoice and dashboard price
   // every kWh against, so it can never drift out of step with what the rest
@@ -305,9 +309,17 @@ function LiveSection({
     queryFn: () => api.savings.feedInRate(siteId!, live!.today!.day),
     enabled: showFeedInRate && !!siteId && !!live?.today,
   });
+  // Fetched lazily — only once someone actually switches to it — rather
+  // than on every load alongside today's, since most visits never look.
+  const tomorrowRateQuery = useQuery({
+    queryKey: ["feed-in-rate", siteId, live?.tomorrow?.day],
+    queryFn: () => api.savings.feedInRate(siteId!, live!.tomorrow!.day),
+    enabled: showFeedInRate && !!siteId && !!live?.tomorrow && dayView === "tomorrow",
+  });
 
   if (!live) return null;
   const feedInRateByHour = showFeedInRate ? hourlyFeedInRate(dayRateQuery.data) : undefined;
+  const tomorrowFeedInRateByHour = showFeedInRate ? hourlyFeedInRate(tomorrowRateQuery.data) : undefined;
 
   // The cards need a live entity each; the day's curve needs none — it
   // reads production from the store and the forecast from Home Assistant's
@@ -367,7 +379,17 @@ function LiveSection({
         )}
       </div>
       )}
-      {live.today && <DayCurveChart today={live.today} feedInRateByHour={feedInRateByHour} />}
+      {live.today && (
+        <DayCurveChart
+          today={live.today}
+          tomorrow={live.tomorrow}
+          feedInRateByHour={feedInRateByHour}
+          tomorrowFeedInRateByHour={tomorrowFeedInRateByHour}
+          showTomorrow={showTomorrow}
+          dayView={dayView}
+          onDayViewChange={setDayView}
+        />
+      )}
     </section>
   );
 }
@@ -419,9 +441,41 @@ function DayStat({ label, value, hint }: { label: string; value: string; hint?: 
   );
 }
 
+/** The Today/Tomorrow segmented toggle, shown only once tomorrow has anything. */
+function DayViewToggle({
+  view,
+  onChange,
+}: {
+  view: "today" | "tomorrow";
+  onChange: (view: "today" | "tomorrow") => void;
+}) {
+  const t = useT();
+  const option = (value: "today" | "tomorrow", label: string) => (
+    <button
+      type="button"
+      onClick={() => onChange(value)}
+      aria-pressed={view === value}
+      className={`px-2 py-1 text-xs font-medium ${
+        view === value ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
+      {option("today", t("party.live.viewToday"))}
+      <div className="w-px bg-slate-300" />
+      {option("tomorrow", t("party.live.viewTomorrow"))}
+    </div>
+  );
+}
+
 /**
- * Today, hour by hour: bars for what the panels made, a dashed line for
- * what was expected, and the part of the line still ahead shaded in.
+ * Today, hour by hour — bars for what the panels made, a dashed line for
+ * what was expected, and the part of the line still ahead shaded in — or,
+ * toggled to tomorrow, just the forecast and the feed-in rate already known
+ * for it, both usually published from the evening before.
  *
  * Every hour from the first with anything to the last is on the axis, so
  * a gap in the readings shows as a gap and not as time skipped. The hour in
@@ -431,15 +485,57 @@ function DayStat({ label, value, hint }: { label: string; value: string; hint?: 
  */
 function DayCurveChart({
   today,
+  tomorrow,
   feedInRateByHour,
+  tomorrowFeedInRateByHour,
+  showTomorrow,
+  dayView,
+  onDayViewChange,
 }: {
   today: LiveDayCurve;
+  tomorrow: TomorrowForecast | null;
   /** Undefined for a participant: see LiveSection's `showFeedInRate`. */
   feedInRateByHour?: Map<number, number>;
+  tomorrowFeedInRateByHour?: Map<number, number>;
+  showTomorrow: boolean;
+  dayView: "today" | "tomorrow";
+  onDayViewChange: (view: "today" | "tomorrow") => void;
 }) {
   const t = useT();
-  const hasRate = (feedInRateByHour?.size ?? 0) > 0;
+  // Falls back to "today" even if the toggle's own state is still
+  // "tomorrow" from an earlier, richer refresh — the toggle only offers
+  // "tomorrow" while `showTomorrow` holds, so this never fights the user,
+  // only a state that outlived the data behind it.
+  const view = showTomorrow ? dayView : "today";
+  const rateByHour = view === "today" ? feedInRateByHour : tomorrowFeedInRateByHour;
+  const hasRate = (rateByHour?.size ?? 0) > 0;
   const points = useMemo<CurvePoint[]>(() => {
+    if (view === "tomorrow") {
+      if (!tomorrow) return [];
+      const forecast = new Map(tomorrow.hourly.map((h) => [h.hour, h.kwh]));
+      const hours = [...forecast.entries()].filter(([, kwh]) => kwh > 0).map(([hour]) => hour);
+      if (hours.length === 0) return [];
+      const first = Math.min(...hours);
+      const last = Math.max(...hours);
+      const out: CurvePoint[] = [];
+      for (let hour = first; hour <= last; hour++) {
+        const f = forecast.get(hour) ?? null;
+        out.push({
+          hour,
+          label: `${String(hour).padStart(2, "0")}:00`,
+          made: null,
+          exported: null,
+          kept: null,
+          forecast: f,
+          // The whole day is still ahead — unlike today, there is no "so
+          // far" to subtract it from.
+          remaining: f,
+          feedInRate: tomorrowFeedInRateByHour?.get(hour) ?? null,
+          partial: false,
+        });
+      }
+      return out;
+    }
     const production = new Map(today.actual.map((h) => [h.hour, h.kwh]));
     const charge = new Map(today.batteryCharge.map((h) => [h.hour, h.kwh]));
     const exportedLocal = new Map(today.exportedLocal.map((h) => [h.hour, h.kwh]));
@@ -480,7 +576,7 @@ function DayCurveChart({
       });
     }
     return out;
-  }, [today, feedInRateByHour]);
+  }, [view, today, tomorrow, feedInRateByHour, tomorrowFeedInRateByHour]);
   if (points.length === 0) return null;
 
   // What the panels made today, one figure: production (AC delivered) plus
@@ -491,18 +587,28 @@ function DayCurveChart({
   const batteryChargeKwh = today.batteryCharge.reduce((sum, h) => sum + h.kwh, 0);
   const exportedKwh = today.exportedLocal.reduce((sum, h) => sum + h.kwh, 0);
   const madeKwh = producedKwh + batteryChargeKwh;
-  const forecastKwh = today.forecast.reduce((sum, h) => sum + h.kwh, 0);
+  const forecastKwh = (view === "tomorrow" ? (tomorrow?.hourly ?? []) : today.forecast).reduce(
+    (sum, h) => sum + h.kwh,
+    0,
+  );
 
   return (
     <div className="rounded-lg border bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="text-sm font-medium text-slate-900">
-          {t("party.live.chart")}
-          <InfoTip text={t("party.live.chartNote")} />
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm font-medium text-slate-900">
+            {t(view === "tomorrow" ? "party.live.tomorrowChart" : "party.live.chart")}
+            <InfoTip text={t(view === "tomorrow" ? "party.live.tomorrowChartNote" : "party.live.chartNote")} />
+          </p>
+          {showTomorrow && <DayViewToggle view={view} onChange={onDayViewChange} />}
+        </div>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
-          <DayStat label={t("party.live.madeToday")} hint={t("party.live.madeTodayHint")} value={`${madeKwh.toFixed(1)} kWh`} />
-          <DayStat label={t("party.live.leftHouse")} value={`${exportedKwh.toFixed(1)} kWh`} />
+          {view === "today" && (
+            <>
+              <DayStat label={t("party.live.madeToday")} hint={t("party.live.madeTodayHint")} value={`${madeKwh.toFixed(1)} kWh`} />
+              <DayStat label={t("party.live.leftHouse")} value={`${exportedKwh.toFixed(1)} kWh`} />
+            </>
+          )}
           <DayStat label={t("party.live.forecastTotal")} value={`${forecastKwh.toFixed(1)} kWh`} />
         </div>
       </div>
@@ -539,18 +645,22 @@ function DayCurveChart({
                       {p.label}
                       {p.partial ? ` · ${t("party.live.partial")}` : ""}
                     </p>
-                    <p className="text-slate-600">
-                      {t("party.live.madeToday")}:{" "}
-                      <span className="font-semibold text-slate-900">
-                        {p.made == null ? "—" : `${p.made.toFixed(2)} kWh`}
-                      </span>
-                    </p>
-                    <p className="pl-2 text-slate-500">
-                      {t("party.live.leftHouse")}: {p.exported == null ? "—" : `${p.exported.toFixed(2)} kWh`}
-                    </p>
-                    <p className="pl-2 text-slate-500">
-                      {t("party.live.keptAtHome")}: {p.kept == null ? "—" : `${p.kept.toFixed(2)} kWh`}
-                    </p>
+                    {view === "today" && (
+                      <>
+                        <p className="text-slate-600">
+                          {t("party.live.madeToday")}:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {p.made == null ? "—" : `${p.made.toFixed(2)} kWh`}
+                          </span>
+                        </p>
+                        <p className="pl-2 text-slate-500">
+                          {t("party.live.leftHouse")}: {p.exported == null ? "—" : `${p.exported.toFixed(2)} kWh`}
+                        </p>
+                        <p className="pl-2 text-slate-500">
+                          {t("party.live.keptAtHome")}: {p.kept == null ? "—" : `${p.kept.toFixed(2)} kWh`}
+                        </p>
+                      </>
+                    )}
                     <p className="mt-1 text-slate-600">
                       {t("party.live.forecast")}:{" "}
                       <span className="font-semibold text-slate-900">
@@ -592,24 +702,29 @@ function DayCurveChart({
                 foot, the same colour and position the single bar used to
                 have, and what stayed — self-consumed plus whatever charged
                 the battery — on top of it. Only the top segment is rounded,
-                as one bar rather than two independently-cornered blocks. */}
-            <Bar
-              dataKey="exported"
-              name={t("party.live.leftHouse")}
-              stackId="made"
-              fill={EXPORTED_COLOR}
-              maxBarSize={28}
-              isAnimationActive={false}
-            />
-            <Bar
-              dataKey="kept"
-              name={t("party.live.keptAtHome")}
-              stackId="made"
-              fill={KEPT_COLOR}
-              maxBarSize={28}
-              radius={[3, 3, 0, 0]}
-              isAnimationActive={false}
-            />
+                as one bar rather than two independently-cornered blocks.
+                Tomorrow has no bars at all: nothing has happened yet. */}
+            {view === "today" && (
+              <>
+                <Bar
+                  dataKey="exported"
+                  name={t("party.live.leftHouse")}
+                  stackId="made"
+                  fill={EXPORTED_COLOR}
+                  maxBarSize={28}
+                  isAnimationActive={false}
+                />
+                <Bar
+                  dataKey="kept"
+                  name={t("party.live.keptAtHome")}
+                  stackId="made"
+                  fill={KEPT_COLOR}
+                  maxBarSize={28}
+                  radius={[3, 3, 0, 0]}
+                  isAnimationActive={false}
+                />
+              </>
+            )}
             <Line
               type="monotone"
               dataKey="forecast"
@@ -629,10 +744,10 @@ function DayCurveChart({
                 name={t("calc.col.feedInRate")}
                 stroke={FEED_IN_RATE_COLOR}
                 strokeWidth={2}
-                // Unlike the forecast, this line often covers only the hours
-                // that have elapsed so far — early in the day that can be a
-                // single point, which a bare line (no dot) would draw as
-                // nothing at all.
+                // Often covers only part of the window — early in the day, or
+                // early in the evening for tomorrow — which can be a single
+                // point, which a bare line (no dot) would draw as nothing at
+                // all.
                 dot={{ r: 2, fill: FEED_IN_RATE_COLOR, strokeWidth: 0 }}
                 isAnimationActive={false}
                 connectNulls={false}

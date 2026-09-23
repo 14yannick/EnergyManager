@@ -162,6 +162,9 @@ export interface Party {
   role: PartyRole;
   /** Account the QR-bill is payable to. Only meaningful on an admin party. */
   iban: string | null;
+  /** When this party's membership starts/ends — null means no bound either way. */
+  startDate: string | null;
+  endDate: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -291,7 +294,14 @@ export type InvoiceLineKind =
   /** The owner's PV used as it was made — worth nothing on the invoice, everything in the comparison. */
   | "self_direct"
   /** The owner's load covered from the battery — the same. */
-  | "self_battery";
+  | "self_battery"
+  /**
+   * Credit for energy exported to the grid, priced by the grid provider (not
+   * the RCP) — negative, since it reduces what's owed rather than adding to
+   * it. Attributed to whichever party's own metering shows the export; today
+   * only the owner ever does.
+   */
+  | "feed_in";
 
 export interface InvoiceLine {
   category: BillingCategory;
@@ -377,6 +387,54 @@ export interface InvoiceRun {
   payee: InvoicePayee | null;
   invoices: IssuedInvoice[];
   warnings: string[];
+}
+
+/**
+ * A generated invoice as stored and shown on the Account tab — a dated,
+ * persisted record of what `runInvoices` computed at the moment Generate was
+ * clicked, not a live view. Every non-cancelled row for a given party and
+ * period is unique (see the DB's partial unique index), so a batch either
+ * exists once for a period or not at all.
+ */
+export type InvoiceStatus = "issued" | "paid" | "cancelled";
+
+export interface Invoice {
+  id: string;
+  /** Every invoice one Generate call produced shares this — see cancelBatch. */
+  batchId: string;
+  siteId: string;
+  partyId: string;
+  partyReference: string | null;
+  partyName: string;
+  from: string;
+  to: string;
+  /** When this was generated — "invoice date", not the period it covers. */
+  issuedAt: string;
+  gridKwh: number;
+  localKwh: number;
+  selfDirectKwh: number;
+  selfBatteryKwh: number;
+  totalChf: number;
+  /** The vZEV benefit shown on the Account tab: comparison.savingChf at generation time. */
+  savingChf: number;
+  status: InvoiceStatus;
+  paidAt: string | null;
+  cancelledAt: string | null;
+}
+
+/**
+ * One party's existing lock on a period: an active (non-cancelled) invoice
+ * already covers them, so generating again for them is refused until the
+ * batch it came from is cancelled. Generating is per-party now, so a period
+ * can have some parties locked (from an earlier, narrower Generate) and
+ * others still free — this is why a lock is reported per party rather than
+ * once for the whole period.
+ */
+export interface InvoiceLock {
+  partyId: string;
+  batchId: string;
+  issuedAt: string;
+  status: InvoiceStatus;
 }
 
 export interface ReadingsImportResult {
@@ -664,9 +722,23 @@ export interface CfAccessSyncResult {
   policyName: string | null;
 }
 
+/**
+ * Tomorrow, hour by hour — forecast only, since nothing has happened yet.
+ * Solar forecast feeds and day-ahead tariffs both typically publish for the
+ * next day in the evening, so this is usually empty until then.
+ */
+export interface TomorrowForecast {
+  /** YYYY-MM-DD in the site's time zone — tomorrow, not today. */
+  day: string;
+  /** Per hour that the forecast has anything for. Empty if not published yet. */
+  hourly: HourKwh[];
+}
+
 export interface LiveEnergyView {
   /** Today's curve — null when the site has no interval data at all. */
   today: LiveDayCurve | null;
+  /** Null once there is nothing yet — see TomorrowForecast. */
+  tomorrow: TomorrowForecast | null;
   /** When these values were read. */
   at: string;
   /** Leaving the house for the grid, in watts. */

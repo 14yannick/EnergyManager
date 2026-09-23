@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   BillingAllocation,
@@ -8,7 +8,7 @@ import type {
   GridTariffPosition,
   InvoiceLine,
   InvoiceLineKind,
-  InvoicePayee,
+  InvoiceLock,
   IssuedInvoice,
 } from "@energy-manager/shared";
 import { billingPeriodLabel, billingPeriodRange, toDateString } from "@energy-manager/shared";
@@ -16,12 +16,12 @@ import { api } from "../api/client";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useCanEdit, useIdentity } from "../lib/useIdentity";
-import { QrBill } from "../components/QrBill";
 
 const LINE_LABELS: Record<InvoiceLineKind, MessageKey> = {
   local: "invoice.line.local",
   self_direct: "invoice.line.selfDirect",
   self_battery: "invoice.line.selfBattery",
+  feed_in: "invoice.line.feedIn",
 };
 
 const CATEGORY_LABELS: Record<BillingCategory, MessageKey> = {
@@ -423,6 +423,42 @@ function InvoiceSection({ siteId }: { siteId: string }) {
   });
   const result = invoicesQuery.data;
 
+  const locksQuery = useQuery({
+    queryKey: ["invoice-locks", siteId, range?.from, range?.to],
+    queryFn: () => api.invoices.locks(siteId, range!.from, range!.to),
+    enabled: !!range,
+  });
+  const locks = locksQuery.data ?? [];
+  const lockedPartyIds = new Set(locks.map((l) => l.partyId));
+
+  // Every billable party is selected by default; a party already locked for
+  // this period can't be selected at all, since generating for it again is
+  // refused until the batch that locked it is cancelled.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Which range the default selection was last computed for — so the reset
+  // below fires exactly once per period, as soon as both the invoice run
+  // and the locks for it are both in, and never again on a background
+  // refetch, which would silently undo a manual selection mid-review.
+  const initializedFor = useRef("");
+  useEffect(() => {
+    if (!result || !range || !locksQuery.isSuccess) return;
+    const key = `${range.from}|${range.to}`;
+    if (initializedFor.current === key) return;
+    initializedFor.current = key;
+    setSelected(
+      new Set(
+        result.invoices
+          .filter((inv): inv is IssuedInvoice & { partyId: string } => !!inv.partyId && !lockedPartyIds.has(inv.partyId))
+          .map((inv) => inv.partyId),
+      ),
+    );
+    // lockedPartyIds is derived from `locks`, already covered by
+    // `locksQuery.isSuccess` above — the effect only ever needs to run once
+    // per range, not once per new Set identity.
+  }, [result, range, locksQuery.isSuccess]);
+
+  const selectedInvoices = (result?.invoices ?? []).filter((inv) => inv.partyId && selected.has(inv.partyId));
+
   return (
     <div className="print-invoices space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4 print:hidden">
@@ -502,14 +538,6 @@ function InvoiceSection({ siteId }: { siteId: string }) {
           </span>
         )}
 
-        {result && result.invoices.length > 0 && (
-          <button
-            onClick={() => window.print()}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            {t("billing.print")}
-          </button>
-        )}
         {result && (
           <span className="pb-2 text-sm text-slate-500">
             {t("billing.summary", { days: result.days, participants: result.participantCount })}
@@ -536,168 +564,372 @@ function InvoiceSection({ siteId }: { siteId: string }) {
         </p>
       ))}
 
-      {result?.invoices.map((inv) => (
-        <InvoiceDocument
-          key={inv.partyId ?? inv.partyName}
-          invoice={inv}
-          payee={result.payee}
+      {result && result.invoices.length > 0 && <ReconciliationCard invoices={result.invoices} />}
+
+      {result && result.invoices.length > 0 && range && (
+        <GenerateInvoicesControl
+          siteId={siteId}
+          from={range.from}
+          to={range.to}
+          invoices={result.invoices}
+          locks={locks}
+          selected={selected}
+          onSelectedChange={setSelected}
         />
+      )}
+
+      {/* The check before generating — a party's own bill, nothing more.
+          The QR-bill and the benefit comparison belong to the real, final
+          document; this is only for reviewing who's about to be billed for
+          what, so neither appears here. */}
+      {selectedInvoices.map((inv) => (
+        <InvoiceDocument key={inv.partyId ?? inv.partyName} invoice={inv} />
       ))}
     </div>
   );
 }
 
-/** Page one mirrors the provider's layout; page two is the VZEV comparison. */
-function InvoiceDocument({
-  invoice,
-  payee,
-}: {
-  invoice: IssuedInvoice;
-  payee: InvoicePayee | null;
-}) {
+/** One batch's worth of already-locked parties, grouped for a single Cancel action. */
+interface LockGroup {
+  batchId: string;
+  issuedAt: string;
+  partyNames: string[];
+  paidCount: number;
+}
+
+function groupLocks(locks: InvoiceLock[], nameOf: Map<string, string>): LockGroup[] {
+  const byBatch = new Map<string, LockGroup>();
+  for (const lock of locks) {
+    const group = byBatch.get(lock.batchId) ?? {
+      batchId: lock.batchId,
+      issuedAt: lock.issuedAt,
+      partyNames: [],
+      paidCount: 0,
+    };
+    group.partyNames.push(nameOf.get(lock.partyId) ?? lock.partyId);
+    if (lock.status === "paid") group.paidCount += 1;
+    byBatch.set(lock.batchId, group);
+  }
+  return [...byBatch.values()];
+}
+
+interface ReconciliationBreakdown {
+  /** Total grid draw across every invoice — one figure per party, so no
+   * position gets double-counted the way summing raw line quantities would
+   * if two positions both bill per kWh drawn. */
+  gridKwh: number;
+  /** Every per-kWh position from the provider's own tariff, no `kind` set. */
+  energyChf: number;
+  /** Every pool-shared or per-participant position — a lump sum, not a rate. */
+  fixChf: number;
+  feedInKwh: number;
+  /** Negative — a credit, not a charge. */
+  feedInChf: number;
+  totalChf: number;
+}
+
+/**
+ * The three components of the grid provider's own invoice, reconstructed
+ * from the split invoices: consumption-based energy charges, fixed/standing
+ * charges, and the feed-in credit. The app's own lines (locally-bought vZEV
+ * energy, the owner's zero-cost self-consumption entries) are left out —
+ * they're an internal arrangement the grid provider never sees.
+ */
+function reconciliationBreakdownOf(invoices: IssuedInvoice[]): ReconciliationBreakdown {
+  let gridKwh = 0;
+  let energyChf = 0;
+  let fixChf = 0;
+  let feedInKwh = 0;
+  let feedInChf = 0;
+  for (const inv of invoices) {
+    gridKwh += inv.gridKwh;
+    for (const l of inv.lines) {
+      if (l.kind === "feed_in") {
+        feedInKwh += l.quantity;
+        feedInChf += l.amountChf;
+      } else if (!l.kind) {
+        if (l.allocation === "per_kwh" || l.allocation === "per_kwh_total") energyChf += l.amountChf;
+        else fixChf += l.amountChf;
+      }
+    }
+  }
+  return { gridKwh, energyChf, fixChf, feedInKwh, feedInChf, totalChf: energyChf + fixChf + feedInChf };
+}
+
+/**
+ * A reconciliation check, not a bill: the grid provider sends one invoice for
+ * the whole connection, broken into the same three pieces this card shows —
+ * energy, fixed charges, feed-in credit — and their sum is typed in here once
+ * that invoice arrives, to catch a missing position or a wrong rate before
+ * either invoice goes out.
+ */
+function ReconciliationCard({ invoices }: { invoices: IssuedInvoice[] }) {
   const t = useT();
+  const [actual, setActual] = useState("");
+  const b = reconciliationBreakdownOf(invoices);
+  const energyRate = b.gridKwh !== 0 ? b.energyChf / b.gridKwh : 0;
+  const feedInRate = b.feedInKwh !== 0 ? Math.abs(b.feedInChf) / b.feedInKwh : 0;
+  const actualValue = actual.trim() === "" ? null : Number(actual);
+  const delta = actualValue != null && !Number.isNaN(actualValue) ? b.totalChf - actualValue : null;
+  // A few centimes of rounding drift across many participants and lines is
+  // expected — round2 happens per line, not once at the end — so "matches"
+  // allows a small tolerance rather than demanding an exact zero.
+  const matches = delta != null && Math.abs(delta) < 0.05;
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-white p-4 print:hidden">
+      <div className="text-sm">
+        <div className="font-medium text-slate-700">{t("invoice.reconciliation")}</div>
+        <div className="text-xs text-slate-500">{t("invoice.reconciliationHint")}</div>
+      </div>
+
+      <table className="w-full text-sm">
+        <tbody>
+          <tr>
+            <td className="py-1 text-slate-600">
+              {t("invoice.reconciliationEnergy", { kwh: b.gridKwh.toFixed(1), rate: (energyRate * 100).toFixed(2) })}
+            </td>
+            <td className="py-1 text-right tabular-nums text-slate-900">{chf(b.energyChf)}</td>
+          </tr>
+          <tr>
+            <td className="py-1 text-slate-600">{t("invoice.reconciliationFixPrice")}</td>
+            <td className="py-1 text-right tabular-nums text-slate-900">{chf(b.fixChf)}</td>
+          </tr>
+          {b.feedInKwh > 0 && (
+            <tr>
+              <td className="py-1 text-slate-600">
+                {t("invoice.reconciliationFeedIn", {
+                  kwh: b.feedInKwh.toFixed(1),
+                  rate: (feedInRate * 100).toFixed(2),
+                })}
+              </td>
+              <td className="py-1 text-right tabular-nums text-emerald-700">{chf(b.feedInChf)}</td>
+            </tr>
+          )}
+          <tr className="border-t font-medium">
+            <td className="py-1 text-slate-900">{t("invoice.reconciliationTotal")}</td>
+            <td className="py-1 text-right tabular-nums text-slate-900">CHF {chf(b.totalChf)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="flex flex-wrap items-end gap-4">
+        <Field label={t("invoice.reconciliationActual")}>
+          <input
+            type="number"
+            step="0.01"
+            inputMode="decimal"
+            className="input w-32"
+            value={actual}
+            onChange={(e) => setActual(e.target.value)}
+            placeholder="0.00"
+          />
+        </Field>
+        {delta != null && !Number.isNaN(delta) && (
+          <span className={`pb-2 text-sm font-medium ${matches ? "text-emerald-700" : "text-red-700"}`}>
+            {matches
+              ? t("invoice.reconciliationMatch")
+              : t("invoice.reconciliationDiff", {
+                  sign: delta > 0 ? "+" : "−",
+                  amount: chf(Math.abs(delta)),
+                })}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Which parties to invoice for this period — every billable one by default
+ * — and turning the selection into dated, persisted records: one PDF per
+ * selected participant, downloaded as a zip. A party already locked for
+ * this period can't be picked at all; cancelling the batch that locked it
+ * is offered right there instead of a silent duplicate.
+ */
+function GenerateInvoicesControl({
+  siteId,
+  from,
+  to,
+  invoices,
+  locks,
+  selected,
+  onSelectedChange,
+}: {
+  siteId: string;
+  from: string;
+  to: string;
+  invoices: IssuedInvoice[];
+  locks: InvoiceLock[];
+  selected: Set<string>;
+  onSelectedChange: (next: Set<string>) => void;
+}) {
+  const { t, locale } = useI18n();
+  const { canEdit } = useCanEdit();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["invoice-locks", siteId, from, to] });
+    void queryClient.invalidateQueries({ queryKey: ["invoices", siteId] });
+  };
+  const generateMutation = useMutation({
+    mutationFn: () => api.invoices.generate(siteId, from, to, locale, [...selected]),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+  const cancelMutation = useMutation({
+    mutationFn: (batchId: string) => api.invoices.cancelBatch(batchId),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  if (!canEdit) return null;
+
+  const lockedPartyIds = new Set(locks.map((l) => l.partyId));
+  const nameOf = new Map(invoices.filter((inv) => inv.partyId).map((inv) => [inv.partyId!, inv.partyName]));
+  const lockGroups = groupLocks(locks, nameOf);
+
+  const toggle = (partyId: string) => {
+    const next = new Set(selected);
+    if (next.has(partyId)) next.delete(partyId);
+    else next.add(partyId);
+    onSelectedChange(next);
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-white p-4 print:hidden">
+      <h2 className="text-sm font-medium text-slate-700">{t("invoice.parties")}</h2>
+      <div className="flex flex-wrap gap-x-6 gap-y-2">
+        {invoices.map((inv) => {
+          const locked = !!inv.partyId && lockedPartyIds.has(inv.partyId);
+          return (
+            <label
+              key={inv.partyId ?? inv.partyName}
+              className={`flex items-center gap-2 text-sm ${locked ? "text-slate-400" : "text-slate-900"}`}
+            >
+              <input
+                type="checkbox"
+                checked={locked ? false : !!inv.partyId && selected.has(inv.partyId)}
+                disabled={locked || !inv.partyId}
+                onChange={() => inv.partyId && toggle(inv.partyId)}
+              />
+              {inv.partyName}
+            </label>
+          );
+        })}
+      </div>
+
+      {lockGroups.map((group) => (
+        <div key={group.batchId} className="flex flex-wrap items-center gap-2 text-xs text-amber-700">
+          <span>{t("invoice.generateLocked", { date: localDate(group.issuedAt) })} — {group.partyNames.join(", ")}</span>
+          <button
+            onClick={() => cancelMutation.mutate(group.batchId)}
+            disabled={group.paidCount > 0 || cancelMutation.isPending}
+            title={group.paidCount > 0 ? t("invoice.cancelBlockedPaid", { count: group.paidCount }) : undefined}
+            className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {t("invoice.cancelBatch")}
+          </button>
+        </div>
+      ))}
+
+      <button
+        onClick={() => generateMutation.mutate()}
+        disabled={selected.size === 0 || generateMutation.isPending}
+        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+      >
+        {t("invoice.generateAction")}
+      </button>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * A checking preview of what Generate will actually produce — the bill
+ * itself, nothing more. Neither the vZEV-benefit comparison nor the QR-bill
+ * payment slip belongs here: both are for the real, generated document, not
+ * for reviewing who is about to be billed for what before that happens.
+ */
+function InvoiceDocument({ invoice }: { invoice: IssuedInvoice }) {
+  const t = useT();
+  // Shown apart from the categorized positions, at the very top: it's the
+  // grid provider's own money coming back, not one more charge to read down
+  // a table to find.
+  const feedInLine = invoice.lines.find((l) => l.kind === "feed_in");
   const grouped = CATEGORY_ORDER.map((category) => ({
     category,
-    lines: invoice.lines.filter((l) => l.category === category),
+    lines: invoice.lines.filter((l) => l.category === category && l.kind !== "feed_in"),
   })).filter((g) => g.lines.length > 0);
 
   return (
-    <>
-      <section className="print-sheet print-body rounded-lg border bg-white p-6 print:border-0">
-        <header className="mb-4 border-b pb-3">
-          <h2 className="text-lg font-semibold text-slate-900">{invoice.partyName}</h2>
-          {invoice.partyReference && (
-            <p className="text-sm text-slate-600">
-              {t("invoice.participantNo", { reference: invoice.partyReference })}
-            </p>
-          )}
-          <p className="text-sm text-slate-500">
-            {t("invoice.header", {
-              from: localDate(invoice.from),
-              to: localDate(invoice.to),
-              days: invoice.days,
-              participants: invoice.participantCount,
-            })}
+    <section className="rounded-lg border bg-white p-6">
+      <header className="mb-4 border-b pb-3">
+        <h2 className="text-lg font-semibold text-slate-900">{invoice.partyName}</h2>
+        {invoice.partyReference && (
+          <p className="text-sm text-slate-600">
+            {t("invoice.participantNo", { reference: invoice.partyReference })}
           </p>
-        </header>
-
-        {grouped.map(({ category, lines }) => (
-          <div key={category} className="mb-4">
-            <h3 className="mb-1 text-sm font-semibold text-slate-900">
-              {t(CATEGORY_LABELS[category])}
-            </h3>
-            <LineTable lines={lines} />
-            <div className="flex justify-between border-t pt-1 text-sm font-medium">
-              <span>{t("invoice.subtotal")}</span>
-              <span className="tabular-nums">
-                {chf(lines.reduce((s, l) => s + l.amountChf, 0))}
-              </span>
-            </div>
-          </div>
-        ))}
-
-        <div className="flex justify-between border-t-2 border-slate-900 pt-2 text-base font-semibold">
-          <span>{t("invoice.amountDue")}</span>
-          <span className="tabular-nums">CHF {chf(invoice.totalChf)}</span>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">
-          {invoice.selfDirectKwh + invoice.selfBatteryKwh > 0
-            ? t("invoice.footnoteOwner", {
-                total: (invoice.gridKwh + invoice.localKwh + invoice.selfDirectKwh + invoice.selfBatteryKwh).toFixed(1),
-                direct: invoice.selfDirectKwh.toFixed(1),
-                battery: invoice.selfBatteryKwh.toFixed(1),
-                grid: invoice.gridKwh.toFixed(1),
-              })
-            : t("invoice.footnote", {
-                grid: invoice.gridKwh.toFixed(1),
-                local: invoice.localKwh.toFixed(1),
-              })}
+        )}
+        <p className="text-sm text-slate-500">
+          {t("invoice.header", {
+            from: localDate(invoice.from),
+            to: localDate(invoice.to),
+            days: invoice.days,
+            participants: invoice.participantCount,
+          })}
         </p>
-      </section>
+      </header>
 
-      {/* `gap`, not `space-y`: space-y works by putting a margin-top on every
-          child but the first, and Tailwind's selector for it outranks the
-          `margin-top: auto` that pins the payment part to the foot of the
-          printed sheet. A gap creates no margins to compete with. */}
-      <div className="print-sheet flex flex-col gap-4">
-        <section className="print-body rounded-lg border bg-white p-6 print:border-0">
-        <header className="mb-4 border-b pb-3">
-          <h2 className="text-lg font-semibold text-slate-900">
-            {t("invoice.benefitTitle", {
-              name:
-                invoice.partyName +
-                (invoice.partyReference ? ` (${invoice.partyReference})` : ""),
-            })}
-          </h2>
-          <p className="text-sm text-slate-500">{t("invoice.benefitIntro")}</p>
-        </header>
-
-        <h3 className="mb-1 text-sm font-semibold text-slate-900">{t("invoice.directSupply")}</h3>
-        <LineTable lines={invoice.comparison.lines} />
-        <div className="flex justify-between border-t pt-1 text-sm font-medium">
-          <span>{t("invoice.directSupplyTotal")}</span>
-          <span className="tabular-nums">{chf(invoice.comparison.totalChf)}</span>
+      {feedInLine && (
+        <div className="mb-4 flex justify-between rounded-md bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+          <span>
+            {t(LINE_LABELS.feed_in)} ({feedInLine.quantity.toFixed(1)} kWh)
+          </span>
+          <span className="tabular-nums">{chf(feedInLine.amountChf)}</span>
         </div>
-
-        <dl className="mt-5 space-y-1 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-slate-600">{t("invoice.directly")}</dt>
-            <dd className="tabular-nums">CHF {chf(invoice.comparison.totalChf)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-slate-600">{t("invoice.yourRcpBill")}</dt>
-            <dd className="tabular-nums">CHF {chf(invoice.totalChf)}</dd>
-          </div>
-          <div className="flex justify-between border-t-2 border-slate-900 pt-2 text-base font-semibold">
-            <dt>{t("invoice.yourBenefit")}</dt>
-            <dd className="tabular-nums">CHF {chf(invoice.comparison.savingChf)}</dd>
-          </div>
-          {/* Only where there is something to split: on the owner's invoice,
-              whose own production is what the benefit is mostly made of. A
-              participant's benefit is the RCP's alone and needs no breakdown. */}
-          {invoice.selfDirectKwh + invoice.selfBatteryKwh > 0 && (
-            <>
-              <div className="flex justify-between pl-4 text-xs text-slate-600">
-                <dt>{t("invoice.split.directUse")}</dt>
-                <dd className="tabular-nums">CHF {chf(invoice.comparison.savingSplit.directUseChf)}</dd>
-              </div>
-              <div className="flex justify-between pl-4 text-xs text-slate-600">
-                <dt>{t("invoice.split.battery")}</dt>
-                <dd className="tabular-nums">CHF {chf(invoice.comparison.savingSplit.batteryChf)}</dd>
-              </div>
-              <div className="flex justify-between pl-4 text-xs text-slate-600">
-                <dt>{t("invoice.split.rcp")}</dt>
-                <dd className="tabular-nums">CHF {chf(invoice.comparison.savingSplit.rcpChf)}</dd>
-              </div>
-            </>
-          )}
-        </dl>
-
-        <p className="mt-4 text-xs text-slate-500">
-          {invoice.selfDirectKwh + invoice.selfBatteryKwh > 0
-            ? t("invoice.benefitNoteOwner", {
-                participants: invoice.participantCount,
-                own: (invoice.selfDirectKwh + invoice.selfBatteryKwh).toFixed(1),
-              })
-            : t("invoice.benefitNote", {
-                participants: invoice.participantCount,
-                local: invoice.localKwh.toFixed(1),
-              })}
-        </p>
-      </section>
-
-      {/* The payment part shares this sheet with the comparison and is pinned
-          to its bottom edge, where the tear line is.
-
-          Skipped on the administrator's own invoice — a slip payable from and
-          to the same account is meaningless. An `rcp_admin` still receives the
-          invoice itself: they owe their share, they just settle it without a
-          payment slip. */}
-      {payee?.partyId !== invoice.partyId && (
-        <QrBill payee={payee} invoice={invoice} />
       )}
+
+      {grouped.map(({ category, lines }) => (
+        <div key={category} className="mb-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900">
+            {t(CATEGORY_LABELS[category])}
+          </h3>
+          <LineTable lines={lines} />
+          <div className="flex justify-between border-t pt-1 text-sm font-medium">
+            <span>{t("invoice.subtotal")}</span>
+            <span className="tabular-nums">
+              {chf(lines.reduce((s, l) => s + l.amountChf, 0))}
+            </span>
+          </div>
+        </div>
+      ))}
+
+      <div className="flex justify-between border-t-2 border-slate-900 pt-2 text-base font-semibold">
+        <span>{t("invoice.amountDue")}</span>
+        <span className="tabular-nums">CHF {chf(invoice.totalChf)}</span>
       </div>
-    </>
+      <p className="mt-2 text-xs text-slate-500">
+        {invoice.selfDirectKwh + invoice.selfBatteryKwh > 0
+          ? t("invoice.footnoteOwner", {
+              total: (invoice.gridKwh + invoice.localKwh + invoice.selfDirectKwh + invoice.selfBatteryKwh).toFixed(1),
+              direct: invoice.selfDirectKwh.toFixed(1),
+              battery: invoice.selfBatteryKwh.toFixed(1),
+              grid: invoice.gridKwh.toFixed(1),
+            })
+          : t("invoice.footnote", {
+              grid: invoice.gridKwh.toFixed(1),
+              local: invoice.localKwh.toFixed(1),
+            })}
+      </p>
+    </section>
   );
 }
 

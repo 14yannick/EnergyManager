@@ -530,9 +530,11 @@ pnpm db:generate   # generate a new Drizzle migration after changing apps/api/sr
 
 - [x] Phase 1: tariff/cost tracking, readings import, savings & payback dashboard
 - [ ] Phase 2: VZEV invoicing — *in progress*. Parties, per-party consumption
-      allocation and per-participant invoices are in place; invoices are computed
-      on demand from a date range, so there is no stored history and no payment
-      tracking yet
+      allocation and per-participant invoices are in place; an admin can now
+      generate and store a dated batch of invoices for a period — one PDF per
+      participant, a QR-bill included, downloaded as a zip — and track paid/unpaid
+      per invoice on the Account tab. The PDF itself isn't kept anywhere yet
+      (cloud storage and a link back from the Account tab are still open)
 - [ ] Phase 3: real-time monitoring. Live ingestion is partly here already — interval
       data and dynamic feed-in rates both sync from Home Assistant, on a timer
       rather than on demand

@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { check, date, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { sites } from "./sites.js";
 
@@ -71,6 +71,15 @@ export const parties = pgTable(
      * administers the RCP; anyone else's IBAN is none of this app's business.
      */
     iban: text("iban"),
+    /**
+     * When this party's membership starts and ends — a tenant moving in or
+     * out mid-period, say. Nullable throughout: most parties have neither
+     * set, meaning "for as long as the vZEV has existed" / "no end in
+     * sight". Not yet read by the billing engine — see the schema's own
+     * history for why.
+     */
+    startDate: date("start_date"),
+    endDate: date("end_date"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -82,5 +91,9 @@ export const parties = pgTable(
     uniqueIndex("parties_one_admin_idx")
       .on(table.siteId)
       .where(sql`${table.role} in ('rcp_admin', 'rcp_admin_only')`),
+    check(
+      "parties_date_range_check",
+      sql`${table.startDate} is null or ${table.endDate} is null or ${table.endDate} > ${table.startDate}`,
+    ),
   ],
 );

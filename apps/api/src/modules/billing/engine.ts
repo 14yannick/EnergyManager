@@ -34,6 +34,14 @@ export interface ParticipantUsage {
    */
   selfDirectKwh?: number;
   selfBatteryKwh?: number;
+  /**
+   * What the grid provider credits for this party's own exported energy, and
+   * the kWh behind it — already priced (per interval, for a dynamic period),
+   * not recomputed here. Only a party with metered export carries this;
+   * today that is always the owner.
+   */
+  feedInKwh?: number;
+  feedInRevenueChf?: number;
 }
 
 export interface InvoiceInputs {
@@ -83,17 +91,45 @@ export function isBilledParty<T extends { role: PartyRole }>(party: T): boolean 
  * member — the owner normally pays a share of the fixed costs and imports
  * from the grid like everyone else.
  *
- * The `+ 1` applies only when no party administers the RCP at all: the owner
+ * The `+ 1` applies only when no party administers the site at all: the owner
  * still exists and still consumes, they just haven't been entered yet, which
  * is how every site looked before parties could carry a role. Once an admin
  * party exists, its own role says whether to count it, and adding the
  * constant as well would count the same household twice — that bug reached 5
  * for 4 people and under-charged everybody.
+ *
+ * `siteParties` (all parties at the site, unfiltered) decides *whether* the
+ * fallback applies; `billedParties` (which may be narrower — e.g. filtered to
+ * who was valid for a given period) decides the count itself. They default to
+ * the same list, so a caller with no period in play can pass just one. Without
+ * this split, an admin party that has been entered but isn't valid for the
+ * period being billed would be mistaken for "never entered" and trigger the
+ * fallback anyway, showing a phantom participant instead of the true zero.
  */
-export function participantCountOf(parties: ReadonlyArray<{ role: PartyRole }>): number {
-  const billed = parties.filter(isBilledParty).length;
-  const administered = parties.some((p) => ADMIN_PARTY_ROLES.includes(p.role));
+export function participantCountOf(
+  billedParties: ReadonlyArray<{ role: PartyRole }>,
+  siteParties: ReadonlyArray<{ role: PartyRole }> = billedParties,
+): number {
+  const billed = billedParties.filter(isBilledParty).length;
+  const administered = siteParties.some((p) => ADMIN_PARTY_ROLES.includes(p.role));
   return administered ? billed : billed + 1;
+}
+
+/**
+ * Whether a party was a member for the *entire* period, not just part of
+ * it — this engine doesn't prorate a shared cost across a mid-period join or
+ * leave, so a party only counts (for being invoiced, and for the pool
+ * dividing `pool_shared` costs) when they were present start to end. Null
+ * start/end means no bound on that side.
+ */
+export function partyValidForPeriod<T extends { startDate: string | null; endDate: string | null }>(
+  party: T,
+  from: string,
+  to: string,
+): boolean {
+  if (party.startDate && party.startDate > from) return false;
+  if (party.endDate && party.endDate < to) return false;
+  return true;
 }
 
 /**
@@ -107,6 +143,24 @@ export function participantCountOf(parties: ReadonlyArray<{ role: PartyRole }>):
 function rawInvoiceLines(inputs: InvoiceInputs): InvoiceLine[] {
   const { days, participantCount, usage, localRateChf } = inputs;
   const lines: InvoiceLine[] = [];
+
+  // The feed-in credit leads the invoice, ahead of everything else: it is
+  // money the grid provider pays out, not a charge the RCP levies, so it
+  // reads as a credit against the bill rather than one more position in it.
+  if ((usage.feedInKwh ?? 0) > 0) {
+    const kwh = usage.feedInKwh!;
+    const revenue = usage.feedInRevenueChf ?? 0;
+    lines.push({
+      category: "energie",
+      label: "Feed-in credit (grid export)",
+      kind: "feed_in",
+      allocation: "per_kwh",
+      quantity: kwh,
+      quantityUnit: "kWh",
+      unitRateChf: revenue / kwh,
+      amountChf: -revenue,
+    });
+  }
 
   // The owner's self-consumption leads the invoice at a price of zero: not
   // a charge, a statement of the whole consumption, so the grid draw below
@@ -278,6 +332,13 @@ export function usageLooksHalfImported(usage: Pick<ParticipantUsage, "localKwh" 
 export function buildParticipantInvoice(inputs: InvoiceInputs): ParticipantInvoice {
   const lines = buildInvoiceLines(inputs);
   const totalChf = round2(lines.reduce((sum, l) => sum + l.amountChf, 0));
+  // The feed-in credit is the owner's own income from the grid provider,
+  // earned whether or not the connection is shared at all — folding it into
+  // the vZEV-vs-direct comparison would count it as part of the vZEV's own
+  // benefit, which it isn't.
+  const billedTotalChf = round2(
+    lines.filter((l) => l.kind !== "feed_in").reduce((sum, l) => sum + l.amountChf, 0),
+  );
   return {
     partyId: inputs.usage.partyId,
     partyReference: inputs.usage.partyReference,
@@ -292,7 +353,7 @@ export function buildParticipantInvoice(inputs: InvoiceInputs): ParticipantInvoi
     selfBatteryKwh: inputs.usage.selfBatteryKwh ?? 0,
     lines,
     totalChf,
-    comparison: buildDirectComparison(inputs, totalChf),
+    comparison: buildDirectComparison(inputs, billedTotalChf),
   };
 }
 

@@ -19,6 +19,8 @@ function toDomain(row: Row): Party {
     country: row.country,
     role: row.role,
     iban: row.iban,
+    startDate: row.startDate,
+    endDate: row.endDate,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -82,6 +84,8 @@ export async function createParty(siteId: string, input: PartyInput): Promise<Pa
       ...(input.country ? { country: input.country } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       iban: input.iban ?? null,
+      startDate: input.startDate ?? null,
+      endDate: input.endDate ?? null,
     })
     .returning();
   return toDomain(row!);
@@ -102,6 +106,8 @@ export async function updateParty(id: string, input: PartyInput): Promise<Party 
       ...(input.country ? { country: input.country } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       iban: input.iban ?? null,
+      startDate: input.startDate ?? null,
+      endDate: input.endDate ?? null,
       updatedAt: new Date(),
     })
     .where(eq(parties.id, id))

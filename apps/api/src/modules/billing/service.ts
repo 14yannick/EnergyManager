@@ -16,6 +16,7 @@ import {
   ownerFixedCosts,
   ownerIsMember,
   participantCountOf,
+  partyValidForPeriod,
   periodBounds,
   positionsChangingWithin,
   positionsOverlapping,
@@ -149,7 +150,7 @@ export async function runInvoices(
   const fromBound = sql`(${from}::date AT TIME ZONE 'Europe/Zurich')`;
   const toBoundExclusive = sql`((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
 
-  const [positions, participants, usageRows, flatRows] = await Promise.all([
+  const [positions, allParticipants, usageRows, flatRows] = await Promise.all([
     listPositions(siteId),
     db.select().from(parties).where(eq(parties.siteId, siteId)).orderBy(asc(parties.name)),
     db
@@ -171,6 +172,11 @@ export async function runInvoices(
       .groupBy(intervalMetrics.partyId, intervalMetrics.metricKind),
     db.select().from(tariffPeriods).where(eq(tariffPeriods.siteId, siteId)),
   ]);
+
+  // A party who joined after this period started, or left before it ended,
+  // wasn't a member for the whole stretch — left out of the invoice run
+  // entirely, and out of the pool that divides `pool_shared` costs.
+  const participants = allParticipants.filter((p) => partyValidForPeriod(p, from, to));
 
   // Positions overlapping the period. Every one handed to the engine is
   // billed for the whole period, so a position that changes inside it must
@@ -244,7 +250,7 @@ export async function runInvoices(
   // exempt you from paying for what you consumed. Only `rcp_admin_only` and
   // `viewer` are left out, of invoices and of the count alike.
   const billable = participants.filter(isBilledParty);
-  const participantCount = participantCountOf(participants);
+  const participantCount = participantCountOf(participants, allParticipants);
 
   // The owner's own consumption that never crossed the meter — PV used as
   // made, load covered from the battery — comes from the savings engine, so
@@ -255,12 +261,20 @@ export async function runInvoices(
   // cycle that resolves to `undefined` depending on who loads first.
   const owner = participants.find((p) => p.role === "rcp_admin");
   let self = { directKwh: 0, batteryKwh: 0 };
+  // Grid export isn't metered per party yet — it all lands on the owner,
+  // which is right today (they're the only one with production) and will
+  // need a real per-party split once ebIX import can attribute it otherwise.
+  let feedIn = { kwh: 0, revenueChf: 0 };
   if (owner) {
     const { getDailySavings } = await import("../savings/service.js");
     const [overall] = await getDailySavings(siteId, from, to, "overall");
     self = {
       directKwh: Math.max(overall?.directUseKwh ?? 0, 0),
       batteryKwh: Math.max(overall?.batteryDischargeConsumedKwh ?? 0, 0),
+    };
+    feedIn = {
+      kwh: Math.max(overall?.exportedPricedKwh ?? 0, 0),
+      revenueChf: Math.max(overall?.exportRevenueChf ?? 0, 0),
     };
   }
 
@@ -272,7 +286,14 @@ export async function runInvoices(
       partyName: party.name,
       gridKwh: usage.grid,
       localKwh: usage.local,
-      ...(party.id === owner?.id ? { selfDirectKwh: self.directKwh, selfBatteryKwh: self.batteryKwh } : {}),
+      ...(party.id === owner?.id
+        ? {
+            selfDirectKwh: self.directKwh,
+            selfBatteryKwh: self.batteryKwh,
+            feedInKwh: feedIn.kwh,
+            feedInRevenueChf: feedIn.revenueChf,
+          }
+        : {}),
     };
     const invoice = buildParticipantInvoice({
       from,

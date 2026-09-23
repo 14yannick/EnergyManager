@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "swissqrbill": "^4.4.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

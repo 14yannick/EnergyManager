@@ -19,6 +19,9 @@ import type {
   HaSyncRequest,
   HaSyncResult,
   IntervalMetricKind,
+  Invoice,
+  InvoiceLock,
+  InvoiceLocale,
   LiveEnergyView,
   Party,
   NeighbourSales,
@@ -243,6 +246,50 @@ export const api = {
     removePosition: (id: string) => request<void>(`/billing/positions/${id}`, { method: "DELETE" }),
     invoices: (siteId: string, from: string, to: string) =>
       request<InvoiceRun>(`/sites/${siteId}/billing/invoices?from=${from}&to=${to}`),
+  },
+  /** The Account tab's own, dated invoices — distinct from billing.invoices'
+   * live, unstored computation above. */
+  invoices: {
+    list: (siteId: string) => request<Invoice[]>(`/sites/${siteId}/invoices`),
+    /** One entry per party already locked for the period — empty when none are. */
+    locks: (siteId: string, from: string, to: string) =>
+      request<InvoiceLock[]>(`/sites/${siteId}/invoices/locks?from=${from}&to=${to}`),
+    markPaid: (id: string, paidAt: string) =>
+      request<Invoice>(`/invoices/${id}/paid`, { method: "PATCH", body: JSON.stringify({ paidAt }) }),
+    cancelBatch: (batchId: string) =>
+      request<{ cancelled: number }>(`/invoices/batches/${batchId}/cancel`, { method: "POST" }),
+    /**
+     * Not `request()`: this returns a zip file, not JSON, and the browser's
+     * own download handling (an object URL clicked through a throwaway
+     * anchor) is what actually saves it — the same reason `readings.import`
+     * uses a raw `fetch` instead.
+     */
+    generate: async (
+      siteId: string,
+      from: string,
+      to: string,
+      locale: InvoiceLocale,
+      partyIds: string[],
+    ): Promise<void> => {
+      const res = await fetch(`/api/sites/${siteId}/invoices/generate`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to, locale, partyIds }),
+      });
+      if (res.type === "opaqueredirect") throw new SessionExpiredError();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError(body.message ?? body.error ?? `Request failed: ${res.status}`, res.status);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoices_${from}_${to}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
   },
   /** Who the server thinks we are. `email: null` means auth is switched off. */
   me: () => request<AuthIdentity>("/me"),

@@ -10,6 +10,7 @@ import { TariffPeriodsPage } from "./pages/TariffPeriodsPage";
 import { CalculationDetailPage } from "./pages/CalculationDetailPage";
 import { ReadingsImportPage } from "./pages/ReadingsImportPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { AccountPage } from "./pages/AccountPage";
 import { BillingPage } from "./pages/BillingPage";
 import { PartyDashboardPage } from "./pages/PartyDashboardPage";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -39,8 +40,10 @@ interface NavItem {
 function navItems(participant: boolean): NavItem[] {
   return participant
     ? [
+        // Billing itself doesn't apply to a participant any more — the
+        // Account tab already carries their own dated invoices and status.
         { to: "/", label: "nav.consumption", end: true },
-        { to: "/billing", label: "nav.billing" },
+        { to: "/account", label: "nav.account" },
         { to: "/profile", label: "nav.profile" },
       ]
     : [
@@ -49,6 +52,7 @@ function navItems(participant: boolean): NavItem[] {
         // before settings, because it is where you go to check the others.
         { to: "/", label: "nav.dashboard", end: true },
         { to: "/consumption", label: "nav.consumption" },
+        { to: "/account", label: "nav.account" },
         { to: "/billing", label: "nav.billing" },
         { to: "/profile", label: "nav.profile" },
         { to: "/tariff-periods", label: "nav.tariffs" },
@@ -199,7 +203,9 @@ export function App() {
         ) : participant ? (
           <Routes>
             <Route path="/" element={<PartyDashboardPage />} />
-            <Route path="/billing" element={<BillingPage />} />
+            <Route path="/account" element={<AccountPage />} />
+            {/* Billing moved into Account; keep an old link working. */}
+            <Route path="/billing" element={<Navigate to="/account" replace />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -213,6 +219,7 @@ export function App() {
             <Route path="/cost-items" element={<Navigate to="/settings" replace />} />
             <Route path="/readings" element={<ReadingsImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/account" element={<AccountPage />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
