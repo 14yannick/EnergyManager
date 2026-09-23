@@ -712,7 +712,7 @@ function ConsumptionChart({
       };
       return {
         ...p,
-        label: periodLabel(key, granularity, t("common.total")),
+        label: periodLabel(key, granularity, t("common.total"), granularity === "hourly" && from === to),
         gridEnergyChf: p.rcpCostChf - p.localEnergyChf - p.rcpFixedChf,
         directEnergyChf: p.directCostChf - p.directFixedChf,
       };

@@ -283,11 +283,20 @@ export function periodKeys(from: string, to: string, granularity: Granularity): 
   return keys;
 }
 
-export function periodLabel(key: string, granularity: Granularity, totalLabel: string): string {
+export function periodLabel(
+  key: string,
+  granularity: Granularity,
+  totalLabel: string,
+  /** True when every bar in the chart is already known to be the same day —
+   * the date would only repeat, so the label drops it and reads as a plain
+   * time of day instead. */
+  singleDay = false,
+): string {
   if (granularity === "overall") return totalLabel;
   if (granularity === "quarterly") return `${key.slice(5)} ${key.slice(0, 4)}`;
   if (granularity === "hourly") {
-    // "YYYY-MM-DDTHH" -> "14.09 08h"
+    // "YYYY-MM-DDTHH" -> "08:00" for a single day, "14.09 08h" otherwise.
+    if (singleDay) return `${key.slice(11, 13)}:00`;
     return `${key.slice(8, 10)}.${key.slice(5, 7)} ${key.slice(11, 13)}h`;
   }
   const [y, m, d] = key.split("-");

@@ -659,7 +659,7 @@ function RevenueBreakdownChart({
 
       return {
         key,
-        label: periodLabel(key, granularity, t("common.total")),
+        label: periodLabel(key, granularity, t("common.total"), granularity === "hourly" && from === to),
         ...bars,
         consumptionChf: chf.consumption,
         directChf: chf.direct,
