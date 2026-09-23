@@ -19,3 +19,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </I18nProvider>
   </React.StrictMode>,
 );
+
+// Registered only so Chrome offers "Install app" instead of a plain
+// shortcut — see public/sw.js for why it does no caching.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js");
+  });
+}
