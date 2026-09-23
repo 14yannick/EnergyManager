@@ -656,7 +656,6 @@ function RevenueBreakdownChart({
         rcp: 0,
       };
       const bars = barUnit(unit) === "chf" ? chf : kwh;
-      const money = barUnit(unit) === "chf";
 
       return {
         key,

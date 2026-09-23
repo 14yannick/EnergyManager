@@ -3,6 +3,7 @@ import type {
   CumulativeSavingsPoint,
   NeighbourSales,
   DailySavings,
+  FeedInRatePoint,
   SavingsDayDetail,
   SavingsDayParty,
   SavingsSlot,
@@ -27,6 +28,7 @@ import {
 import { toNumber } from "../../lib/numeric.js";
 import { priceNeighbourSales } from "./neighbourSales.js";
 import { loadOwnerFixedCosts } from "../billing/service.js";
+import { periodBounds } from "../billing/engine.js";
 import { savedByParty } from "../consumption/service.js";
 import { getCostItemsSummary } from "../costItems/service.js";
 import {
@@ -251,6 +253,32 @@ export async function getSavingsDay(siteId: string, date: string): Promise<Savin
   const daily = aggregateIntervalsToDaily(slots.map(toDailySavings));
   const parties = await loadDayParties(siteId, date, resolveRate);
   return { date, totals: daily[0] ?? null, slots, parties };
+}
+
+const QUARTER_HOUR_MS = 15 * 60 * 1000;
+
+/**
+ * The feed-in rate for every metering interval of a local day, whether or
+ * not anything has been read for it yet.
+ *
+ * Resolved from periods, the day-ahead feed and surcharges alone — the same
+ * inputs `loadPricedSlots` prices actual readings against — so it needs no
+ * metering and covers hours still ahead exactly as readily as ones already
+ * past. A rate is a rate regardless of whether the hour behind it has
+ * elapsed, unlike a reading, so there is no separate "actual" curve to
+ * reconcile this against once the day catches up to it.
+ */
+export async function getFeedInRateCurve(siteId: string, date: string): Promise<FeedInRatePoint[]> {
+  const fromBound = sql`(${date}::date AT TIME ZONE 'Europe/Zurich')`;
+  const toBoundExclusive = sql`((${date}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
+  const resolveRate = await loadRateResolver(siteId, fromBound, toBoundExclusive);
+  const { startIso, endExclusiveIso } = periodBounds(date, date);
+  const points: FeedInRatePoint[] = [];
+  for (let t = new Date(startIso).getTime(); t < new Date(endExclusiveIso).getTime(); t += QUARTER_HOUR_MS) {
+    const ts = new Date(t).toISOString();
+    points.push({ ts, rateChfPerKwh: resolveRate("feed_in", ts) });
+  }
+  return points;
 }
 
 /**

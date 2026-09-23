@@ -1,6 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { dateRangeQuerySchema, savingsDayQuerySchema, savingsQuerySchema } from "@energy-manager/shared";
-import { getDailySavings, getNeighbourSales, getSavingsDay, getSavingsSummary } from "./service.js";
+import {
+  getDailySavings,
+  getFeedInRateCurve,
+  getNeighbourSales,
+  getSavingsDay,
+  getSavingsSummary,
+} from "./service.js";
 
 export async function savingsRoutes(app: FastifyInstance) {
   // `granularity=monthly` returns one row per calendar month instead of per
@@ -29,6 +35,19 @@ export async function savingsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "invalid_query", issues: parsed.error.issues });
       }
       return getSavingsDay(req.params.siteId, parsed.data.date);
+    },
+  );
+
+  // The live view's chart: a full day's feed-in rate, known ahead for
+  // whatever the day-ahead feed or a flat period already covers.
+  app.get<{ Params: { siteId: string }; Querystring: Record<string, string> }>(
+    "/api/sites/:siteId/savings/feed-in-rate",
+    async (req, reply) => {
+      const parsed = savingsDayQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "invalid_query", issues: parsed.error.issues });
+      }
+      return getFeedInRateCurve(req.params.siteId, parsed.data.date);
     },
   );
 

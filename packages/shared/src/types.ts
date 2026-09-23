@@ -497,6 +497,19 @@ export interface SavingsDayDetail {
   parties: SavingsDayParty[];
 }
 
+/**
+ * The feed-in rate at one metering-interval instant, resolved the same way
+ * as every kWh actually priced — but for every interval of the day, not only
+ * ones with a reading. A dynamic rate is published ahead of the day it
+ * prices, so the hours still to come are usually already known; a flat
+ * period's rate is known for as far as the period itself runs. Null where
+ * neither can price the instant yet.
+ */
+export interface FeedInRatePoint {
+  ts: string;
+  rateChfPerKwh: number | null;
+}
+
 export interface SavingsSummary {
   from: string;
   to: string;

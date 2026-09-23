@@ -25,6 +25,7 @@ import type {
   PartyConsumption,
   PartyInput,
   ReadingsImportResult,
+  FeedInRatePoint,
   SavingsDayDetail,
   SavingsSummary,
   SavingsQuery,
@@ -178,6 +179,8 @@ export const api = {
       ),
     day: (siteId: string, date: string) =>
       request<SavingsDayDetail>(`/sites/${siteId}/savings/day?date=${date}`),
+    feedInRate: (siteId: string, date: string) =>
+      request<FeedInRatePoint[]>(`/sites/${siteId}/savings/feed-in-rate?date=${date}`),
     /** Per participant: what selling to them earned, against exporting instead. */
     neighbours: (siteId: string, from: string, to: string) =>
       request<NeighbourSales>(`/sites/${siteId}/savings/neighbours?from=${from}&to=${to}`),

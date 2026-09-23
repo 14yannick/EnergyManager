@@ -222,7 +222,8 @@ function PositionsSection({ siteId }: { siteId: string }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          editingId ? updateMutation.mutate() : createMutation.mutate();
+          if (editingId) updateMutation.mutate();
+          else createMutation.mutate();
         }}
         className="flex flex-wrap items-end gap-3"
       >

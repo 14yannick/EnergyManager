@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { LiveDayCurve } from "@energy-manager/shared";
+import type { FeedInRatePoint, LiveDayCurve } from "@energy-manager/shared";
 import type { PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useSelectedPeriod } from "../lib/usePeriod";
@@ -126,7 +126,10 @@ export function PartyDashboardPage() {
     <div className="space-y-6">
       {/* Above the title on purpose: it is the one thing on this page that is
           true only right now, so it should not need scrolling past to reach. */}
-      <LiveSection siteId={siteId} />
+      {/* The feed-in rate would reveal the owner's revenue, so it is drawn
+          only for admin/viewer — same boundary as the dynamic-tariffs and
+          neighbours routes (see policy.ts). */}
+      <LiveSection siteId={siteId} showFeedInRate={!isParticipant} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -238,7 +241,48 @@ export function PartyDashboardPage() {
  */
 const SURPLUS_FLOOR_W = 100;
 
-function LiveSection({ siteId }: { siteId: string | null | undefined }) {
+/** A slot's ISO instant to its Europe/Zurich local hour (0–23). */
+function zurichHour(iso: string): number {
+  const h = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Zurich",
+    hour: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+  return h === "24" ? 0 : Number(h);
+}
+
+/**
+ * The feed-in rate averaged into the same local hours as the chart's bars.
+ *
+ * Metering-interval points are finer than an hour; a dynamic rate can change
+ * within one, so the average is what actually applies across that hour, not
+ * a single sample of it. A point nothing could price (no period covers it,
+ * or a dynamic period with nothing from the feed yet) is left out of the
+ * average rather than counted as zero.
+ */
+function hourlyFeedInRate(points: FeedInRatePoint[] | undefined): Map<number, number> | undefined {
+  if (!points) return undefined;
+  const sums = new Map<number, { total: number; count: number }>();
+  for (const point of points) {
+    if (point.rateChfPerKwh == null) continue;
+    const hour = zurichHour(point.ts);
+    const acc = sums.get(hour) ?? { total: 0, count: 0 };
+    acc.total += point.rateChfPerKwh;
+    acc.count += 1;
+    sums.set(hour, acc);
+  }
+  const out = new Map<number, number>();
+  for (const [hour, { total, count }] of sums) out.set(hour, total / count);
+  return out;
+}
+
+function LiveSection({
+  siteId,
+  showFeedInRate,
+}: {
+  siteId: string | null | undefined;
+  showFeedInRate: boolean;
+}) {
   const t = useT();
   const query = useQuery({
     queryKey: ["ha-live", siteId],
@@ -249,9 +293,21 @@ function LiveSection({ siteId }: { siteId: string | null | undefined }) {
     // Home Assistant and the browser.
     refetchInterval: 60 * 1000,
   });
-
   const live = query.data;
+
+  // Resolved by the same rate resolver the invoice and dashboard price
+  // every kWh against, so it can never drift out of step with what the rest
+  // of the app shows — and, unlike a reading, covers the whole day: a rate
+  // known ahead of time (the day-ahead feed, or a flat period) needs nothing
+  // to have been metered yet to be known now.
+  const dayRateQuery = useQuery({
+    queryKey: ["feed-in-rate", siteId, live?.today?.day],
+    queryFn: () => api.savings.feedInRate(siteId!, live!.today!.day),
+    enabled: showFeedInRate && !!siteId && !!live?.today,
+  });
+
   if (!live) return null;
+  const feedInRateByHour = showFeedInRate ? hourlyFeedInRate(dayRateQuery.data) : undefined;
 
   // The cards need a live entity each; the day's curve needs none — it
   // reads production from the store and the forecast from Home Assistant's
@@ -311,7 +367,7 @@ function LiveSection({ siteId }: { siteId: string | null | undefined }) {
         )}
       </div>
       )}
-      {live.today && <DayCurveChart today={live.today} />}
+      {live.today && <DayCurveChart today={live.today} feedInRateByHour={feedInRateByHour} />}
     </section>
   );
 }
@@ -331,6 +387,10 @@ const FORECAST_COLOR = "#475569";
 // swatch is drawn from `fill` alone and would otherwise promise a dark block
 // where the chart shows a faint one.
 const REMAINING_FILL = "#e4e7ec";
+// The app's established green — already validated as adjacent-safe against
+// this chart's own orange and blue elsewhere on this page (the "Consumption
+// by source" chart below uses the same three), so no need to revalidate it.
+const FEED_IN_RATE_COLOR = "#1baf7a";
 
 interface CurvePoint {
   hour: number;
@@ -344,6 +404,8 @@ interface CurvePoint {
   forecast: number | null;
   /** The forecast again, but only from the current hour on — what is still to come. */
   remaining: number | null;
+  /** CHF/kWh, averaged from the metering-interval slots inside the hour. */
+  feedInRate: number | null;
   partial: boolean;
 }
 
@@ -367,8 +429,16 @@ function DayStat({ label, value, hint }: { label: string; value: string; hint?: 
  * production is only derived once the hour's PV figure arrives, so it will
  * usually look short until the hour ends, and must not read as a cloud.
  */
-function DayCurveChart({ today }: { today: LiveDayCurve }) {
+function DayCurveChart({
+  today,
+  feedInRateByHour,
+}: {
+  today: LiveDayCurve;
+  /** Undefined for a participant: see LiveSection's `showFeedInRate`. */
+  feedInRateByHour?: Map<number, number>;
+}) {
   const t = useT();
+  const hasRate = (feedInRateByHour?.size ?? 0) > 0;
   const points = useMemo<CurvePoint[]>(() => {
     const production = new Map(today.actual.map((h) => [h.hour, h.kwh]));
     const charge = new Map(today.batteryCharge.map((h) => [h.hour, h.kwh]));
@@ -377,7 +447,9 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
     // The axis runs from the first hour with anything in it to the last. A
     // night hour that only reports zero — the store says so for every hour
     // since midnight — is not "anything": it would pin the axis to 00:00 and
-    // squeeze the day into its right-hand half.
+    // squeeze the day into its right-hand half. The feed-in rate follows this
+    // same window rather than stretching it: it is drawn only where it
+    // overlaps production or forecast, not as a reason to widen either.
     const hours = [...production.entries(), ...charge.entries(), ...exportedLocal.entries(), ...forecast.entries()]
       .filter(([, kwh]) => kwh > 0)
       .map(([hour]) => hour);
@@ -403,11 +475,12 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
         kept,
         forecast: f,
         remaining: hour >= today.currentHour ? f : null,
+        feedInRate: feedInRateByHour?.get(hour) ?? null,
         partial: hour === today.currentHour,
       });
     }
     return out;
-  }, [today]);
+  }, [today, feedInRateByHour]);
   if (points.length === 0) return null;
 
   // What the panels made today, one figure: production (AC delivered) plus
@@ -443,6 +516,19 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
                 one under 14" interval showed all of them regardless. */}
             <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
             <YAxis tick={{ fontSize: 11 }} width={40} domain={[0, "auto"]} tickFormatter={(v: number) => v.toFixed(1)} />
+            {/* Both domains start at exactly 0, so the zero line lands on the
+                same pixel row for both axes without any further alignment —
+                unlike the revenue chart's, neither can go negative. */}
+            {hasRate && (
+              <YAxis
+                yAxisId="rate"
+                orientation="right"
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                width={48}
+                domain={[0, "auto"]}
+                tickFormatter={(v: number) => v.toFixed(2)}
+              />
+            )}
             <Tooltip
               content={({ active, payload }) => {
                 const p = payload?.[0]?.payload as CurvePoint | undefined;
@@ -471,6 +557,14 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
                         {p.forecast == null ? "—" : `${p.forecast.toFixed(2)} kWh`}
                       </span>
                     </p>
+                    {hasRate && (
+                      <p className="mt-1 text-slate-600">
+                        {t("calc.col.feedInRate")}:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {p.feedInRate == null ? "—" : `${p.feedInRate.toFixed(3)} CHF/kWh`}
+                        </span>
+                      </p>
+                    )}
                   </div>
                 );
               }}
@@ -527,6 +621,23 @@ function DayCurveChart({ today }: { today: LiveDayCurve }) {
               isAnimationActive={false}
               connectNulls={false}
             />
+            {hasRate && (
+              <Line
+                yAxisId="rate"
+                type="monotone"
+                dataKey="feedInRate"
+                name={t("calc.col.feedInRate")}
+                stroke={FEED_IN_RATE_COLOR}
+                strokeWidth={2}
+                // Unlike the forecast, this line often covers only the hours
+                // that have elapsed so far — early in the day that can be a
+                // single point, which a bare line (no dot) would draw as
+                // nothing at all.
+                dot={{ r: 2, fill: FEED_IN_RATE_COLOR, strokeWidth: 0 }}
+                isAnimationActive={false}
+                connectNulls={false}
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>

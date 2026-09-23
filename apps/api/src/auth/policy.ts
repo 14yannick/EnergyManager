@@ -42,6 +42,7 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
 
   "/api/sites/:siteId/savings/daily": { GET: READ },
   "/api/sites/:siteId/savings/day": { GET: READ },
+  "/api/sites/:siteId/savings/feed-in-rate": { GET: READ },
   "/api/sites/:siteId/savings/summary": { GET: READ },
   "/api/sites/:siteId/savings/cumulative": { GET: READ },
   // Every participant's figures and the feed-in rates: never a participant's.
