@@ -89,12 +89,19 @@ function drawTotalRow(doc: PDFKit.PDFDocument, label: string, value: string, str
     .lineTo(doc.x + width, doc.y)
     .stroke();
   doc.moveDown(0.3);
-  doc
-    .font(FONT_BOLD)
-    .fontSize(strong ? 12 : 10)
-    .fillColor(HEADER_COLOR)
-    .text(label, doc.x, doc.y, { continued: true, width: width - 100 })
-    .text(value, { align: "right" });
+  const x = doc.x;
+  const y = doc.y;
+  doc.font(FONT_BOLD).fontSize(strong ? 12 : 10).fillColor(HEADER_COLOR);
+  // Two independent boxes at the same (x, y) — not a `continued` run.
+  // PDFKit right-aligns a continued call's text within *that call's own*
+  // width, not the row's full width, so `.text(value, {align:"right"})`
+  // right-aligned inside `width - 100` instead of the true right margin,
+  // landing every total short of where the table's own Amount CHF column
+  // above it ends.
+  doc.text(label, x, y, { width: width - 100 });
+  doc.text(value, x, y, { width, align: "right" });
+  doc.x = x;
+  doc.y = y + doc.currentLineHeight(true);
   doc.font(FONT_REGULAR);
   doc.moveDown(0.5);
 }
