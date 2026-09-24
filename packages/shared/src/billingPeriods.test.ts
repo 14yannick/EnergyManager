@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { billingPeriodLabel, billingPeriodRange } from "./billingPeriods.js";
+import { billingPeriodLabel, billingPeriodRange, invoicePeriodLabel, periodShapeOf } from "./billingPeriods.js";
 
 /** 17 September 2026, local time — Q3, so stepping back crosses into Q2. */
 const NOW = new Date(2026, 8, 17, 14, 30);
@@ -114,5 +114,46 @@ describe("billingPeriodLabel", () => {
         expect(label).toContain(from.slice(0, 4));
       }
     }
+  });
+});
+
+describe("periodShapeOf", () => {
+  it("recognises a whole calendar quarter", () => {
+    expect(periodShapeOf("2027-01-01", "2027-03-31")).toEqual({ kind: "quarter", year: 2027, quarter: 1 });
+    expect(periodShapeOf("2027-10-01", "2027-12-31")).toEqual({ kind: "quarter", year: 2027, quarter: 4 });
+  });
+
+  it("recognises a whole calendar year over its first quarter", () => {
+    expect(periodShapeOf("2027-01-01", "2027-12-31")).toEqual({ kind: "year", year: 2027 });
+  });
+
+  it("recognises a whole calendar month", () => {
+    expect(periodShapeOf("2027-02-01", "2027-02-28")).toEqual({ kind: "month", year: 2027, month1: 2 });
+  });
+
+  it("gets February's last day right across a leap year", () => {
+    expect(periodShapeOf("2028-02-01", "2028-02-29")).toEqual({ kind: "month", year: 2028, month1: 2 });
+    // A non-leap February must not accept the 29th as a whole month's end.
+    expect(periodShapeOf("2027-02-01", "2027-02-29")).toEqual({ kind: "custom" });
+  });
+
+  it("falls back to custom for a range that isn't a whole calendar unit", () => {
+    expect(periodShapeOf("2027-01-15", "2027-03-31")).toEqual({ kind: "custom" });
+    expect(periodShapeOf("2027-01-01", "2027-06-30")).toEqual({ kind: "custom" });
+  });
+});
+
+describe("invoicePeriodLabel", () => {
+  it("matches billingPeriodLabel's own formatting for the same period", () => {
+    expect(invoicePeriodLabel("2026-07-01", "2026-09-30", "en")).toBe(
+      billingPeriodLabel("quarterly", 0, "en", NOW),
+    );
+    expect(invoicePeriodLabel("2026-07-01", "2026-09-30", "fr")).toBe(
+      billingPeriodLabel("quarterly", 0, "fr", NOW),
+    );
+  });
+
+  it("returns null for a custom range, so the caller can fall back to the exact dates", () => {
+    expect(invoicePeriodLabel("2027-01-15", "2027-03-31", "en")).toBeNull();
   });
 });

@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invoice, InvoiceStatus } from "@energy-manager/shared";
+import { invoicePeriodLabel } from "@energy-manager/shared";
 import { api } from "../api/client";
-import { useT, type MessageKey } from "../i18n/context";
+import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useCanEdit, useIdentity } from "../lib/useIdentity";
 
@@ -157,7 +158,7 @@ function MarkPaidControl({ invoiceId, onDone }: { invoiceId: string; onDone: () 
 }
 
 export function AccountPage() {
-  const t = useT();
+  const { t, locale } = useI18n();
   const identity = useIdentity();
   const isParticipant = identity.data?.role === "participant";
   const { canEdit } = useCanEdit();
@@ -184,7 +185,11 @@ export function AccountPage() {
         <p className="max-w-2xl text-sm text-slate-500">{t("account.intro")}</p>
       </div>
 
-      <div className="space-y-4 rounded-lg border bg-white p-4">
+      {/* Capped, unlike most cards in the app: this one is a list of rows, not
+          a form or a chart, and rows this short just grow an empty gap
+          between their left and right ends on a wide monitor rather than
+          gaining anything from the extra width. */}
+      <div className="max-w-6xl space-y-4 rounded-lg border bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-medium text-slate-700">{t("account.title")}</h2>
           <InvoiceFilterToggle showAll={showAll} onChange={setShowAll} />
@@ -198,40 +203,54 @@ export function AccountPage() {
 
         {rows.length > 0 && (
           <div>
-            {rows.map((inv: Invoice) => (
-              <div key={inv.id} className="flex flex-col gap-1.5 border-t py-2.5 text-sm first:border-t-0">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                  {!isParticipant && (
-                    <span className="whitespace-nowrap font-medium text-slate-900">{inv.partyName}</span>
-                  )}
-                  <span className="whitespace-nowrap text-slate-900">
-                    {localDate(inv.from)} – {localDate(inv.to)}
-                  </span>
-                  <StatusBadge status={inv.status} />
-                  <Stat label={t("account.column.issued")} className="text-slate-500">
-                    {localDate(inv.issuedAt)}
-                  </Stat>
-                  <Stat label={t("account.column.consumed")} className="tabular-nums text-slate-600">
-                    {kwh(inv.gridKwh + inv.localKwh)} kWh
-                  </Stat>
-                  <Stat label={t("account.column.advantage")} className="tabular-nums text-slate-600">
-                    CHF {chf(inv.savingChf)}
-                  </Stat>
-                  <Stat label={t("invoice.amountDue")} className="tabular-nums font-semibold text-slate-900">
-                    CHF {chf(inv.totalChf)}
-                  </Stat>
+            {rows.map((inv: Invoice) => {
+              // "Q1 2027" when the period is a whole calendar quarter/year/
+              // month — matching what a period picker would have called it —
+              // else null, in which case the headline line falls back to the
+              // exact dates the second line always shows anyway.
+              const periodLabel = invoicePeriodLabel(inv.from, inv.to, locale);
+              return (
+                <div key={inv.id} className="flex flex-col gap-1.5 border-t py-2.5 text-sm first:border-t-0">
+                  {/* Headline: who, which period, the benefit, the PDF, the
+                      bottom line — what you scan for. */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                    {!isParticipant && (
+                      <span className="whitespace-nowrap font-medium text-slate-900">{inv.partyName}</span>
+                    )}
+                    <span className="whitespace-nowrap text-slate-900">
+                      {periodLabel ?? `${localDate(inv.from)} – ${localDate(inv.to)}`}
+                    </span>
+                    <Stat label={t("account.column.advantage")} className="tabular-nums text-slate-600">
+                      CHF {chf(inv.savingChf)}
+                    </Stat>
+                    <DownloadPdfButton fileId={inv.drivePdfFileId} />
+                    <span className="ml-auto whitespace-nowrap text-base font-semibold tabular-nums text-slate-900">
+                      CHF {chf(inv.totalChf)}
+                    </span>
+                  </div>
+                  {/* Detail: the exact interval, when it was issued, what was
+                      consumed, its status, and the admin's action on it. */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                    <span className="whitespace-nowrap text-slate-500">
+                      {localDate(inv.from)} – {localDate(inv.to)}
+                    </span>
+                    <Stat label={t("account.column.issued")} className="text-slate-500">
+                      {localDate(inv.issuedAt)}
+                    </Stat>
+                    <Stat label={t("account.column.consumed")} className="tabular-nums text-slate-500">
+                      {kwh(inv.gridKwh + inv.localKwh)} kWh
+                    </Stat>
+                    <StatusBadge status={inv.status} />
+                    {canEdit && inv.status === "issued" && (
+                      <MarkPaidControl
+                        invoiceId={inv.id}
+                        onDone={() => queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })}
+                      />
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <DownloadPdfButton fileId={inv.drivePdfFileId} />
-                  {canEdit && inv.status === "issued" && (
-                    <MarkPaidControl
-                      invoiceId={inv.id}
-                      onDone={() => queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })}
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
