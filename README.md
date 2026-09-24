@@ -278,6 +278,13 @@ every Generate click already downloads. Leave `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON
 unset and the feature simply doesn't exist — invoices still generate
 normally, just without a Drive copy.
 
+Each PDF lands in a period subfolder under the folder you connect — "Q1.2027"
+for a calendar quarter, "2027" for a whole year, "2027-01" for a month, or
+the raw date range for anything else (a custom period, say) — created on
+first use and reused after. The file itself is named the same way, e.g.
+`Q1.2027_592971.pdf`, so it reads the same whether you're looking at it
+inside that folder or after downloading the zip.
+
 **A service account, not an OAuth app.** There is no per-site "sign in with
 Google" step. One long-lived credential (like `HA_TOKEN` or `CF_API_TOKEN`)
 gives the server a fixed identity, and that identity's *only* access boundary

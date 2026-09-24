@@ -98,6 +98,48 @@ export async function verifyFolderAccess(folderId: string): Promise<{ name: stri
 }
 
 /**
+ * Escapes a name for Drive's `q` search syntax — single quotes end the
+ * string literal, and a backslash is its own escape character.
+ */
+function escapeForDriveQuery(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+/**
+ * Finds a subfolder by exact name directly under `parentId`, creating it if
+ * none exists yet — one call per period per batch (see generateInvoices),
+ * not per invoice, so every party in the same period's batch lands in the
+ * same folder rather than racing to create their own.
+ */
+export async function findOrCreateSubfolder(parentId: string, name: string): Promise<string> {
+  const drive = driveClient();
+  const q = [
+    `'${parentId}' in parents`,
+    `name = '${escapeForDriveQuery(name)}'`,
+    "mimeType = 'application/vnd.google-apps.folder'",
+    "trashed = false",
+  ].join(" and ");
+  const list = await drive.files.list({
+    q,
+    fields: "files(id)",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    corpora: "allDrives",
+    pageSize: 1,
+  });
+  const existing = list.data.files?.[0]?.id;
+  if (existing) return existing;
+
+  const created = await drive.files.create({
+    requestBody: { name, parents: [parentId], mimeType: "application/vnd.google-apps.folder" },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+  if (!created.data.id) throw new Error(`Drive subfolder "${name}" created but returned no id.`);
+  return created.data.id;
+}
+
+/**
  * Uploads one PDF into an already-verified folder. Called from invoice
  * generation, always best-effort — a failure here must never fail the
  * generate call itself, so callers catch and log rather than propagate.

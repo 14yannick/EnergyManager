@@ -6,7 +6,8 @@ import { db } from "../../db/client.js";
 import { invoices, sites } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { runInvoices } from "../billing/service.js";
-import { googleDriveConfigured, uploadPdf } from "../googleDrive/service.js";
+import { findOrCreateSubfolder, googleDriveConfigured, uploadPdf } from "../googleDrive/service.js";
+import { filenameFor, periodLabelFor } from "./naming.js";
 import { buildInvoicePdf } from "./pdf.js";
 
 type Row = typeof invoices.$inferSelect;
@@ -89,12 +90,6 @@ export async function findLocks(siteId: string, from: string, to: string): Promi
   return rows.map((r) => ({ ...r, issuedAt: r.issuedAt.toISOString() }));
 }
 
-/** A zip entry name safe across filesystems: the party's own reference where it has one. */
-function filenameFor(invoice: { partyReference: string | null; partyName: string }): string {
-  const base = (invoice.partyReference || invoice.partyName).replace(/[^\w.-]+/g, "_");
-  return `${base}.pdf`;
-}
-
 /**
  * Turns a period's live computation into a dated, persisted batch: one row
  * per selected participant plus the PDF it was built from, zipped for
@@ -133,12 +128,22 @@ export async function generateInvoices(
   const selected = run.invoices.filter((invoice) => invoice.partyId != null && requested.has(invoice.partyId));
   if (selected.length === 0) throw new NothingToInvoiceError();
 
+  const periodLabel = periodLabelFor(from, to);
+
   // Only read once per batch, not once per invoice — and only at all if
   // there is any point, i.e. the server has a service account configured.
-  let driveFolderId: string | null = null;
+  // The subfolder is resolved (or created) once here too, rather than once
+  // per party: they all land in the same "Q1.2027"-style folder.
+  let uploadFolderId: string | null = null;
   if (googleDriveConfigured) {
     const [site] = await db.select({ driveFolderId: sites.driveFolderId }).from(sites).where(eq(sites.id, siteId));
-    driveFolderId = site?.driveFolderId ?? null;
+    if (site?.driveFolderId) {
+      try {
+        uploadFolderId = await findOrCreateSubfolder(site.driveFolderId, periodLabel);
+      } catch (err) {
+        log?.error({ err, periodLabel }, "Couldn't resolve this period's Drive subfolder");
+      }
+    }
   }
 
   const batchId = randomUUID();
@@ -146,14 +151,15 @@ export async function generateInvoices(
   const rows = await Promise.all(
     selected.map(async (invoice) => {
       const pdf = await buildInvoicePdf(invoice, run.payee, locale);
-      zip.file(filenameFor(invoice), pdf);
+      const filename = filenameFor(invoice, periodLabel);
+      zip.file(filename, pdf);
       // Best-effort: a Drive hiccup must never lose an invoice that has
       // already been decided and priced. The zip download is never at risk
       // either way — it's built from `pdf` above, not from this.
       let drivePdfFileId: string | null = null;
-      if (driveFolderId) {
+      if (uploadFolderId) {
         try {
-          drivePdfFileId = await uploadPdf(driveFolderId, filenameFor(invoice), pdf);
+          drivePdfFileId = await uploadPdf(uploadFolderId, filename, pdf);
         } catch (err) {
           log?.error({ err, batchId, partyName: invoice.partyName }, "Drive upload failed for a generated invoice");
         }
