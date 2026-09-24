@@ -327,15 +327,43 @@ function MappingSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
   );
 }
 
-/** Which live entity feeds each figure on the participants' "right now" view. */
+type SensorClass = "power" | "energy" | "battery";
+
+/**
+ * The two signed power sensors, each with its own convention: which way is
+ * positive is a property of the sensor, so the flag lives under it.
+ */
+const SIGN_FLAGS: Partial<
+  Record<string, { key: "liveExportNegative" | "liveBatteryChargeNegative"; label: MessageKey; hint: MessageKey }>
+> = {
+  liveExportPowerEntityId: { key: "liveExportNegative", label: "settings.live.exportNegative", hint: "settings.live.exportNegativeHint" },
+  liveBatteryPowerEntityId: {
+    key: "liveBatteryChargeNegative",
+    label: "settings.live.batteryChargeNegative",
+    hint: "settings.live.batteryChargeNegativeHint",
+  },
+};
+
+/** Which live entity feeds each figure on the "right now" view. */
 const LIVE_FIELDS: Array<{
-  field: "liveExportPowerEntityId" | "livePvPowerEntityId" | "forecastTodayEntityId" | "forecastRemainingEntityId" | "forecastTomorrowEntityId";
+  field:
+    | "liveExportPowerEntityId"
+    | "livePvPowerEntityId"
+    | "liveBatteryPowerEntityId"
+    | "liveBatterySocEntityId"
+    | "liveLoadPowerEntityId"
+    | "forecastTodayEntityId"
+    | "forecastRemainingEntityId"
+    | "forecastTomorrowEntityId";
   label: MessageKey;
   hint: MessageKey;
-  deviceClass: "power" | "energy";
+  deviceClass: SensorClass;
 }> = [
   { field: "liveExportPowerEntityId", label: "settings.live.export", hint: "settings.live.exportHint", deviceClass: "power" },
   { field: "livePvPowerEntityId", label: "settings.live.pv", hint: "settings.live.pvHint", deviceClass: "power" },
+  { field: "liveBatteryPowerEntityId", label: "settings.live.battery", hint: "settings.live.batteryHint", deviceClass: "power" },
+  { field: "liveBatterySocEntityId", label: "settings.live.soc", hint: "settings.live.socHint", deviceClass: "battery" },
+  { field: "liveLoadPowerEntityId", label: "settings.live.load", hint: "settings.live.loadHint", deviceClass: "power" },
   { field: "forecastTodayEntityId", label: "settings.live.today", hint: "settings.live.todayHint", deviceClass: "energy" },
   { field: "forecastRemainingEntityId", label: "settings.live.remaining", hint: "settings.live.remainingHint", deviceClass: "energy" },
   { field: "forecastTomorrowEntityId", label: "settings.live.tomorrow", hint: "settings.live.tomorrowHint", deviceClass: "energy" },
@@ -360,6 +388,10 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
     queryKey: ["ha-sensors", "energy"],
     queryFn: () => api.homeAssistant.sensors("energy"),
   });
+  const batteryQuery = useQuery({
+    queryKey: ["ha-sensors", "battery"],
+    queryFn: () => api.homeAssistant.sensors("battery"),
+  });
 
   const save = useMutation({
     mutationFn: (input: SiteUpdateInput) => api.sites.update(site.id, input),
@@ -370,9 +402,10 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
     onError: (err: Error) => setError(err.message),
   });
 
-  const loading = powerQuery.isLoading || energyQuery.isLoading;
-  const listFor = (deviceClass: "power" | "energy") =>
-    (deviceClass === "power" ? powerQuery.data : energyQuery.data) ?? [];
+  const queries = { power: powerQuery, energy: energyQuery, battery: batteryQuery };
+  const loading = Object.values(queries).some((q) => q.isLoading);
+  const failed = Object.values(queries).find((q) => q.isError);
+  const listFor = (deviceClass: SensorClass) => queries[deviceClass].data ?? [];
 
   return (
     <div className="space-y-3 rounded-lg border bg-white p-4">
@@ -382,12 +415,8 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {(powerQuery.isError || energyQuery.isError) && (
-        <p className="text-sm text-red-600">
-          {t("settings.statListFailed", {
-            message: ((powerQuery.error ?? energyQuery.error) as Error).message,
-          })}
-        </p>
+      {failed && (
+        <p className="text-sm text-red-600">{t("settings.statListFailed", { message: (failed.error as Error).message })}</p>
       )}
 
       <div className="overflow-x-auto">
@@ -431,22 +460,21 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
                         </option>
                       ))}
                     </select>
-                    {/* The sign is a property of this one sensor, so it lives
-                        under it: inverters disagree on whether feeding the grid
-                        reads positive or negative, and guessing showed 0 kW
-                        while the house was exporting 4.8. */}
-                    {field === "liveExportPowerEntityId" && current && (
+                    {/* Inverters disagree on which way is positive — guessing
+                        the export sign showed 0 kW while the house was
+                        exporting 4.8 — so a signed sensor carries its flag. */}
+                    {SIGN_FLAGS[field] && current && (
                       <label className="mt-2 flex max-w-md items-start gap-2 text-xs text-slate-600">
                         <input
                           type="checkbox"
                           className="mt-0.5"
-                          checked={site.liveExportNegative}
+                          checked={site[SIGN_FLAGS[field]!.key]}
                           disabled={!canEdit || save.isPending}
-                          onChange={(e) => save.mutate({ liveExportNegative: e.target.checked })}
+                          onChange={(e) => save.mutate({ [SIGN_FLAGS[field]!.key]: e.target.checked })}
                         />
                         <span>
-                          <span className="font-medium text-slate-700">{t("settings.live.exportNegative")}</span>
-                          <span className="block text-slate-400">{t("settings.live.exportNegativeHint")}</span>
+                          <span className="font-medium text-slate-700">{t(SIGN_FLAGS[field]!.label)}</span>
+                          <span className="block text-slate-400">{t(SIGN_FLAGS[field]!.hint)}</span>
                         </span>
                       </label>
                     )}
@@ -508,7 +536,7 @@ function CloudflareAccessSection({ canEdit }: { canEdit: boolean }) {
           <button
             onClick={() => syncMutation.mutate()}
             disabled={!canEdit || syncMutation.isPending}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="btn-primary px-4 py-2 text-sm"
           >
             {syncMutation.isPending ? t("settings.syncing") : t("settings.cfAccessSyncNow")}
           </button>
@@ -636,7 +664,7 @@ function GoogleDriveSection({ siteId, canEdit }: { siteId: string; canEdit: bool
                 <button
                   onClick={() => verifyMutation.mutate(folderId)}
                   disabled={!folderId.trim() || verifyMutation.isPending}
-                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  className="btn-primary px-4 py-2 text-sm"
                 >
                   {verifyMutation.isPending ? t("settings.driveConnecting") : t("settings.driveConnect")}
                 </button>
@@ -744,7 +772,7 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
         <button
           onClick={() => syncMutation.mutate()}
           disabled={!canEdit || syncMutation.isPending || !rangeValid}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="btn-primary px-4 py-2 text-sm"
         >
           {syncMutation.isPending ? t("settings.syncing") : t("settings.syncNow")}
         </button>

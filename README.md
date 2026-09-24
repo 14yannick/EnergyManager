@@ -22,7 +22,10 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
   [`apps/api/src/modules/homeAssistant/split.ts`](apps/api/src/modules/homeAssistant/split.ts)
 - **Savings & payback dashboard**: revenue by category (direct consumption, direct
   export, battery, neighbour sales) at hourly/daily/monthly/yearly resolution, in CHF,
-  kWh or both; KPIs; and simple payback + breakeven computed three ways — with battery,
+  kWh or both; KPIs; an energy-flow diagram (sun → house, battery, grid, participants,
+  with grid import) as a Sankey or a radial map; a live "right now" strip with the house's
+  power flow at this instant (Home Assistant power sensors, battery state of charge) over
+  today's energy; and simple payback + breakeven computed three ways — with battery,
   without battery (counterfactual), and battery-only
 - **Calculation detail** page showing one day at a time: where production went (direct
   use, the parties, the grid) and what the battery cost and earned, each line carrying

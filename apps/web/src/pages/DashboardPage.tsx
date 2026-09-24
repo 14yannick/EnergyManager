@@ -15,13 +15,17 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api/client";
+import { PALETTE, type Tone } from "../lib/palette";
 import { useT, type Translate } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useSelectedPeriod } from "../lib/usePeriod";
 import { PeriodControls } from "../components/PeriodControls";
+import { PeriodHeader } from "../components/PeriodHeader";
 import { InfoTip } from "../components/InfoTip";
 import { StatCard } from "../components/StatCard";
+import { LiveSection } from "../components/LiveSection";
 import { NeighbourSalesChart } from "../components/NeighbourSalesChart";
+import { EnergyFlowChart } from "../components/EnergyFlowChart";
 import {
   MAX_HOURLY_DAYS,
   PERIODS_PER_YEAR,
@@ -118,6 +122,7 @@ export function DashboardPage() {
     queryFn: () => api.savings.neighbours(site!.id, from, to),
     enabled: !!site,
   });
+
   // Deliberately not scoped to the period above: an open invoice is a
   // current-balance fact, not a historical one, so this is the same figure
   // whichever range the rest of the page happens to be showing. Shares its
@@ -140,25 +145,38 @@ export function DashboardPage() {
   // alone would have cost either way.
   const netEarningChf =
     neighbours == null ? undefined : neighbours.totals.gainChf + (neighbours.owner?.advantageChf ?? 0);
+  // A profit-and-loss figure earns its colour: green while it is actually
+  // positive, plain at zero or below. Tinting a zero would claim a gain the
+  // number does not show.
+  const gainTone = (chf: number | undefined): Tone | undefined => (chf != null && chf > 0 ? "local" : undefined);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">{t("dash.title")}</h1>
-          <p className="max-w-2xl text-sm text-slate-500">{t("dash.intro")}</p>
-        </div>
-        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-3 text-sm">
-          <PeriodControls
-            range={{ from, to }}
-            granularity={granularity}
-            mode={mode}
-            onChange={setPeriod}
-            dataRange={dataRange}
-            bounds={bounds}
-          />
-        </div>
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900">{t("dash.title")}</h1>
+        <p className="max-w-2xl text-sm text-slate-500">{t("dash.intro")}</p>
       </div>
+
+      {/* The sun first: what the panels are doing this minute and how the
+          day has run hour by hour, before any money. The same section the
+          participant's Consumption page shows — the owner asks the same
+          question, just about their own roof — with the feed-in rate drawn
+          in, since the owner is who it is paid to. Absent entirely, not
+          dashed out, while nothing live is configured. */}
+      <LiveSection siteId={site.id} owner />
+
+      {/* The period selector lives here rather than beside the page title:
+          nothing above this line answers to it. */}
+      <PeriodHeader title={t("dash.periodTitle")} intro={t("dash.periodIntro")}>
+        <PeriodControls
+          range={{ from, to }}
+          granularity={granularity}
+          mode={mode}
+          onChange={setPeriod}
+          dataRange={dataRange}
+          bounds={bounds}
+        />
+      </PeriodHeader>
 
       {granularity === "hourly" && (
         <p className="text-xs text-slate-500">{t("dash.hourlyCap", { days: MAX_HOURLY_DAYS })}</p>
@@ -179,58 +197,71 @@ export function DashboardPage() {
             />
           )}
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label={t("dash.withBatteryTotal")}
-          value={summary?.totals.withBatteryChf}
-          sub={avgOf(summary?.avgDaily.withBatteryChf)}
-        />
-        <StatCard
-          label={t("dash.noBatteryTotal")}
-          value={summary?.totals.withoutBatteryChf}
-          sub={avgOf(summary?.avgDaily.withoutBatteryChf)}
-        />
-        <StatCard
-          label={t("dash.soldPrice")}
-          value={summary?.soldPricePerKwhChf}
-          format={(v) => ct(v)}
-          sub={
-            summary
-              ? t("dash.soldPriceSub", {
-                  kwh: (summary.sold.gridKwh + summary.sold.neighbourKwh + summary.sold.unpricedKwh).toFixed(0),
-                  grid: summary.sold.gridKwh > 0 ? ct(summary.sold.gridChf / summary.sold.gridKwh) : "—",
-                  local:
-                    summary.sold.neighbourKwh > 0 ? ct(summary.sold.neighbourChf / summary.sold.neighbourKwh) : "—",
-                }) +
-                (summary.sold.unpricedKwh >= 0.5
-                  ? ` · ${t("dash.soldUnpriced", { kwh: summary.sold.unpricedKwh.toFixed(0) })}`
-                  : "")
-              : undefined
-          }
-        />
-        <StatCard
-          label={t("dash.batteryRevenue")}
-          hint={t("dash.batteryRevenueHint")}
-          value={summary?.totals.batteryRevenueChf}
-          sub={avgOf(summary?.avgDaily.batteryRevenueChf)}
-        />
-        <StatCard
-          label={t("dash.openInvoices")}
-          hint={t("dash.openInvoicesHint")}
-          value={openInvoicesChf}
-        />
-        <StatCard
-          label={t("dash.netEarning")}
-          hint={t("dash.netEarningHint")}
-          value={netEarningChf}
-          emphasis={netEarningChf != null && netEarningChf > 0 ? "positive" : "strong"}
-        />
+        {/* The page's answer, twice the size of everything else: what the
+            system saved, and what the vZEV itself earned. The saving is the
+            sun's doing and wears its colour; the earning is a result, and is
+            coloured only by its sign. The four below are the working
+            figures. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <StatCard
+            size="hero"
+            tone="sun"
+            label={t("dash.withBatteryTotal")}
+            value={summary?.totals.withBatteryChf}
+            sub={avgOf(summary?.avgDaily.withBatteryChf)}
+          />
+          <StatCard
+            size="hero"
+            tone={gainTone(netEarningChf)}
+            label={t("dash.netEarning")}
+            hint={t("dash.netEarningHint")}
+            value={netEarningChf}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatCard
+            label={t("dash.noBatteryTotal")}
+            value={summary?.totals.withoutBatteryChf}
+            sub={avgOf(summary?.avgDaily.withoutBatteryChf)}
+          />
+          <StatCard
+            label={t("dash.soldPrice")}
+            value={summary?.soldPricePerKwhChf}
+            format={(v) => ct(v)}
+            sub={
+              summary
+                ? t("dash.soldPriceSub", {
+                    kwh: (summary.sold.gridKwh + summary.sold.neighbourKwh + summary.sold.unpricedKwh).toFixed(0),
+                    grid: summary.sold.gridKwh > 0 ? ct(summary.sold.gridChf / summary.sold.gridKwh) : "—",
+                    local:
+                      summary.sold.neighbourKwh > 0 ? ct(summary.sold.neighbourChf / summary.sold.neighbourKwh) : "—",
+                  }) +
+                  (summary.sold.unpricedKwh >= 0.5
+                    ? ` · ${t("dash.soldUnpriced", { kwh: summary.sold.unpricedKwh.toFixed(0) })}`
+                    : "")
+                : undefined
+            }
+          />
+          <StatCard
+            tone={gainTone(summary?.totals.batteryRevenueChf)}
+            label={t("dash.batteryRevenue")}
+            hint={t("dash.batteryRevenueHint")}
+            value={summary?.totals.batteryRevenueChf}
+            sub={avgOf(summary?.avgDaily.batteryRevenueChf)}
+          />
+          <StatCard
+            label={t("dash.openInvoices")}
+            hint={t("dash.openInvoicesHint")}
+            value={openInvoicesChf}
+          />
         </div>
       </section>
 
       <RevenueBreakdownChart siteId={site.id} from={from} to={to} granularity={granularity} />
 
       <NeighbourSalesChart siteId={site.id} from={from} to={to} />
+
+      <EnergyFlowChart siteId={site.id} from={from} to={to} granularity={granularity} />
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-slate-700">
@@ -279,11 +310,11 @@ export function DashboardPage() {
 const REVENUE_COLORS = {
   // Slot 7 (violet) at the foot of the stack, under yellow — a pair it
   // clears comfortably.
-  rcp: "#4a3aa7",
-  consumption: "#eda100",
-  direct: "#2a78d6",
-  battery: "#eb6834",
-  neighbor: "#1baf7a",
+  rcp: PALETTE.vzev,
+  consumption: PALETTE.sun,
+  direct: PALETTE.grid,
+  battery: PALETTE.battery,
+  neighbor: PALETTE.local,
 };
 
 /**
@@ -294,7 +325,7 @@ const REVENUE_COLORS = {
  * it is the same energy, going the other way — while being told apart at a
  * glance, and reads as the cost it represents.
  */
-const BATTERY_CHARGING_COLOR = "#8c3f1d";
+const BATTERY_CHARGING_COLOR = PALETTE.batteryCharging;
 
 /**
  * Export forgone on participant sales — the same idea as charging cost, so it
@@ -307,7 +338,7 @@ const BATTERY_CHARGING_COLOR = "#8c3f1d";
  * against that brown while staying far enough from the neighbour green above
  * the axis to read as a different series.
  */
-const NEIGHBOR_FORGONE_COLOR = "#007c64";
+const NEIGHBOR_FORGONE_COLOR = PALETTE.localForgone;
 
 /**
  * A hollow bar whose border sits inside its slot.
@@ -895,7 +926,7 @@ function RevenueBreakdownChart({
                 </pattern>
               ))}
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.gridline} vertical={false} />
             {/* The line the bars are measured from. Dashed and pale so it
                 marks the baseline without competing with the bars. */}
             <ReferenceLine
@@ -918,7 +949,7 @@ function RevenueBreakdownChart({
               <YAxis
                 yAxisId="kwh"
                 orientation="right"
-                tick={{ fontSize: 11, fill: "#64748b" }}
+                tick={{ fontSize: 11, fill: PALETTE.axis }}
                 tickFormatter={axisTick}
                 domain={axisDomains.right ?? [0, "auto"]}
                 ticks={ticksThroughZero(axisDomains.right)}
@@ -1061,7 +1092,7 @@ function RevenueBreakdownChart({
                 type="monotone"
                 dataKey="producedKwh"
                 name={t("dash.productionSeries")}
-                stroke="#0f172a"
+                stroke={PALETTE.ink}
                 strokeWidth={2}
                 dot={false}
               />
