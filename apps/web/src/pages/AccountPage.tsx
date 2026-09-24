@@ -149,7 +149,7 @@ function MarkPaidControl({ invoiceId, onDone }: { invoiceId: string; onDone: () 
         type="button"
         onClick={() => mutation.mutate()}
         disabled={mutation.isPending}
-        className="rounded-md bg-slate-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+        className="btn-primary px-3 py-1 text-xs"
       >
         {t("account.markPaid")}
       </button>

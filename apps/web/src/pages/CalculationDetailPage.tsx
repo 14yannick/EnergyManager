@@ -614,7 +614,7 @@ function PeriodTable({ siteId }: { siteId: string }) {
             <button
               onClick={exportCsv}
               disabled={rows.length === 0}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn-primary px-4 py-2 text-sm"
             >
               {t("calc.exportCsv")}
             </button>

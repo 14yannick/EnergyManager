@@ -8,6 +8,14 @@
        the text, which is nearly invisible against this border. */
     @apply max-w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-slate-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500;
   }
+
+  /* A primary action — the one button on a card that does the thing. Size
+     (padding, text size) stays at the call site; colour lives here, so the
+     accent is one definition rather than seventeen copied class strings. See
+     PRIMARY in src/lib/palette.ts for why it is warm and what stays ink. */
+  .btn-primary {
+    @apply rounded-md bg-primary font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary;
+  }
 }
 
 /* ---------------------------------------------------------------------------

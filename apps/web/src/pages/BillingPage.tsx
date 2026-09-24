@@ -296,7 +296,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
         <button
           type="submit"
           disabled={createMutation.isPending || updateMutation.isPending || draft.label.trim() === ""}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="btn-primary px-4 py-2 text-sm"
         >
           {editingId ? t("common.save") : t("billing.addPosition")}
         </button>
@@ -497,7 +497,7 @@ function InvoiceSection({ siteId }: { siteId: string }) {
             <button
               onClick={() => setCustomRange({ from: customFrom, to: customTo })}
               disabled={customFrom > customTo}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn-primary px-4 py-2 text-sm"
             >
               {t("billing.generate")}
             </button>
@@ -843,7 +843,7 @@ function GenerateInvoicesControl({
       <button
         onClick={() => generateMutation.mutate()}
         disabled={selected.size === 0 || generateMutation.isPending}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="btn-primary px-4 py-2 text-sm"
       >
         {t("invoice.generateAction")}
       </button>

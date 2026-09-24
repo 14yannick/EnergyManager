@@ -69,7 +69,7 @@ export function ReadingsImportPage() {
         <button
           onClick={() => importMutation.mutate()}
           disabled={!file || importMutation.isPending}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="btn-primary px-4 py-2 text-sm"
         >
           {importMutation.isPending ? t("readings.importing") : t("readings.import")}
         </button>
@@ -203,12 +203,12 @@ function ExportSection({ siteId }: { siteId: string }) {
       {canExport ? (
         <a
           href={api.readings.exportUrl(siteId, from, to, kinds)}
-          className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+          className="btn-primary inline-block px-4 py-2 text-sm"
         >
           {t("readings.download")}
         </a>
       ) : (
-        <span className="inline-block cursor-not-allowed rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white opacity-50">
+        <span className="btn-primary inline-block cursor-not-allowed px-4 py-2 text-sm opacity-50">
           {t("readings.download")}
         </span>
       )}
@@ -439,7 +439,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
         <button
           type="submit"
           disabled={createMutation.isPending || draft.name.trim() === ""}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="btn-primary px-4 py-2 text-sm"
         >
           {t("parties.addParticipant")}
         </button>

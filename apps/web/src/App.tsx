@@ -185,7 +185,20 @@ export function App() {
         {/* The tabs wrap under the brand below `xl` (`order-last w-full` in
             NavBar) and sit beside it above. */}
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 lg:px-8 xl:flex-nowrap">
-          <span className="text-lg font-semibold text-slate-900">{t("app.name")}</span>
+          <span className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            {/* The one brand mark: the sun, in the sun's own colour. */}
+            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-sun" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.5" fill="currentColor" />
+              <path
+                d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </svg>
+            {t("app.name")}
+          </span>
           {showNav && <NavBar items={items} />}
         </div>
       </header>

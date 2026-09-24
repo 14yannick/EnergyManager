@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { NeighbourSale } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { PALETTE } from "../lib/palette";
 import { useT } from "../i18n/context";
 import { InfoTip } from "./InfoTip";
 import { axisTick } from "../lib/periods";
@@ -28,8 +29,8 @@ import { axisTick } from "../lib/periods";
 // The dashboard's own colours for the two flows being compared: neighbour
 // sales, and direct export. Validated as a pair; the export bar is hatched as
 // well, so it reads as the alternative rather than as money received.
-const SALE_COLOR = "#1baf7a";
-const EXPORT_COLOR = "#2a78d6";
+const SALE_COLOR = PALETTE.local;
+const EXPORT_COLOR = PALETTE.grid;
 const EXPORT_HATCH = "neighbourExportHatch";
 
 const chf = (v: number) => `CHF ${v.toFixed(2)}`;
@@ -78,7 +79,7 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
                       <line x1={0} y1={0} x2={0} y2={5} stroke={EXPORT_COLOR} strokeWidth={3} />
                     </pattern>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.gridline} vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={axisTick} width={56} />
                   <Tooltip content={<SaleTooltip />} cursor={{ fill: "#f1f5f9" }} />
