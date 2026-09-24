@@ -111,8 +111,35 @@ export function DashboardPage() {
     enabled: !!site,
   });
 
+  // Shares its query key with NeighbourSalesChart's own fetch below, so this
+  // is cache, not a second network round trip.
+  const neighboursQuery = useQuery({
+    queryKey: ["savings-neighbours", site?.id, from, to],
+    queryFn: () => api.savings.neighbours(site!.id, from, to),
+    enabled: !!site,
+  });
+  // Deliberately not scoped to the period above: an open invoice is a
+  // current-balance fact, not a historical one, so this is the same figure
+  // whichever range the rest of the page happens to be showing. Shares its
+  // key with the Account page's own fetch.
+  const invoicesQuery = useQuery({
+    queryKey: ["invoices", site?.id],
+    queryFn: () => api.invoices.list(site!.id),
+    enabled: !!site,
+  });
+
   if (!site) return <p className="text-slate-500">{t("common.loading")}</p>;
   const summary = summaryQuery.data;
+  const neighbours = neighboursQuery.data;
+  const openInvoicesChf = invoicesQuery.data
+    ?.filter((inv) => inv.status === "issued")
+    .reduce((sum, inv) => sum + inv.totalChf, 0);
+  // What selling to participants gained (revenue less the export it displaced)
+  // plus the owner's own saving on standing charges from sharing the
+  // connection — the vZEV's whole economic point, net of what running it
+  // alone would have cost either way.
+  const netEarningChf =
+    neighbours == null ? undefined : neighbours.totals.gainChf + (neighbours.owner?.advantageChf ?? 0);
 
   return (
     <div className="space-y-6">
@@ -186,6 +213,17 @@ export function DashboardPage() {
           hint={t("dash.batteryRevenueHint")}
           value={summary?.totals.batteryRevenueChf}
           sub={avgOf(summary?.avgDaily.batteryRevenueChf)}
+        />
+        <StatCard
+          label={t("dash.openInvoices")}
+          hint={t("dash.openInvoicesHint")}
+          value={openInvoicesChf}
+        />
+        <StatCard
+          label={t("dash.netEarning")}
+          hint={t("dash.netEarningHint")}
+          value={netEarningChf}
+          emphasis={netEarningChf != null && netEarningChf > 0 ? "positive" : "strong"}
         />
         </div>
       </section>

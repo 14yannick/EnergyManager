@@ -522,6 +522,10 @@ export const en = {
   "dash.noBatteryTotal": "Total savings — no battery",
   "dash.batteryRevenue": "Battery revenue",
   "dash.batteryRevenueHint": "Discharge − export forgone",
+  "dash.openInvoices": "Open invoices",
+  "dash.openInvoicesHint": "Sum of issued, unpaid invoices — a current balance, not scoped to the period above",
+  "dash.netEarning": "Net earning of the vZEV",
+  "dash.netEarningHint": "Sold to participants + fixed-charge saving − the export that energy would have earned instead",
   "dash.avgSuffix": "CHF {value}/{unit} avg",
 
   "dash.payback": "Payback by category",

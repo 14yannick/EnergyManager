@@ -540,6 +540,10 @@ export const de: Record<keyof typeof en, string> = {
   "dash.noBatteryTotal": "Gesamtersparnis — ohne Batterie",
   "dash.batteryRevenue": "Ertrag der Batterie",
   "dash.batteryRevenueHint": "Entladung − entgangene Einspeisung",
+  "dash.openInvoices": "Offene Rechnungen",
+  "dash.openInvoicesHint": "Summe der ausgestellten, unbezahlten Rechnungen — ein aktueller Saldo, unabhängig von der Periode oben",
+  "dash.netEarning": "Nettoertrag des vZEV",
+  "dash.netEarningHint": "Verkauf an Teilnehmer + Ersparnis bei den Grundgebühren − die Einspeisung, die diese Energie sonst erzielt hätte",
   "dash.avgSuffix": "CHF {value}/{unit} im Schnitt",
 
   "dash.payback": "Amortisation nach Kategorie",

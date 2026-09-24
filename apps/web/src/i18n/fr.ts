@@ -530,6 +530,10 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.noBatteryTotal": "Économies totales — sans batterie",
   "dash.batteryRevenue": "Revenu de la batterie",
   "dash.batteryRevenueHint": "Décharge − injection perdue",
+  "dash.openInvoices": "Factures ouvertes",
+  "dash.openInvoicesHint": "Somme des factures émises et impayées — un solde actuel, indépendant de la période ci-dessus",
+  "dash.netEarning": "Gain net du RCPv",
+  "dash.netEarningHint": "Vendu aux participants + économie sur les charges fixes − l'injection que cette énergie aurait rapportée à la place",
   "dash.avgSuffix": "CHF {value}/{unit} en moyenne",
 
   "dash.payback": "Amortissement par catégorie",
