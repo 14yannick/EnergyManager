@@ -38,7 +38,7 @@ export async function invoiceRoutes(app: FastifyInstance) {
     }
     const { from, to, locale, partyIds } = parsed.data;
     try {
-      const { zip } = await generateInvoices(req.params.siteId, from, to, locale, partyIds);
+      const { zip } = await generateInvoices(req.params.siteId, from, to, locale, partyIds, req.log);
       return reply
         .status(201)
         .header("Content-Type", "application/zip")

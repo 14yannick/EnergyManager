@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "drive_folder_name" text;

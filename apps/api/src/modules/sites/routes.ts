@@ -22,6 +22,8 @@ function toDomain(row: Row): Site {
     forecastTodayEntityId: row.forecastTodayEntityId,
     forecastRemainingEntityId: row.forecastRemainingEntityId,
     forecastTomorrowEntityId: row.forecastTomorrowEntityId,
+    driveFolderId: row.driveFolderId,
+    driveFolderName: row.driveFolderName,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

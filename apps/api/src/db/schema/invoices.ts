@@ -50,6 +50,13 @@ export const invoices = pgTable(
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     /** The full computed invoice this row and its PDF were built from. */
     detail: jsonb("detail").$type<IssuedInvoice>().notNull(),
+    /**
+     * The archived PDF's Drive file id, if Google Drive was configured (both
+     * a server-wide service account and this site's folder) at generation
+     * time. Null just means no copy was archived — generation never fails
+     * because of Drive, so this is always best-effort.
+     */
+    drivePdfFileId: text("drive_pdf_file_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

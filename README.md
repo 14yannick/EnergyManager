@@ -271,6 +271,68 @@ Participants need no account here beyond their address being on their party
 and site id — `/api/sites` is closed to them, because a site row carries your
 investment figures.
 
+## Google Drive (optional)
+
+Archives each generated invoice PDF to a Drive folder, alongside the zip
+every Generate click already downloads. Leave `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`
+unset and the feature simply doesn't exist — invoices still generate
+normally, just without a Drive copy.
+
+**A service account, not an OAuth app.** There is no per-site "sign in with
+Google" step. One long-lived credential (like `HA_TOKEN` or `CF_API_TOKEN`)
+gives the server a fixed identity, and that identity's *only* access boundary
+is Drive's own sharing model: it can see a folder if, and only if, someone
+explicitly shared that folder with it. Nothing else in anyone's Drive is ever
+reachable, regardless of how broad the requested scope is.
+
+**No Google Cloud IAM role is needed on the service account itself** — this
+trips people up because Drive doesn't follow the same access model as most
+other Google Cloud resources. The two things that actually matter are steps
+1 and 3 below (the Drive API enabled on the project, and the folder shared
+with the service account's address); nothing in Cloud Console's "IAM & Admin"
+needs to name this service account at all. Domain-wide delegation (a Google
+Workspace admin feature) is unrelated and unnecessary here too.
+
+**A regular "My Drive" folder does not work, even shared with the service
+account.** This only surfaced by actually testing it: Drive refuses the
+upload with *"Service Accounts do not have storage quota"* — a bare service
+account has no storage of its own on a personal (non-Workspace) account, and
+a shared folder in someone's My Drive doesn't give it any. A **Shared
+Drive** does have its own pooled storage the service account can write into,
+but Shared Drives are a **Google Workspace** feature — unavailable on a plain
+`@gmail.com` account. If you don't have Workspace, this feature currently has
+no working setup on a personal account; that's a Drive platform limitation,
+not something this app's code can route around.
+
+1. **Create a service account and download its JSON key.** Google's own guide
+   covers this end to end:
+   [Create a service account](https://cloud.google.com/iam/docs/service-accounts-create).
+   Enable the Google Drive API on the same project
+   ([console.cloud.google.com/apis/library/drive.googleapis.com](https://console.cloud.google.com/apis/library/drive.googleapis.com)).
+2. **Set `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` to the key file's whole
+   contents**, as one line — not a path to a mounted file, since not every
+   host running this app can easily get an extra file into the container.
+   This is a server credential like `HA_TOKEN` or `CF_API_TOKEN`; never typed
+   into the app itself.
+3. **Create a Shared Drive** (requires Google Workspace) for invoices, and
+   add the service account's email as a member with at least Content Manager
+   access — that address is shown under Settings → Google Drive once the
+   credential is configured, something like
+   `energymanager@your-project.iam.gserviceaccount.com`.
+4. **Paste the Shared Drive's id** (from its URL:
+   `drive.google.com/drive/folders/`**`<this part>`**, or
+   `drive.google.com/drive/u/0/folders/`**`<this part>`** — either way, the
+   part after the last `/`) into Settings → Google Drive → Connect. The app
+   verifies access before saving anything.
+
+**Every archived PDF is set to "anyone with the link can view".** A
+participant is a different Google identity than the admin — often with no
+Google account at all — so without this, the Account page's download link
+would 403 for everyone but the admin. The link itself is a long, unguessable
+file id: not listed, not indexed, not discoverable by browsing the folder
+from outside it — the same trade-off an "unlisted" video or doc link makes —
+but anyone who does obtain that exact URL can open it.
+
 ## Quickstart (Docker)
 
 ```bash
@@ -533,8 +595,9 @@ pnpm db:generate   # generate a new Drizzle migration after changing apps/api/sr
       allocation and per-participant invoices are in place; an admin can now
       generate and store a dated batch of invoices for a period — one PDF per
       participant, a QR-bill included, downloaded as a zip — and track paid/unpaid
-      per invoice on the Account tab. The PDF itself isn't kept anywhere yet
-      (cloud storage and a link back from the Account tab are still open)
+      per invoice on the Account tab. Optionally archived to Google Drive at
+      generation time, with a real download link from the Account tab (see
+      [Google Drive](#google-drive-optional) above)
 - [ ] Phase 3: real-time monitoring. Live ingestion is partly here already — interval
       data and dynamic feed-in rates both sync from Home Assistant, on a timer
       rather than on demand

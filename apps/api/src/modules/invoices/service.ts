@@ -3,9 +3,10 @@ import { and, desc, eq, ne } from "drizzle-orm";
 import JSZip from "jszip";
 import type { Invoice, InvoiceLock, InvoiceLocale } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
-import { invoices } from "../../db/schema/index.js";
+import { invoices, sites } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { runInvoices } from "../billing/service.js";
+import { googleDriveConfigured, uploadPdf } from "../googleDrive/service.js";
 import { buildInvoicePdf } from "./pdf.js";
 
 type Row = typeof invoices.$inferSelect;
@@ -30,6 +31,7 @@ function toDomain(row: Row): Invoice {
     status: row.status,
     paidAt: row.paidAt?.toISOString() ?? null,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    drivePdfFileId: row.drivePdfFileId,
   };
 }
 
@@ -109,12 +111,18 @@ function filenameFor(invoice: { partyReference: string | null; partyName: string
  * it; its `BillingPeriodError` (a period spanning a tariff change) is left
  * to propagate unchanged.
  */
+/** The one piece of Fastify's request logger this needs — kept minimal so tests can stub it trivially. */
+export interface MinimalLogger {
+  error: (obj: unknown, msg?: string) => void;
+}
+
 export async function generateInvoices(
   siteId: string,
   from: string,
   to: string,
   locale: InvoiceLocale,
   partyIds: string[],
+  log?: MinimalLogger,
 ): Promise<{ batchId: string; zip: Buffer }> {
   const locks = await findLocks(siteId, from, to);
   const requested = new Set(partyIds);
@@ -125,12 +133,31 @@ export async function generateInvoices(
   const selected = run.invoices.filter((invoice) => invoice.partyId != null && requested.has(invoice.partyId));
   if (selected.length === 0) throw new NothingToInvoiceError();
 
+  // Only read once per batch, not once per invoice — and only at all if
+  // there is any point, i.e. the server has a service account configured.
+  let driveFolderId: string | null = null;
+  if (googleDriveConfigured) {
+    const [site] = await db.select({ driveFolderId: sites.driveFolderId }).from(sites).where(eq(sites.id, siteId));
+    driveFolderId = site?.driveFolderId ?? null;
+  }
+
   const batchId = randomUUID();
   const zip = new JSZip();
   const rows = await Promise.all(
     selected.map(async (invoice) => {
       const pdf = await buildInvoicePdf(invoice, run.payee, locale);
       zip.file(filenameFor(invoice), pdf);
+      // Best-effort: a Drive hiccup must never lose an invoice that has
+      // already been decided and priced. The zip download is never at risk
+      // either way — it's built from `pdf` above, not from this.
+      let drivePdfFileId: string | null = null;
+      if (driveFolderId) {
+        try {
+          drivePdfFileId = await uploadPdf(driveFolderId, filenameFor(invoice), pdf);
+        } catch (err) {
+          log?.error({ err, batchId, partyName: invoice.partyName }, "Drive upload failed for a generated invoice");
+        }
+      }
       return {
         batchId,
         siteId,
@@ -146,6 +173,7 @@ export async function generateInvoices(
         totalChf: String(invoice.totalChf),
         savingChf: String(invoice.comparison.savingChf),
         detail: invoice,
+        drivePdfFileId,
       };
     }),
   );

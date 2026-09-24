@@ -231,6 +231,22 @@ export const api = {
     /** Manual retry for the sync every party save already triggers automatically. */
     sync: () => request<CfAccessSyncResult>("/cloudflare-access/sync", { method: "POST" }),
   },
+  googleDrive: {
+    status: (siteId: string) =>
+      request<{
+        configured: boolean;
+        serviceAccountEmail: string | null;
+        folderId: string | null;
+        folderName: string | null;
+      }>(`/sites/${siteId}/drive/status`),
+    verifyFolder: (siteId: string, folderId: string) =>
+      request<{ folderId: string; folderName: string }>(`/sites/${siteId}/drive/verify-folder`, {
+        method: "POST",
+        body: JSON.stringify({ folderId }),
+      }),
+    disconnectFolder: (siteId: string) =>
+      request<void>(`/sites/${siteId}/drive/folder`, { method: "DELETE" }),
+  },
   billing: {
     positions: (siteId: string) => request<GridTariffPosition[]>(`/sites/${siteId}/billing/positions`),
     createPosition: (siteId: string, input: GridTariffPositionInput) =>

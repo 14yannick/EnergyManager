@@ -101,6 +101,20 @@ const envSchema = z.object({
   // like HA_TOKEN's more dangerous sibling.
   CF_API_TOKEN: z.string().optional(),
   CF_ACCOUNT_ID: z.string().optional(),
+
+  // ---- Google Drive (optional) -------------------------------------------
+  // Where generated invoice PDFs are archived, alongside the zip download.
+  // A service account, not an OAuth app: unlike Cloudflare/HA there is no
+  // per-site "pick an account" step — one credential, and it can only ever
+  // see whatever folder a site's admin explicitly shares with its email
+  // address (visible at GET .../drive/status). Unset simply disables the
+  // feature — invoices still generate, just without a Drive copy.
+  //
+  // The whole key file's *contents*, not a path to it: some hosts (this
+  // app's own Unraid deployment among them) have no convenient way to mount
+  // an extra file into the container, but setting one more environment
+  // variable is always available.
+  GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: z.string().optional(),
 });
 
 const parsed = envSchema.parse(process.env);
@@ -157,3 +171,4 @@ export const adminEmails = emailSet(parsed.AUTH_ADMIN_EMAILS);
 export const cfAccessSyncConfigured = Boolean(
   parsed.CF_API_TOKEN && parsed.CF_ACCOUNT_ID && adminEmails.size > 0,
 );
+export const googleDriveConfigured = Boolean(parsed.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON);

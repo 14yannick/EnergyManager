@@ -64,6 +64,11 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   "/api/home-assistant/entities/:id": { DELETE: ADMIN },
   "/api/sites/:siteId/home-assistant/sync": { POST: ADMIN },
 
+  // Setup-only — where a generated PDF is archived, not billing data itself.
+  "/api/sites/:siteId/drive/status": { GET: ADMIN },
+  "/api/sites/:siteId/drive/verify-folder": { POST: ADMIN },
+  "/api/sites/:siteId/drive/folder": { DELETE: ADMIN },
+
   // Open to a participant: these are the grid provider's own published rates,
   // every one of which already appears as a line on their invoice. The
   // feed-in and neighbour-sale tariffs, which would reveal the owner's

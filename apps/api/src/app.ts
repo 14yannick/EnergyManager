@@ -16,6 +16,7 @@ import { communityRoutes } from "./modules/community/routes.js";
 import { consumptionRoutes } from "./modules/consumption/routes.js";
 import { meRoutes } from "./modules/me/routes.js";
 import { cfAccessRoutes } from "./modules/cfAccess/routes.js";
+import { googleDriveRoutes } from "./modules/googleDrive/routes.js";
 import { registerAuth } from "./auth/plugin.js";
 
 export async function buildApp() {
@@ -56,6 +57,7 @@ export async function buildApp() {
   await app.register(consumptionRoutes);
   await app.register(meRoutes);
   await app.register(cfAccessRoutes);
+  await app.register(googleDriveRoutes);
 
   return app;
 }

@@ -39,6 +39,11 @@ services:
       CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
       AUTH_ADMIN_EMAILS: ${AUTH_ADMIN_EMAILS:-}
       AUTH_DEV_AS: ${AUTH_DEV_AS:-}
+      # Cloudflare Access sync and Google Drive archiving are both optional —
+      # see README.md. Unset leaves the corresponding feature off.
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

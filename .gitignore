@@ -8,3 +8,6 @@ build/
 .DS_Store
 coverage/
 *.tsbuildinfo
+
+# Google service account key(s) — real credentials, never committed.
+energy-manager-508819-a56791a59c2a.json

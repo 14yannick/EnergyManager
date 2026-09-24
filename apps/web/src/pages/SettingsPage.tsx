@@ -154,6 +154,8 @@ export function SettingsPage() {
       )}
 
       <CloudflareAccessSection canEdit={canEdit} />
+
+      <GoogleDriveSection siteId={site.id} canEdit={canEdit} />
     </div>
   );
 }
@@ -544,6 +546,105 @@ function CloudflareAccessSection({ canEdit }: { canEdit: boolean }) {
               )}
             </div>
           )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Where generated invoice PDFs are archived, alongside the zip every Generate
+ * click already downloads (see BillingPage). A service account, not an OAuth
+ * app: its whole access boundary is Drive's own sharing model, so connecting
+ * a folder here means the admin already shared it with the address shown
+ * below — nothing is typed or picked from inside this app itself.
+ */
+function GoogleDriveSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const statusQuery = useQuery({
+    queryKey: ["drive-status", siteId],
+    queryFn: () => api.googleDrive.status(siteId),
+  });
+  const [folderId, setFolderId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const verifyMutation = useMutation({
+    mutationFn: (id: string) => api.googleDrive.verifyFolder(siteId, id),
+    onSuccess: () => {
+      setError(null);
+      setFolderId("");
+      void queryClient.invalidateQueries({ queryKey: ["drive-status", siteId] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+  const disconnectMutation = useMutation({
+    mutationFn: () => api.googleDrive.disconnectFolder(siteId),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["drive-status", siteId] }),
+  });
+
+  const status = statusQuery.data;
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-white p-4">
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">{t("settings.drive")}</h2>
+        <p className="mt-1 text-xs text-slate-500">{t("settings.driveNote")}</p>
+      </div>
+
+      {status && !status.configured && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          {t("settings.driveUnconfigured")}
+        </p>
+      )}
+
+      {status?.configured && (
+        <>
+          {status.serviceAccountEmail && (
+            <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              {t("settings.driveServiceAccount", { email: status.serviceAccountEmail })}
+            </p>
+          )}
+
+          {status.folderId ? (
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="text-emerald-700">
+                {t("settings.driveConnected", { name: status.folderName ?? status.folderId })}
+              </span>
+              {canEdit && (
+                <button
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {t("settings.driveDisconnect")}
+                </button>
+              )}
+            </div>
+          ) : (
+            canEdit && (
+              <div className="flex flex-wrap items-end gap-3">
+                <Field label={t("settings.driveFolderId")} hint={t("settings.driveFolderIdHint")}>
+                  <input
+                    type="text"
+                    className="input w-64"
+                    value={folderId}
+                    onChange={(e) => setFolderId(e.target.value)}
+                    placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz"
+                  />
+                </Field>
+                <button
+                  onClick={() => verifyMutation.mutate(folderId)}
+                  disabled={!folderId.trim() || verifyMutation.isPending}
+                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {verifyMutation.isPending ? t("settings.driveConnecting") : t("settings.driveConnect")}
+                </button>
+              </div>
+            )
+          )}
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
         </>
       )}
     </div>

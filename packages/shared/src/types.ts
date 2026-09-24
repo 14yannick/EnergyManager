@@ -23,6 +23,10 @@ export interface Site {
   forecastTodayEntityId: string | null;
   forecastRemainingEntityId: string | null;
   forecastTomorrowEntityId: string | null;
+  /** The Drive folder generated invoice PDFs archive to. Null means none. */
+  driveFolderId: string | null;
+  /** The folder's own name as of when it was connected — cosmetic only. */
+  driveFolderName: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -420,6 +424,8 @@ export interface Invoice {
   status: InvoiceStatus;
   paidAt: string | null;
   cancelledAt: string | null;
+  /** The archived PDF's Drive file id, if it was archived at generation time. */
+  drivePdfFileId: string | null;
 }
 
 /**

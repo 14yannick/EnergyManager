@@ -57,6 +57,16 @@ export const sites = pgTable("sites", {
   forecastTodayEntityId: text("forecast_today_entity_id"),
   forecastRemainingEntityId: text("forecast_remaining_entity_id"),
   forecastTomorrowEntityId: text("forecast_tomorrow_entity_id"),
+  /**
+   * The Drive folder generated invoice PDFs are archived to (see
+   * modules/googleDrive) — a folder this site's admin created themselves and
+   * shared with the service account's email. Null means nothing is archived;
+   * the feature is also off entirely if the server has no service account
+   * key configured, regardless of this.
+   */
+  driveFolderId: text("drive_folder_id"),
+  /** The folder's own name at the moment it was connected — shown in Settings so a raw id isn't the only thing there. Not kept in sync if renamed in Drive afterward; cosmetic only. */
+  driveFolderName: text("drive_folder_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

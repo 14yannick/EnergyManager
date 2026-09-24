@@ -181,18 +181,34 @@ export function AccountPage() {
                       <StatusBadge status={inv.status} />
                     </td>
                     <td className="py-1.5 pr-3">
-                      <button
-                        type="button"
-                        disabled
-                        title={t("invoice.pdfComingSoon")}
-                        aria-label={t("invoice.pdfComingSoon")}
-                        className="rounded p-1 text-slate-300"
-                      >
-                        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                          <path d="M4 2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.414a1 1 0 0 0-.293-.707l-4.414-4.414A1 1 0 0 0 11.586 2H4Zm7 1.5V7a1 1 0 0 0 1 1h3.5" />
-                          <path d="M6.5 12h1.75a1.25 1.25 0 1 1 0 2.5H7v1.25a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Zm.5 1.5h1.25a.25.25 0 0 0 0-.5H7v.5Zm4-1.5h1a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1a.5.5 0 0 1-.5-.5v-2.5a.5.5 0 0 1 .5-.5Zm.5 2.5h.5v-1.5H12v1.5Zm3.5-2.5h1.25a.5.5 0 0 1 0 1H16v.5h.75a.5.5 0 0 1 0 1H16v.5a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Z" />
-                        </svg>
-                      </button>
+                      {inv.drivePdfFileId ? (
+                        <a
+                          href={`https://drive.google.com/file/d/${inv.drivePdfFileId}/view`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={t("invoice.downloadPdf")}
+                          aria-label={t("invoice.downloadPdf")}
+                          className="inline-block rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+                            <path d="M4 2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.414a1 1 0 0 0-.293-.707l-4.414-4.414A1 1 0 0 0 11.586 2H4Zm7 1.5V7a1 1 0 0 0 1 1h3.5" />
+                            <path d="M6.5 12h1.75a1.25 1.25 0 1 1 0 2.5H7v1.25a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Zm.5 1.5h1.25a.25.25 0 0 0 0-.5H7v.5Zm4-1.5h1a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1a.5.5 0 0 1-.5-.5v-2.5a.5.5 0 0 1 .5-.5Zm.5 2.5h.5v-1.5H12v1.5Zm3.5-2.5h1.25a.5.5 0 0 1 0 1H16v.5h.75a.5.5 0 0 1 0 1H16v.5a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Z" />
+                          </svg>
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          title={t("invoice.pdfComingSoon")}
+                          aria-label={t("invoice.pdfComingSoon")}
+                          className="rounded p-1 text-slate-300"
+                        >
+                          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+                            <path d="M4 2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.414a1 1 0 0 0-.293-.707l-4.414-4.414A1 1 0 0 0 11.586 2H4Zm7 1.5V7a1 1 0 0 0 1 1h3.5" />
+                            <path d="M6.5 12h1.75a1.25 1.25 0 1 1 0 2.5H7v1.25a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Zm.5 1.5h1.25a.25.25 0 0 0 0-.5H7v.5Zm4-1.5h1a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1a.5.5 0 0 1-.5-.5v-2.5a.5.5 0 0 1 .5-.5Zm.5 2.5h.5v-1.5H12v1.5Zm3.5-2.5h1.25a.5.5 0 0 1 0 1H16v.5h.75a.5.5 0 0 1 0 1H16v.5a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Z" />
+                          </svg>
+                        </button>
+                      )}
                     </td>
                     {canEdit && (
                       <td className="py-1.5">
