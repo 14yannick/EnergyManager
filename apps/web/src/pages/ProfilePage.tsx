@@ -16,10 +16,10 @@ export function ProfilePage() {
   const identity = session.kind === "active" ? session.identity : null;
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-slate-900">{t("profile.title")}</h1>
-        <p className="text-sm text-slate-500">{t("profile.intro")}</p>
+        <p className="max-w-2xl text-sm text-slate-500">{t("profile.intro")}</p>
       </div>
 
       <section className="space-y-3 rounded-lg border bg-white p-4">
