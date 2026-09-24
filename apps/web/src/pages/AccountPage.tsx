@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invoice, InvoiceStatus } from "@energy-manager/shared";
 import { api } from "../api/client";
@@ -69,6 +69,56 @@ function InvoiceFilterToggle({
       <div className="w-px bg-slate-300" />
       {option(true, t("account.filter.all"))}
     </div>
+  );
+}
+
+/**
+ * A labelled figure, kept as one word for wrapping purposes — `flex-wrap`
+ * breaks a row between children, never inside one, so pairing the label with
+ * its value here is what stops "kWh" ending up alone at the start of the
+ * next line while "42.0" stays on the one above it.
+ */
+function Stat({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <span className={`whitespace-nowrap ${className}`}>
+      <span className="text-slate-400">{label}: </span>
+      {children}
+    </span>
+  );
+}
+
+function DownloadPdfButton({ fileId }: { fileId: string | null }) {
+  const t = useT();
+  const icon = (
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+      <path d="M4 2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.414a1 1 0 0 0-.293-.707l-4.414-4.414A1 1 0 0 0 11.586 2H4Zm7 1.5V7a1 1 0 0 0 1 1h3.5" />
+      <path d="M6.5 12h1.75a1.25 1.25 0 1 1 0 2.5H7v1.25a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Zm.5 1.5h1.25a.25.25 0 0 0 0-.5H7v.5Zm4-1.5h1a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1a.5.5 0 0 1-.5-.5v-2.5a.5.5 0 0 1 .5-.5Zm.5 2.5h.5v-1.5H12v1.5Zm3.5-2.5h1.25a.5.5 0 0 1 0 1H16v.5h.75a.5.5 0 0 1 0 1H16v.5a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Z" />
+    </svg>
+  );
+  if (fileId) {
+    return (
+      <a
+        href={`https://drive.google.com/file/d/${fileId}/view`}
+        target="_blank"
+        rel="noreferrer"
+        title={t("invoice.downloadPdf")}
+        aria-label={t("invoice.downloadPdf")}
+        className="inline-block rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+      >
+        {icon}
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      disabled
+      title={t("invoice.pdfComingSoon")}
+      aria-label={t("invoice.pdfComingSoon")}
+      className="rounded p-1 text-slate-300"
+    >
+      {icon}
+    </button>
   );
 }
 
@@ -147,83 +197,41 @@ export function AccountPage() {
         )}
 
         {rows.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-500">
-                <tr>
-                  {!isParticipant && <th className="py-1 pr-3 font-medium">{t("account.column.party")}</th>}
-                  <th className="py-1 pr-3 font-medium">{t("account.column.period")}</th>
-                  <th className="py-1 pr-3 font-medium">{t("account.column.issued")}</th>
-                  <th className="py-1 pr-3 text-right font-medium">{t("account.column.consumed")}</th>
-                  <th className="py-1 pr-3 text-right font-medium">{t("account.column.advantage")}</th>
-                  <th className="py-1 pr-3 text-right font-medium">{t("invoice.amountDue")}</th>
-                  <th className="py-1 pr-3 font-medium">{t("account.column.status")}</th>
-                  <th className="py-1 pr-3" />
-                  {canEdit && <th className="py-1" />}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((inv: Invoice) => (
-                  <tr key={inv.id} className="border-t">
-                    {!isParticipant && <td className="py-1.5 pr-3 text-slate-900">{inv.partyName}</td>}
-                    <td className="py-1.5 pr-3 text-slate-900">
-                      {localDate(inv.from)} – {localDate(inv.to)}
-                    </td>
-                    <td className="py-1.5 pr-3 text-slate-500">{localDate(inv.issuedAt)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
-                      {kwh(inv.gridKwh + inv.localKwh)} kWh
-                    </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
-                      CHF {chf(inv.savingChf)}
-                    </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-slate-900">CHF {chf(inv.totalChf)}</td>
-                    <td className="py-1.5 pr-3">
-                      <StatusBadge status={inv.status} />
-                    </td>
-                    <td className="py-1.5 pr-3">
-                      {inv.drivePdfFileId ? (
-                        <a
-                          href={`https://drive.google.com/file/d/${inv.drivePdfFileId}/view`}
-                          target="_blank"
-                          rel="noreferrer"
-                          title={t("invoice.downloadPdf")}
-                          aria-label={t("invoice.downloadPdf")}
-                          className="inline-block rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                        >
-                          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                            <path d="M4 2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.414a1 1 0 0 0-.293-.707l-4.414-4.414A1 1 0 0 0 11.586 2H4Zm7 1.5V7a1 1 0 0 0 1 1h3.5" />
-                            <path d="M6.5 12h1.75a1.25 1.25 0 1 1 0 2.5H7v1.25a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Zm.5 1.5h1.25a.25.25 0 0 0 0-.5H7v.5Zm4-1.5h1a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1a.5.5 0 0 1-.5-.5v-2.5a.5.5 0 0 1 .5-.5Zm.5 2.5h.5v-1.5H12v1.5Zm3.5-2.5h1.25a.5.5 0 0 1 0 1H16v.5h.75a.5.5 0 0 1 0 1H16v.5a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Z" />
-                          </svg>
-                        </a>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled
-                          title={t("invoice.pdfComingSoon")}
-                          aria-label={t("invoice.pdfComingSoon")}
-                          className="rounded p-1 text-slate-300"
-                        >
-                          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                            <path d="M4 2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.414a1 1 0 0 0-.293-.707l-4.414-4.414A1 1 0 0 0 11.586 2H4Zm7 1.5V7a1 1 0 0 0 1 1h3.5" />
-                            <path d="M6.5 12h1.75a1.25 1.25 0 1 1 0 2.5H7v1.25a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Zm.5 1.5h1.25a.25.25 0 0 0 0-.5H7v.5Zm4-1.5h1a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1a.5.5 0 0 1-.5-.5v-2.5a.5.5 0 0 1 .5-.5Zm.5 2.5h.5v-1.5H12v1.5Zm3.5-2.5h1.25a.5.5 0 0 1 0 1H16v.5h.75a.5.5 0 0 1 0 1H16v.5a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Z" />
-                          </svg>
-                        </button>
-                      )}
-                    </td>
-                    {canEdit && (
-                      <td className="py-1.5">
-                        {inv.status === "issued" && (
-                          <MarkPaidControl
-                            invoiceId={inv.id}
-                            onDone={() => queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })}
-                          />
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            {rows.map((inv: Invoice) => (
+              <div key={inv.id} className="flex flex-col gap-1.5 border-t py-2.5 text-sm first:border-t-0">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  {!isParticipant && (
+                    <span className="whitespace-nowrap font-medium text-slate-900">{inv.partyName}</span>
+                  )}
+                  <span className="whitespace-nowrap text-slate-900">
+                    {localDate(inv.from)} – {localDate(inv.to)}
+                  </span>
+                  <StatusBadge status={inv.status} />
+                  <Stat label={t("account.column.issued")} className="text-slate-500">
+                    {localDate(inv.issuedAt)}
+                  </Stat>
+                  <Stat label={t("account.column.consumed")} className="tabular-nums text-slate-600">
+                    {kwh(inv.gridKwh + inv.localKwh)} kWh
+                  </Stat>
+                  <Stat label={t("account.column.advantage")} className="tabular-nums text-slate-600">
+                    CHF {chf(inv.savingChf)}
+                  </Stat>
+                  <Stat label={t("invoice.amountDue")} className="tabular-nums font-semibold text-slate-900">
+                    CHF {chf(inv.totalChf)}
+                  </Stat>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <DownloadPdfButton fileId={inv.drivePdfFileId} />
+                  {canEdit && inv.status === "issued" && (
+                    <MarkPaidControl
+                      invoiceId={inv.id}
+                      onDone={() => queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

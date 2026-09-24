@@ -454,12 +454,10 @@ export const en = {
   "account.status.issued": "Issued",
   "account.status.paid": "Paid",
   "account.status.cancelled": "Cancelled",
-  "account.column.party": "Party",
   "account.column.period": "Period",
   "account.column.issued": "Issued",
   "account.column.consumed": "Consumed",
   "account.column.advantage": "vZEV advantage",
-  "account.column.status": "Status",
   "account.markPaid": "Mark paid",
   "billing.intro":
     "Enter the grid operator's bill position by position, then generate an invoice for each vZEV participant. Amounts include VAT: the supplier's VAT is passed through as is, no VAT is added.",

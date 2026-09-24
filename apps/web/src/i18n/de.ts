@@ -468,12 +468,10 @@ export const de: Record<keyof typeof en, string> = {
   "account.status.issued": "Gestellt",
   "account.status.paid": "Bezahlt",
   "account.status.cancelled": "Storniert",
-  "account.column.party": "Teilnehmer",
   "account.column.period": "Zeitraum",
   "account.column.issued": "Gestellt am",
   "account.column.consumed": "Verbrauch",
   "account.column.advantage": "vZEV-Vorteil",
-  "account.column.status": "Status",
   "account.markPaid": "Als bezahlt markieren",
   "billing.intro":
     "Erfassen Sie die Rechnung des Netzbetreibers Position für Position und erstellen Sie anschliessend für jeden vZEV-Teilnehmer eine Rechnung. Die Beträge verstehen sich inkl. MWST: Die MWST des Lieferanten wird unverändert weitergegeben, es kommt keine zusätzliche MWST hinzu.",

@@ -462,12 +462,10 @@ export const fr: Record<keyof typeof en, string> = {
   "account.status.issued": "Émise",
   "account.status.paid": "Payée",
   "account.status.cancelled": "Annulée",
-  "account.column.party": "Participant",
   "account.column.period": "Période",
   "account.column.issued": "Émise le",
   "account.column.consumed": "Consommé",
   "account.column.advantage": "Avantage RCPv",
-  "account.column.status": "Statut",
   "account.markPaid": "Marquer payée",
   "billing.intro":
     "Saisissez la facture du gestionnaire de réseau position par position, puis générez une facture pour chaque participant du RCPv. Les montants sont TVA incluse : la TVA du fournisseur est répercutée telle quelle, aucune TVA n'est ajoutée.",
