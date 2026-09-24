@@ -79,7 +79,15 @@ function InvoiceFilterToggle({
  * its value here is what stops "kWh" ending up alone at the start of the
  * next line while "42.0" stays on the one above it.
  */
-function Stat({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
+function Stat({
+  label,
+  className = "",
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <span className={`whitespace-nowrap ${className}`}>
       <span className="text-slate-400">{label}: </span>
@@ -220,11 +228,10 @@ export function AccountPage() {
         <p className="max-w-2xl text-sm text-slate-500">{t("account.intro")}</p>
       </div>
 
-      {/* Capped, unlike most cards in the app: this one is a list of rows, not
-          a form or a chart, and rows this short just grow an empty gap
-          between their left and right ends on a wide monitor rather than
-          gaining anything from the extra width. */}
-      <div className="max-w-6xl space-y-4 rounded-lg border bg-white p-4">
+      {/* Full width, like every other card in the app — the row content
+          below is what's capped, not this border, so the card lines up
+          with the ones on every other tab instead of stopping short. */}
+      <div className="space-y-4 rounded-lg border bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-medium text-slate-700">{t("account.title")}</h2>
           <InvoiceFilterToggle showAll={showAll} onChange={setShowAll} />
@@ -245,49 +252,67 @@ export function AccountPage() {
               // exact dates the second line always shows anyway.
               const periodLabel = invoicePeriodLabel(inv.from, inv.to, locale);
               return (
-                <div key={inv.id} className="flex flex-col gap-1.5 border-t py-2.5 text-sm first:border-t-0">
-                  {/* Headline: who, which period, the benefit, the PDF, the
-                      bottom line — what you scan for. */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                    {!isParticipant && (
-                      <span className="whitespace-nowrap font-medium text-slate-900">{inv.partyName}</span>
-                    )}
-                    <span className="whitespace-nowrap text-slate-900">
-                      {periodLabel ?? `${localDate(inv.from)} – ${localDate(inv.to)}`}
-                    </span>
-                    <Stat label={t("account.column.advantage")} className="tabular-nums text-slate-600">
-                      CHF {chf(inv.savingChf)}
-                    </Stat>
-                    <DownloadPdfButton invoiceId={inv.id} archived={inv.drivePdfFileId != null} />
-                    <span className="ml-auto whitespace-nowrap text-base font-semibold tabular-nums text-slate-900">
-                      CHF {chf(inv.totalChf)}
-                    </span>
-                  </div>
-                  {/* Detail: the exact interval, when it was issued, what was
-                      consumed, its status, and the admin's action on it. */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                    <span className="whitespace-nowrap text-slate-500">
-                      {localDate(inv.from)} – {localDate(inv.to)}
-                    </span>
-                    <Stat label={t("account.column.issued")} className="text-slate-500">
-                      {localDate(inv.issuedAt)}
-                    </Stat>
-                    <Stat label={t("account.column.consumed")} className="tabular-nums text-slate-500">
-                      {kwh(inv.gridKwh + inv.localKwh)} kWh
-                    </Stat>
-                    <StatusBadge status={inv.status} />
-                    {canEdit && inv.status === "issued" && (
-                      <MarkPaidControl
-                        invoiceId={inv.id}
-                        onDone={() => queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })}
-                      />
-                    )}
-                    {canEdit && inv.status === "paid" && (
-                      <MarkUnpaidControl
-                        invoiceId={inv.id}
-                        onDone={() => queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })}
-                      />
-                    )}
+                <div key={inv.id} className="border-t py-2.5 text-sm first:border-t-0">
+                  {/* Capped, unlike the card around it: a row this short just
+                      grows an empty gap between its left end and the
+                      right-aligned amount on a wide monitor, rather than
+                      gaining anything from the extra width. */}
+                  <div className="flex max-w-6xl flex-col gap-1.5">
+                    {/* Headline: who, which period, the benefit, the PDF, the
+                        bottom line — what you scan for. */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                      {!isParticipant && (
+                        <span className="whitespace-nowrap font-medium text-slate-900">
+                          {inv.partyName}
+                        </span>
+                      )}
+                      <span className="whitespace-nowrap text-slate-900">
+                        {periodLabel ?? `${localDate(inv.from)} – ${localDate(inv.to)}`}
+                      </span>
+                      <Stat
+                        label={t("account.column.advantage")}
+                        className="tabular-nums text-slate-600"
+                      >
+                        CHF {chf(inv.savingChf)}
+                      </Stat>
+                      <DownloadPdfButton invoiceId={inv.id} archived={inv.drivePdfFileId != null} />
+                      <span className="ml-auto whitespace-nowrap text-base font-semibold tabular-nums text-slate-900">
+                        CHF {chf(inv.totalChf)}
+                      </span>
+                    </div>
+                    {/* Detail: the exact interval, when it was issued, what was
+                        consumed, its status, and the admin's action on it. */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                      <span className="whitespace-nowrap text-slate-500">
+                        {localDate(inv.from)} – {localDate(inv.to)}
+                      </span>
+                      <Stat label={t("account.column.issued")} className="text-slate-500">
+                        {localDate(inv.issuedAt)}
+                      </Stat>
+                      <Stat
+                        label={t("account.column.consumed")}
+                        className="tabular-nums text-slate-500"
+                      >
+                        {kwh(inv.gridKwh + inv.localKwh)} kWh
+                      </Stat>
+                      <StatusBadge status={inv.status} />
+                      {canEdit && inv.status === "issued" && (
+                        <MarkPaidControl
+                          invoiceId={inv.id}
+                          onDone={() =>
+                            queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })
+                          }
+                        />
+                      )}
+                      {canEdit && inv.status === "paid" && (
+                        <MarkUnpaidControl
+                          invoiceId={inv.id}
+                          onDone={() =>
+                            queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })
+                          }
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
               );
