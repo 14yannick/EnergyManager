@@ -272,6 +272,8 @@ export const api = {
       request<InvoiceLock[]>(`/sites/${siteId}/invoices/locks?from=${from}&to=${to}`),
     markPaid: (id: string, paidAt: string) =>
       request<Invoice>(`/invoices/${id}/paid`, { method: "PATCH", body: JSON.stringify({ paidAt }) }),
+    /** Reverts a paid invoice back to issued — undoing a mistaken mark-paid. */
+    markUnpaid: (id: string) => request<Invoice>(`/invoices/${id}/unpaid`, { method: "PATCH" }),
     cancelBatch: (batchId: string) =>
       request<{ cancelled: number }>(`/invoices/batches/${batchId}/cancel`, { method: "POST" }),
     /**

@@ -207,6 +207,28 @@ export async function markPaid(id: string, paidAt: string): Promise<Invoice> {
 }
 
 /**
+ * Reverts a paid invoice back to issued — an admin correcting a mistaken
+ * mark-paid, or undoing one made against the wrong date. Deliberately the
+ * mirror of markPaid rather than a general status setter: it only ever
+ * moves paid -> issued, so it can never resurrect a cancelled invoice or
+ * skip straight from issued to paid without going through markPaid's own
+ * paidAt.
+ */
+export async function markUnpaid(id: string): Promise<Invoice> {
+  const [row] = await db.select().from(invoices).where(eq(invoices.id, id));
+  if (!row) throw new InvoiceStateError("No such invoice.");
+  if (row.status !== "paid") {
+    throw new InvoiceStateError(`Invoice is ${row.status}, not paid — nothing to revert.`);
+  }
+  const [updated] = await db
+    .update(invoices)
+    .set({ status: "issued", paidAt: null, updatedAt: new Date() })
+    .where(eq(invoices.id, id))
+    .returning();
+  return toDomain(updated!);
+}
+
+/**
  * Cancels every invoice in a batch, freeing its period for regeneration.
  *
  * Refuses outright if any invoice in the batch is already paid — voiding

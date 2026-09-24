@@ -467,6 +467,7 @@ export const en = {
   "account.column.consumed": "Consumed",
   "account.column.advantage": "vZEV advantage",
   "account.markPaid": "Mark paid",
+  "account.markUnpaid": "Revert to unpaid",
   "billing.intro":
     "Enter the grid operator's bill position by position, then generate an invoice for each vZEV participant. Amounts include VAT: the supplier's VAT is passed through as is, no VAT is added.",
   "billing.introParticipant":

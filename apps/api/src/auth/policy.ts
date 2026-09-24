@@ -86,6 +86,7 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   "/api/sites/:siteId/invoices/locks": { GET: ADMIN },
   "/api/sites/:siteId/invoices/generate": { POST: ADMIN },
   "/api/invoices/:id/paid": { PATCH: ADMIN },
+  "/api/invoices/:id/unpaid": { PATCH: ADMIN },
   "/api/invoices/batches/:batchId/cancel": { POST: ADMIN },
 
   "/api/sites/:siteId/community/summary": { GET: PARTICIPANT_READ },

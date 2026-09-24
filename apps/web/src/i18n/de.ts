@@ -481,6 +481,7 @@ export const de: Record<keyof typeof en, string> = {
   "account.column.consumed": "Verbrauch",
   "account.column.advantage": "vZEV-Vorteil",
   "account.markPaid": "Als bezahlt markieren",
+  "account.markUnpaid": "Auf unbezahlt zurücksetzen",
   "billing.intro":
     "Erfassen Sie die Rechnung des Netzbetreibers Position für Position und erstellen Sie anschliessend für jeden vZEV-Teilnehmer eine Rechnung. Die Beträge verstehen sich inkl. MWST: Die MWST des Lieferanten wird unverändert weitergegeben, es kommt keine zusätzliche MWST hinzu.",
   "billing.introParticipant":

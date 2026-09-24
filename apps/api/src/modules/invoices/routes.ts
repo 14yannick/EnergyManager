@@ -11,6 +11,7 @@ import {
   generateInvoices,
   listInvoices,
   markPaid,
+  markUnpaid,
 } from "./service.js";
 
 export async function invoiceRoutes(app: FastifyInstance) {
@@ -67,6 +68,17 @@ export async function invoiceRoutes(app: FastifyInstance) {
     }
     try {
       return await markPaid(req.params.id, parsed.data.paidAt);
+    } catch (err) {
+      if (err instanceof InvoiceStateError) {
+        return reply.status(409).send({ error: "invalid_state", message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  app.patch<{ Params: { id: string } }>("/api/invoices/:id/unpaid", async (req, reply) => {
+    try {
+      return await markUnpaid(req.params.id);
     } catch (err) {
       if (err instanceof InvoiceStateError) {
         return reply.status(409).send({ error: "invalid_state", message: err.message });

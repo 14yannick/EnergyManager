@@ -123,6 +123,33 @@ function DownloadPdfButton({ fileId }: { fileId: string | null }) {
   );
 }
 
+/** The admin's "revert to issued" control — a mistaken mark-paid undone in one click, no date to pick. */
+function MarkUnpaidControl({ invoiceId, onDone }: { invoiceId: string; onDone: () => void }) {
+  const t = useT();
+  const [error, setError] = useState<string | null>(null);
+  const mutation = useMutation({
+    mutationFn: () => api.invoices.markUnpaid(invoiceId),
+    onSuccess: () => {
+      setError(null);
+      onDone();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {error && <span className="text-xs text-red-600">{error}</span>}
+      <button
+        type="button"
+        onClick={() => mutation.mutate()}
+        disabled={mutation.isPending}
+        className="rounded border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {t("account.markUnpaid")}
+      </button>
+    </div>
+  );
+}
+
 /** The admin's inline "mark paid" control — a date input defaulting to today, then a button. */
 function MarkPaidControl({ invoiceId, onDone }: { invoiceId: string; onDone: () => void }) {
   const t = useT();
@@ -243,6 +270,12 @@ export function AccountPage() {
                     <StatusBadge status={inv.status} />
                     {canEdit && inv.status === "issued" && (
                       <MarkPaidControl
+                        invoiceId={inv.id}
+                        onDone={() => queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })}
+                      />
+                    )}
+                    {canEdit && inv.status === "paid" && (
+                      <MarkUnpaidControl
                         invoiceId={inv.id}
                         onDone={() => queryClient.invalidateQueries({ queryKey: ["invoices", siteId] })}
                       />
