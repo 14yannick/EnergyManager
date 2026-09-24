@@ -216,6 +216,11 @@ export async function buildInvoicePdf(
   // same account is meaningless.
   const creditor = creditorOf(payee);
   if (creditor && payee?.partyId !== invoice.partyId) {
+    // swissqrbill draws its own text without ever setting a fill color of
+    // its own — it just uses whatever the caller's PDFKit doc is currently
+    // set to. Left at MUTED_COLOR from the benefit note above, every label
+    // and value on the payment slip printed grey instead of black.
+    doc.fillColor(HEADER_COLOR);
     new SwissQRBill(
       {
         amount: invoice.totalChf > 0 ? Number(invoice.totalChf.toFixed(2)) : undefined,
