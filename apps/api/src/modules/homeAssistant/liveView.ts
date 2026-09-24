@@ -118,6 +118,10 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
       exportPower: sites.liveExportPowerEntityId,
       exportNegative: sites.liveExportNegative,
       pvPower: sites.livePvPowerEntityId,
+      batteryPower: sites.liveBatteryPowerEntityId,
+      batteryChargeNegative: sites.liveBatteryChargeNegative,
+      batterySoc: sites.liveBatterySocEntityId,
+      loadPower: sites.liveLoadPowerEntityId,
       forecastToday: sites.forecastTodayEntityId,
       forecastRemaining: sites.forecastRemainingEntityId,
       forecastTomorrow: sites.forecastTomorrowEntityId,
@@ -142,7 +146,12 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
       tomorrow,
       at,
       exportW: null,
+      importW: null,
       pvW: null,
+      batteryChargeW: null,
+      batteryDischargeW: null,
+      batterySocPct: null,
+      loadW: null,
       forecastTodayKwh: null,
       forecastRemainingKwh: null,
       forecastTomorrowKwh: null,
@@ -154,15 +163,26 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
   const read = (entityId: string | null) => (entityId ? (states.get(entityId) ?? null) : null);
 
   // The card means "leaving the house", whichever way the sensor counts it.
+  // One sensor, two figures: the grid meter reads one direction at a time,
+  // so the sign says which and the other is zero.
   const rawExport = read(site.exportPower);
-  const exportW = rawExport == null ? null : site.exportNegative ? -rawExport : rawExport;
+  const gridOut = rawExport == null ? null : site.exportNegative ? -rawExport : rawExport;
+  // Likewise for the battery: positive means charging once the sign is
+  // normalised, and whichever way it is flowing, the other figure is zero.
+  const rawBattery = read(site.batteryPower);
+  const charging = rawBattery == null ? null : site.batteryChargeNegative ? -rawBattery : rawBattery;
 
   return {
     today,
     tomorrow,
     at,
-    exportW,
+    exportW: gridOut == null ? null : Math.max(gridOut, 0),
+    importW: gridOut == null ? null : Math.max(-gridOut, 0),
     pvW: read(site.pvPower),
+    batteryChargeW: charging == null ? null : Math.max(charging, 0),
+    batteryDischargeW: charging == null ? null : Math.max(-charging, 0),
+    batterySocPct: read(site.batterySoc),
+    loadW: read(site.loadPower),
     forecastTodayKwh: read(site.forecastToday),
     forecastRemainingKwh: read(site.forecastRemaining),
     forecastTomorrowKwh: read(site.forecastTomorrow),

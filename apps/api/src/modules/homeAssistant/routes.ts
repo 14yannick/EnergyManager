@@ -48,10 +48,10 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
         return reply.status(503).send({ error: "not_configured", message: "Set HA_URL and HA_TOKEN." });
       }
       const deviceClass = req.query.deviceClass;
-      if (deviceClass !== "power" && deviceClass !== "energy") {
+      if (deviceClass !== "power" && deviceClass !== "energy" && deviceClass !== "battery") {
         return reply
           .status(400)
-          .send({ error: "invalid_query", message: "deviceClass must be power or energy." });
+          .send({ error: "invalid_query", message: "deviceClass must be power, energy or battery." });
       }
       return listHaSensorsByDeviceClass(deviceClass);
     },

@@ -20,6 +20,10 @@ export interface Site {
   /** True when that sensor reads negative while feeding the grid (grid-sign convention). */
   liveExportNegative: boolean;
   livePvPowerEntityId: string | null;
+  liveBatteryPowerEntityId: string | null;
+  liveBatteryChargeNegative: boolean;
+  liveBatterySocEntityId: string | null;
+  liveLoadPowerEntityId: string | null;
   forecastTodayEntityId: string | null;
   forecastRemainingEntityId: string | null;
   forecastTomorrowEntityId: string | null;
@@ -753,10 +757,23 @@ export interface LiveEnergyView {
   tomorrow: TomorrowForecast | null;
   /** When these values were read. */
   at: string;
-  /** Leaving the house for the grid, in watts. */
+  /** Leaving the house for the grid, in watts; 0 while the house draws. */
   exportW: number | null;
+  /**
+   * The grid's other direction: what the house draws, in watts. The same
+   * sensor as `exportW` read the other way, so the two are never both
+   * above zero.
+   */
+  importW: number | null;
   /** PV output at this instant, in watts. */
   pvW: number | null;
+  /** Into and out of the battery, in watts, never both at once; null without a battery power sensor. */
+  batteryChargeW: number | null;
+  batteryDischargeW: number | null;
+  /** State of charge, 0–100. */
+  batterySocPct: number | null;
+  /** What the house is consuming at this instant, in watts. */
+  loadW: number | null;
   /** Forecast for the whole day, in kWh. */
   forecastTodayKwh: number | null;
   /** Of that, still to come, in kWh. */

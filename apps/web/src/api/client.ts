@@ -209,7 +209,7 @@ export const api = {
     statistics: () => request<HaStatisticOption[]>("/home-assistant/statistics"),
     dynamicTariffEntities: () =>
       request<HaDynamicTariffCandidate[]>("/home-assistant/dynamic-tariff-entities"),
-    sensors: (deviceClass: "power" | "energy") =>
+    sensors: (deviceClass: "power" | "energy" | "battery") =>
       request<HaSensorCandidate[]>(`/home-assistant/sensors?deviceClass=${deviceClass}`),
     live: (siteId: string) => request<LiveEnergyView>(`/sites/${siteId}/home-assistant/live`),
     mappings: (siteId: string) => request<HaEntityMapping[]>(`/sites/${siteId}/home-assistant/entities`),

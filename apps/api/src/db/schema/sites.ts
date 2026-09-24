@@ -54,6 +54,22 @@ export const sites = pgTable("sites", {
    */
   liveExportNegative: boolean("live_export_negative").notNull().default(false),
   livePvPowerEntityId: text("live_pv_power_entity_id"),
+  /**
+   * The live flow's three further readings (see LiveFlow on the dashboard):
+   * the battery's power and state of charge, and the house's load. Grid
+   * import needs no entity of its own — it is the export sensor's other
+   * sign.
+   */
+  liveBatteryPowerEntityId: text("live_battery_power_entity_id"),
+  /**
+   * Whether that sensor reads *negative* while charging. Huawei's
+   * charge/discharge power is positive charging and negative discharging;
+   * an inverted template sensor is the other way round. A property of the
+   * sensor, like `liveExportNegative`.
+   */
+  liveBatteryChargeNegative: boolean("live_battery_charge_negative").notNull().default(false),
+  liveBatterySocEntityId: text("live_battery_soc_entity_id"),
+  liveLoadPowerEntityId: text("live_load_power_entity_id"),
   forecastTodayEntityId: text("forecast_today_entity_id"),
   forecastRemainingEntityId: text("forecast_remaining_entity_id"),
   forecastTomorrowEntityId: text("forecast_tomorrow_entity_id"),
