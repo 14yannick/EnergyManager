@@ -144,6 +144,10 @@ async function loadPricedSlots(
         // Summed across every party — the per-party split matters for billing,
         // not for the site's revenue total.
         neighborConsumptionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption'), 0)`,
+        // Unpriced: the savings maths never touches it. It is here so the
+        // energy-flow view can show where the house's power came from without
+        // a second query over the same intervals.
+        importedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'import_grid'), 0)`,
       })
       .from(intervalMetrics)
       .where(
@@ -159,6 +163,7 @@ async function loadPricedSlots(
             "export_grid",
             "export_local",
             "consumption",
+            "import_grid",
           ]),
         ),
       )
@@ -193,6 +198,7 @@ async function loadPricedSlots(
       exportedKwh,
       exportLocalKwh,
       neighborConsumptionKwh,
+      importedKwh: toNumber(row.importedKwh),
       purchaseRateChfPerKwh: resolveRate("purchase", instantIso),
       sellRateChfPerKwh: resolveRate("feed_in", instantIso),
       neighborSellRateChfPerKwh: resolveRate("neighbor_sell", instantIso),

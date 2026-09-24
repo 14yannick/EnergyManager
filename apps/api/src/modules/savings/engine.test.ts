@@ -517,6 +517,19 @@ describe("aggregateIntervalsToDaily", () => {
     expect(day1.savingsWithBatteryChf).toBeCloseTo(2 * interval("2026-06-01").savingsWithBatteryChf, 6);
   });
 
+  it("carries grid import through unpriced, absent by default, summed like any energy", () => {
+    // Import is what the house bought, not anything the panels did, so an
+    // interval with 5 kWh of it must price exactly like one with none.
+    const withImport = interval("2026-06-01", { importedKwh: 5 });
+    const { importedKwh: _a, ...pricedWith } = withImport;
+    const { importedKwh: _b, ...pricedWithout } = interval("2026-06-01");
+    expect(pricedWith).toEqual(pricedWithout);
+    expect(interval("2026-06-01").importedKwh).toBe(0);
+
+    const [day] = aggregateIntervalsToDaily([withImport, interval("2026-06-01", { importedKwh: 2.5 })]);
+    expect(day!.importedKwh).toBeCloseTo(7.5, 6);
+  });
+
   it("nulls the per-day rate once a day mixes more than one interval's rate", () => {
     const rows = [
       interval("2026-06-01", { sellRateChfPerKwh: 0.09 }),

@@ -87,6 +87,12 @@ export interface SavingsInputs {
   exportLocalKwh: number;
   /** Energy consumed by neighbours (summed across parties) — this is what's sold at the neighbour rate. */
   neighborConsumptionKwh: number;
+  /**
+   * Grid import. Optional because nothing priced depends on it: it rides
+   * along unchanged (see `DailySavings.importedKwh`), and a caller with no
+   * import reading is describing a house that drew nothing, not a gap.
+   */
+  importedKwh?: number;
   purchaseRateChfPerKwh: number | null;
   sellRateChfPerKwh: number | null;
   neighborSellRateChfPerKwh: number | null;
@@ -277,6 +283,7 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
 
   return {
     ...inputs,
+    importedKwh: inputs.importedKwh ?? 0,
     selfConsumptionValueChf,
     exportRevenueChf,
     savingsWithBatteryChf,
@@ -312,6 +319,7 @@ const SUMMABLE_FIELDS = [
   "exportedKwh",
   "exportLocalKwh",
   "neighborConsumptionKwh",
+  "importedKwh",
   "selfConsumptionValueChf",
   "exportRevenueChf",
   "savingsWithBatteryChf",

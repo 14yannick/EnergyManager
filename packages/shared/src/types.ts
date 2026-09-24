@@ -461,6 +461,12 @@ export interface DailySavings {
   exportLocalKwh: number;
   /** Energy consumed by neighbours, summed across parties. */
   neighborConsumptionKwh: number;
+  /**
+   * What the house drew from the grid. Never priced here — savings are what
+   * the panels did — but carried so a period's energy balance (where the
+   * house's power came from) can be drawn from these rows alone.
+   */
+  importedKwh: number;
   purchaseRateChfPerKwh: number | null;
   sellRateChfPerKwh: number | null;
   neighborSellRateChfPerKwh: number | null;
