@@ -2,11 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { dateRangeQuerySchema, generateInvoicesSchema, markInvoicePaidSchema } from "@energy-manager/shared";
 import { BillingPeriodError } from "../billing/service.js";
 import { scopedPartyId } from "../../auth/plugin.js";
+import { DrivePdfNotFoundError, downloadPdf } from "../googleDrive/service.js";
 import {
   InvoicePeriodLockedError,
   InvoiceStateError,
   NothingToInvoiceError,
   cancelBatch,
+  findInvoicePdf,
   findLocks,
   generateInvoices,
   listInvoices,
@@ -74,6 +76,36 @@ export async function invoiceRoutes(app: FastifyInstance) {
       }
       throw err;
     }
+  });
+
+  // Proxied through the app rather than a direct Drive link: the file
+  // carries no sharing of its own (see googleDrive/service.ts's uploadPdf),
+  // so this is the only way to read it back, and it is what lets a
+  // participant download without a Google account of their own while still
+  // checking, on every request, that the invoice is theirs.
+  app.get<{ Params: { id: string } }>("/api/invoices/:id/pdf", async (req, reply) => {
+    const found = await findInvoicePdf(req.params.id);
+    // A participant asking for someone else's invoice gets the same 404 as
+    // one that doesn't exist at all — this never confirms which is true.
+    const owned = scopedPartyId(req) == null || found?.partyId === scopedPartyId(req);
+    if (!found || !owned) return reply.status(404).send({ error: "not_found" });
+    if (!found.driveFileId) {
+      return reply.status(404).send({ error: "not_archived", message: "No PDF was archived for this invoice." });
+    }
+    let stream;
+    try {
+      stream = await downloadPdf(found.driveFileId);
+    } catch (err) {
+      if (err instanceof DrivePdfNotFoundError) {
+        req.log.warn({ err: err.message, invoiceId: req.params.id }, "invoice pdf missing from drive");
+        return reply.status(404).send({ error: "not_found" });
+      }
+      throw err;
+    }
+    return reply
+      .header("Content-Type", "application/pdf")
+      .header("Content-Disposition", `inline; filename="${found.filename}"`)
+      .send(stream);
   });
 
   app.patch<{ Params: { id: string } }>("/api/invoices/:id/unpaid", async (req, reply) => {

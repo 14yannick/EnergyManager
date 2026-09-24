@@ -88,7 +88,15 @@ function Stat({ label, className = "", children }: { label: string; className?: 
   );
 }
 
-function DownloadPdfButton({ fileId }: { fileId: string | null }) {
+/**
+ * Links to the app's own `/pdf` route rather than a Drive URL: the file has
+ * no sharing of its own now (see googleDrive/service.ts), so this proxy —
+ * which checks the caller's session and that the invoice is theirs — is
+ * the only way to reach it. A plain browser navigation is enough: the
+ * Cloudflare Access cookie rides along automatically, the same way it does
+ * for every other same-origin request this app makes.
+ */
+function DownloadPdfButton({ invoiceId, archived }: { invoiceId: string; archived: boolean }) {
   const t = useT();
   const icon = (
     <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
@@ -96,10 +104,10 @@ function DownloadPdfButton({ fileId }: { fileId: string | null }) {
       <path d="M6.5 12h1.75a1.25 1.25 0 1 1 0 2.5H7v1.25a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Zm.5 1.5h1.25a.25.25 0 0 0 0-.5H7v.5Zm4-1.5h1a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1a.5.5 0 0 1-.5-.5v-2.5a.5.5 0 0 1 .5-.5Zm.5 2.5h.5v-1.5H12v1.5Zm3.5-2.5h1.25a.5.5 0 0 1 0 1H16v.5h.75a.5.5 0 0 1 0 1H16v.5a.5.5 0 0 1-1 0V12.5a.5.5 0 0 1 .5-.5Z" />
     </svg>
   );
-  if (fileId) {
+  if (archived) {
     return (
       <a
-        href={`https://drive.google.com/file/d/${fileId}/view`}
+        href={`/api/invoices/${invoiceId}/pdf`}
         target="_blank"
         rel="noreferrer"
         title={t("invoice.downloadPdf")}
@@ -250,7 +258,7 @@ export function AccountPage() {
                     <Stat label={t("account.column.advantage")} className="tabular-nums text-slate-600">
                       CHF {chf(inv.savingChf)}
                     </Stat>
-                    <DownloadPdfButton fileId={inv.drivePdfFileId} />
+                    <DownloadPdfButton invoiceId={inv.id} archived={inv.drivePdfFileId != null} />
                     <span className="ml-auto whitespace-nowrap text-base font-semibold tabular-nums text-slate-900">
                       CHF {chf(inv.totalChf)}
                     </span>

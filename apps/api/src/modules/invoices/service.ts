@@ -60,6 +60,37 @@ export class NothingToInvoiceError extends Error {
   }
 }
 
+/**
+ * What the `/pdf` route needs to authorise and serve a download, without
+ * pulling in the whole `Invoice` shape (the jsonb `detail` snapshot chief
+ * among it) for a call that only ever reads three columns.
+ */
+export interface InvoicePdfLookup {
+  partyId: string;
+  driveFileId: string | null;
+  filename: string;
+}
+
+export async function findInvoicePdf(id: string): Promise<InvoicePdfLookup | null> {
+  const [row] = await db
+    .select({
+      partyId: invoices.partyId,
+      partyReference: invoices.partyReference,
+      partyName: invoices.partyName,
+      periodFrom: invoices.periodFrom,
+      periodTo: invoices.periodTo,
+      driveFileId: invoices.drivePdfFileId,
+    })
+    .from(invoices)
+    .where(eq(invoices.id, id));
+  if (!row) return null;
+  return {
+    partyId: row.partyId,
+    driveFileId: row.driveFileId,
+    filename: filenameFor(row, periodLabelFor(row.periodFrom, row.periodTo)),
+  };
+}
+
 export async function listInvoices(siteId: string, partyId: string | null): Promise<Invoice[]> {
   const rows = await db
     .select()

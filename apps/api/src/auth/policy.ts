@@ -83,6 +83,7 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   // summary, generating, marking paid and cancelling all change or reveal
   // billing state site-wide, so those stay admin-only.
   "/api/sites/:siteId/invoices": { GET: PARTICIPANT_READ },
+  "/api/invoices/:id/pdf": { GET: PARTICIPANT_READ },
   "/api/sites/:siteId/invoices/locks": { GET: ADMIN },
   "/api/sites/:siteId/invoices/generate": { POST: ADMIN },
   "/api/invoices/:id/paid": { PATCH: ADMIN },

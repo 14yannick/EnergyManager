@@ -144,14 +144,13 @@ export async function findOrCreateSubfolder(parentId: string, name: string): Pro
  * generation, always best-effort — a failure here must never fail the
  * generate call itself, so callers catch and log rather than propagate.
  *
- * The uploaded file is given "anyone with the link" read access. The folder
- * being shared with the service account only gives *its owner* (the admin)
- * access to what's inside — a participant is a different identity entirely,
- * often with no Google account at all, so without this the Account page's
- * download link would 403 for every participant but the admin. The link
- * itself (a long, unguessable file id) is not discoverable or indexed —
- * this is the same trade-off "unlisted" video/doc links make, not a public
- * listing — but it does mean anyone who obtains that exact URL can open it.
+ * The file is left with no sharing of its own: the service account created
+ * it, so it can always read it back, and that is the only reader this app
+ * needs. A participant's download instead goes through this server (see
+ * `downloadPdf` and invoices/routes.ts's `/pdf` route), which checks their
+ * session and that the invoice is theirs before ever asking Drive for it —
+ * so the PDF's real access control is the app's own auth, not an
+ * unguessable Drive link that anyone holding it could open.
  */
 export async function uploadPdf(folderId: string, filename: string, pdf: Buffer): Promise<string> {
   const drive = driveClient();
@@ -163,10 +162,27 @@ export async function uploadPdf(folderId: string, filename: string, pdf: Buffer)
   });
   const fileId = res.data.id;
   if (!fileId) throw new Error("Drive upload succeeded but returned no file id.");
-  await drive.permissions.create({
-    fileId,
-    requestBody: { role: "reader", type: "anyone" },
-    supportsAllDrives: true,
-  });
   return fileId;
+}
+
+export class DrivePdfNotFoundError extends Error {}
+
+/**
+ * Streams a previously uploaded PDF back out, for the app's own download
+ * route to relay to a browser. `alt: "media"` is what turns a Drive `files`
+ * call from metadata into the file's actual bytes; `responseType: "stream"`
+ * keeps the whole PDF from being buffered into memory before the first byte
+ * reaches the client.
+ */
+export async function downloadPdf(fileId: string): Promise<NodeJS.ReadableStream> {
+  const drive = driveClient();
+  try {
+    const res = await drive.files.get(
+      { fileId, alt: "media", supportsAllDrives: true },
+      { responseType: "stream" },
+    );
+    return res.data;
+  } catch {
+    throw new DrivePdfNotFoundError(`Drive file ${fileId} could not be read.`);
+  }
 }
