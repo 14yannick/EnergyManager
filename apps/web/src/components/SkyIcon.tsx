@@ -25,11 +25,15 @@ export function SkyIcon() {
   const siteId = participant ? identity.data?.siteId : site?.id;
   const live = useLiveView(siteId).data;
 
+  // The site's own local hour, from the day curve, so the forecast's hour
+  // matches the roof's clock and not the viewer's.
+  const hour = live?.today?.currentHour ?? new Date().getHours();
+  const forecast = live?.today?.forecast ?? null;
   const sky: Sky | null =
     live && live.configured
-      ? skyFor({ sun: live.sun, pvW: live.pvW, hour: new Date().getHours() })
+      ? skyFor({ sun: live.sun, pvW: live.pvW, hour, forecast })
       : live?.sun
-        ? skyFor({ sun: live.sun, pvW: null, hour: new Date().getHours() })
+        ? skyFor({ sun: live.sun, pvW: null, hour, forecast })
         : null;
   const kw = live?.pvW != null ? (live.pvW / 1000).toFixed(1) : null;
   const title = sky == null ? undefined : t(`sky.${sky}`, { kw: kw ?? "—" });
