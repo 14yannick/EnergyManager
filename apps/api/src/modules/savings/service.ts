@@ -282,7 +282,7 @@ export async function getFeedInRateCurve(siteId: string, date: string): Promise<
   const points: FeedInRatePoint[] = [];
   for (let t = new Date(startIso).getTime(); t < new Date(endExclusiveIso).getTime(); t += QUARTER_HOUR_MS) {
     const ts = new Date(t).toISOString();
-    points.push({ ts, rateChfPerKwh: resolveRate("feed_in", ts) });
+    points.push({ ts, rateChfPerKwh: resolveRate("feed_in", ts), purchaseRateChfPerKwh: resolveRate("purchase", ts) });
   }
   return points;
 }

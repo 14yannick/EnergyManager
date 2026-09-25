@@ -644,7 +644,7 @@ export const en = {
   "party.live.ofToday": "of {total} kWh forecast for the day",
   "party.live.tomorrow": "Forecast tomorrow",
   "party.live.chart": "Today, hour by hour",
-  "party.live.chartNote": "What the panels made in each hour so far, against the forecast for the day. The hour in progress is partial until it ends.",
+  "party.live.chartNote": "What the panels made in each hour so far, against the forecast for the day. The hour in progress is partial until it ends. The feed-in rate is coloured by how good it is: dark red below zero, red under 8 ct., grey under 14 ct., green above, and dark green once it beats the purchase price.",
   "party.live.viewToday": "Today",
   "party.live.viewTomorrow": "Tomorrow",
   "party.live.tomorrowChart": "Tomorrow, hour by hour",

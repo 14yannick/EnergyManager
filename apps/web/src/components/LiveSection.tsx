@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { FeedInRatePoint, LiveDayCurve, TomorrowForecast } from "@energy-manager/shared";
+import { rateBand, rateGradientStops, type FeedInRatePoint, type LiveDayCurve, type RateBand, type TomorrowForecast } from "@energy-manager/shared";
 import { formatKwh, formatNumber } from "../lib/format";
 import { api } from "../api/client";
 import { PALETTE } from "../lib/palette";
@@ -51,14 +51,18 @@ function zurichHour(iso: string): number {
  * or a dynamic period with nothing from the feed yet) is left out of the
  * average rather than counted as zero.
  */
-function hourlyFeedInRate(points: FeedInRatePoint[] | undefined): Map<number, number> | undefined {
+function hourlyRate(
+  points: FeedInRatePoint[] | undefined,
+  key: "rateChfPerKwh" | "purchaseRateChfPerKwh",
+): Map<number, number> | undefined {
   if (!points) return undefined;
   const sums = new Map<number, { total: number; count: number }>();
   for (const point of points) {
-    if (point.rateChfPerKwh == null) continue;
+    const rate = point[key];
+    if (rate == null) continue;
     const hour = zurichHour(point.ts);
     const acc = sums.get(hour) ?? { total: 0, count: 0 };
-    acc.total += point.rateChfPerKwh;
+    acc.total += rate;
     acc.count += 1;
     sums.set(hour, acc);
   }
@@ -107,8 +111,12 @@ export function LiveSection({
   });
 
   if (!live) return null;
-  const feedInRateByHour = showFeedInRate ? hourlyFeedInRate(dayRateQuery.data) : undefined;
-  const tomorrowFeedInRateByHour = showFeedInRate ? hourlyFeedInRate(tomorrowRateQuery.data) : undefined;
+  const feedInRateByHour = showFeedInRate ? hourlyRate(dayRateQuery.data, "rateChfPerKwh") : undefined;
+  const purchaseRateByHour = showFeedInRate ? hourlyRate(dayRateQuery.data, "purchaseRateChfPerKwh") : undefined;
+  const tomorrowFeedInRateByHour = showFeedInRate ? hourlyRate(tomorrowRateQuery.data, "rateChfPerKwh") : undefined;
+  const tomorrowPurchaseRateByHour = showFeedInRate
+    ? hourlyRate(tomorrowRateQuery.data, "purchaseRateChfPerKwh")
+    : undefined;
 
   // The cards need a live entity each; the day's curve needs none — it
   // reads production from the store and the forecast from Home Assistant's
@@ -135,7 +143,9 @@ export function LiveSection({
             today={live.today}
             tomorrow={live.tomorrow}
             feedInRateByHour={feedInRateByHour}
+            purchaseRateByHour={purchaseRateByHour}
             tomorrowFeedInRateByHour={tomorrowFeedInRateByHour}
+            tomorrowPurchaseRateByHour={tomorrowPurchaseRateByHour}
             showTomorrow={showTomorrow}
             dayView={dayView}
             onDayViewChange={setDayView}
@@ -163,10 +173,37 @@ const FORECAST_COLOR = PALETTE.forecast;
 // swatch is drawn from `fill` alone and would otherwise promise a dark block
 // where the chart shows a faint one.
 const REMAINING_FILL = PALETTE.forecastFill;
-// The app's established green — already validated as adjacent-safe against
-// this chart's own orange and blue elsewhere on this page (the "Consumption
-// by source" chart below uses the same three), so no need to revalidate it.
-const FEED_IN_RATE_COLOR = PALETTE.local;
+/**
+ * The feed-in rate line is painted by how good the rate is at each height
+ * (shared/feedInBands.ts): a loss, poor, fair, good, and better than
+ * buying. The fair grey is the chart's neutral; the good green is the
+ * app's established local green.
+ */
+const RATE_COLORS: Record<RateBand, string> = {
+  loss: PALETTE.rateLoss,
+  poor: PALETTE.ratePoor,
+  fair: PALETTE.rateFair,
+  good: PALETTE.rateGood,
+  best: PALETTE.rateBest,
+};
+/** The fixed window of the rate axis — it only stretches for a rate outside it, a step at a time. */
+const RATE_AXIS_MAX = 0.25;
+const RATE_AXIS_STEP = 0.05;
+
+/**
+ * The rate axis's ticks: every 5 ct. from 0 to 25, and beyond either end
+ * only as far as the day's rates reach, rounded out to the next step so the
+ * axis still ends on a tick.
+ */
+function rateAxisTicks(rates: number[]): number[] {
+  const low = Math.min(0, ...rates);
+  const high = Math.max(RATE_AXIS_MAX, ...rates);
+  const first = Math.floor(low / RATE_AXIS_STEP + 1e-9) * RATE_AXIS_STEP;
+  const last = Math.ceil(high / RATE_AXIS_STEP - 1e-9) * RATE_AXIS_STEP;
+  const ticks: number[] = [];
+  for (let v = first; v <= last + 1e-9; v += RATE_AXIS_STEP) ticks.push(Number(v.toFixed(2)));
+  return ticks;
+}
 
 interface CurvePoint {
   hour: number;
@@ -182,6 +219,8 @@ interface CurvePoint {
   remaining: number | null;
   /** CHF/kWh, averaged from the metering-interval slots inside the hour. */
   feedInRate: number | null;
+  /** What buying a kWh costs that hour — the bar the feed-in rate's colour is set against. */
+  purchaseRate: number | null;
   partial: boolean;
 }
 
@@ -237,11 +276,76 @@ function DayViewToggle({
  * production is only derived once the hour's PV figure arrives, so it will
  * usually look short until the hour ends, and must not read as a cloud.
  */
+interface LegendEntry {
+  value?: string;
+  color?: string;
+  type?: string;
+  dataKey?: string | number;
+}
+
+/**
+ * The chart's own legend, for one reason: the rate line is painted by band,
+ * and a swatch drawn from its `stroke` — a gradient defined inside the
+ * chart's SVG — resolves to nothing in the legend's own. So the rate's
+ * swatch is the gradient again, drawn here, and reads as what the line
+ * is: the bands from best down to loss. Labels in ink, not the series
+ * colour, as everywhere.
+ */
+function DayLegend({ payload }: { payload?: readonly LegendEntry[] }) {
+  const id = useId().replace(/:/g, "");
+  return (
+    <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-2 pt-3 text-xs text-slate-600">
+      {(payload ?? []).map((entry) => {
+        const key = String(entry.dataKey ?? entry.value);
+        const isRate = entry.dataKey === "feedInRate";
+        return (
+          <li key={key} className="flex items-center gap-1.5">
+            <svg width={16} height={10} aria-hidden="true" className="shrink-0">
+              {isRate ? (
+                <>
+                  <defs>
+                    <linearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+                      {/* The bands the line can wear, best to loss, whether or
+                          not today's line reaches them — so the swatch is a
+                          key, not a copy of today. */}
+                      {(["best", "good", "fair", "poor", "loss"] as const).map((band, i) => (
+                        <stop key={band} offset={`${i * 25}%`} stopColor={RATE_COLORS[band]} />
+                      ))}
+                    </linearGradient>
+                  </defs>
+                  {/* A thin rect, not a line: a gradient is mapped onto its
+                      shape's own box, and a horizontal line's box has no
+                      height, which SVG treats as nothing to paint. */}
+                  <rect x={0} y={3.5} width={16} height={3} rx={1.5} fill={`url(#${id})`} />
+                </>
+              ) : entry.type === "line" ? (
+                <line x1={0} y1={5} x2={16} y2={5} stroke={entry.color} strokeWidth={2} strokeDasharray="4 2" />
+              ) : (
+                <rect x={2} y={0} width={12} height={10} rx={2} fill={entry.color} />
+              )}
+            </svg>
+            {entry.value}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+interface RateDotProps {
+  key?: string;
+  cx?: number;
+  cy?: number;
+  value?: number;
+}
+
 function DayCurveChart({
   today,
   tomorrow,
   feedInRateByHour,
+  purchaseRateByHour,
   tomorrowFeedInRateByHour,
+  tomorrowPurchaseRateByHour,
   showTomorrow,
   dayView,
   onDayViewChange,
@@ -250,7 +354,9 @@ function DayCurveChart({
   tomorrow: TomorrowForecast | null;
   /** Undefined for a participant: see LiveSection's `showFeedInRate`. */
   feedInRateByHour?: Map<number, number>;
+  purchaseRateByHour?: Map<number, number>;
   tomorrowFeedInRateByHour?: Map<number, number>;
+  tomorrowPurchaseRateByHour?: Map<number, number>;
   showTomorrow: boolean;
   dayView: "today" | "tomorrow";
   onDayViewChange: (view: "today" | "tomorrow") => void;
@@ -285,6 +391,7 @@ function DayCurveChart({
           // far" to subtract it from.
           remaining: f,
           feedInRate: tomorrowFeedInRateByHour?.get(hour) ?? null,
+          purchaseRate: tomorrowPurchaseRateByHour?.get(hour) ?? null,
           partial: false,
         });
       }
@@ -326,11 +433,25 @@ function DayCurveChart({
         forecast: f,
         remaining: hour >= today.currentHour ? f : null,
         feedInRate: feedInRateByHour?.get(hour) ?? null,
+        purchaseRate: purchaseRateByHour?.get(hour) ?? null,
         partial: hour === today.currentHour,
       });
     }
     return out;
-  }, [view, today, tomorrow, feedInRateByHour, tomorrowFeedInRateByHour]);
+  }, [view, today, tomorrow, feedInRateByHour, purchaseRateByHour, tomorrowFeedInRateByHour, tomorrowPurchaseRateByHour]);
+
+  // The gradient that paints the rate line by band. Against the day's
+  // purchase price (constant within a day: periods change at midnight),
+  // over the line's own vertical extent — see rateGradientStops.
+  const gradientId = useId().replace(/:/g, "");
+  const rates = points.map((p) => p.feedInRate).filter((r): r is number => r != null);
+  const purchase = points.find((p) => p.purchaseRate != null)?.purchaseRate ?? null;
+  const rateStops = rates.length > 0 ? rateGradientStops(Math.min(...rates), Math.max(...rates), purchase) : [];
+  // A flat line has no box to paint a gradient over; its one band is a plain colour.
+  const flat = rates.length > 0 && Math.max(...rates) - Math.min(...rates) <= 0;
+  const rateStroke = flat ? RATE_COLORS[rateStops[0]!.band] : `url(#${gradientId})`;
+  const rateColorOf = (rate: number | null) => (rate == null ? undefined : RATE_COLORS[rateBand(rate, purchase)]);
+  const rateTicks = rateAxisTicks(rates);
   if (points.length === 0) return null;
 
   // What the panels made today, one figure: production (AC delivered) plus
@@ -385,7 +506,11 @@ function DayCurveChart({
                 orientation="right"
                 tick={{ fontSize: 11, fill: PALETTE.axis }}
                 width={48}
-                domain={[0, "auto"]}
+                // A fixed window in 5 ct. steps, so the same rate reads at the
+                // same height day after day; only a rate outside it moves an
+                // end, to the next step.
+                domain={[rateTicks[0]!, rateTicks[rateTicks.length - 1]!]}
+                ticks={rateTicks}
                 tickFormatter={(v: number) => formatNumber(v, 2)}
               />
             )}
@@ -424,7 +549,7 @@ function DayCurveChart({
                     {hasRate && (
                       <p className="mt-1 text-slate-600">
                         {t("calc.col.feedInRate")}:{" "}
-                        <span className="font-semibold text-slate-900">
+                        <span className="font-semibold text-slate-900" style={{ color: rateColorOf(p.feedInRate) }}>
                           {p.feedInRate == null ? "—" : `${formatNumber(p.feedInRate, 3)} CHF/kWh`}
                         </span>
                       </p>
@@ -436,10 +561,7 @@ function DayCurveChart({
             {/* Labels in ink, not in the series colour recharts defaults to:
                 the faint "still expected" tint is unreadable as text, and
                 identity is the swatch's job. */}
-            <Legend
-              wrapperStyle={{ fontSize: 12 }}
-              formatter={(value: string) => <span className="text-slate-600">{value}</span>}
-            />
+            <Legend content={<DayLegend />} />
             <Area
               type="monotone"
               dataKey="remaining"
@@ -491,18 +613,35 @@ function DayCurveChart({
               connectNulls={false}
             />
             {hasRate && (
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  {rateStops.map((s, i) => (
+                    <stop key={i} offset={`${(s.offset * 100).toFixed(3)}%`} stopColor={RATE_COLORS[s.band]} />
+                  ))}
+                </linearGradient>
+              </defs>
+            )}
+            {hasRate && (
               <Line
                 yAxisId="rate"
                 type="monotone"
                 dataKey="feedInRate"
                 name={t("calc.col.feedInRate")}
-                stroke={FEED_IN_RATE_COLOR}
+                stroke={rateStroke}
                 strokeWidth={2}
                 // Often covers only part of the window — early in the day, or
                 // early in the evening for tomorrow — which can be a single
                 // point, which a bare line (no dot) would draw as nothing at
-                // all.
-                dot={{ r: 2, fill: FEED_IN_RATE_COLOR, strokeWidth: 0 }}
+                // all. Each dot wears its own hour's band: a gradient over a
+                // dot's own tiny box would not.
+                dot={(props: unknown) => {
+                  const p = props as RateDotProps;
+                  return <circle key={p.key} cx={p.cx} cy={p.cy} r={2.5} fill={rateColorOf(p.value ?? null)} />;
+                }}
+                activeDot={(props: unknown) => {
+                  const p = props as RateDotProps;
+                  return <circle key={p.key} cx={p.cx} cy={p.cy} r={4} fill={rateColorOf(p.value ?? null)} />;
+                }}
                 isAnimationActive={false}
                 connectNulls={false}
               />

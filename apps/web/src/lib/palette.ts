@@ -66,6 +66,12 @@ export const NEUTRALS: Record<
     ink: string;
     batteryCharging: string;
     localForgone: string;
+    /** The feed-in rate line by band (shared/feedInBands.ts): a loss, poor, fair, good, and better than buying. */
+    rateLoss: string;
+    ratePoor: string;
+    rateFair: string;
+    rateGood: string;
+    rateBest: string;
     slate: Record<SlateShade, string>;
   }
 > = {
@@ -90,6 +96,11 @@ export const NEUTRALS: Record<
     batteryCharging: "#8c3f1d",
     /** Export forgone on local sales: a darker local, same idea. Picked to clear the CVD floor against the brown above it. */
     localForgone: "#007c64",
+    rateLoss: "#991b1b",
+    ratePoor: "#dc2626",
+    rateFair: "#94a3b8",
+    rateGood: "#1baf7a",
+    rateBest: "#047857",
     slate: {
       50: "#f8fafc",
       100: "#f1f5f9",
@@ -120,6 +131,13 @@ export const NEUTRALS: Record<
     // stays clearly apart from the hue it belongs to.
     batteryCharging: "#ffb385",
     localForgone: "#7ee8c9",
+    // "Darker" reads as "stronger" on a dark surface: the loss red is the
+    // saturated one, the best green the bright one.
+    rateLoss: "#ef4444",
+    ratePoor: "#f87171",
+    rateFair: "#94a3b8",
+    rateGood: "#1baf7a",
+    rateBest: "#6ee7b7",
     slate: {
       50: "#0f172a",
       100: "#334155",
@@ -208,6 +226,11 @@ export function cssVariables(mode: Mode): Record<string, string> {
     "--c-ink": rgbTriplet(n.ink),
     "--c-battery-charging": rgbTriplet(n.batteryCharging),
     "--c-local-forgone": rgbTriplet(n.localForgone),
+    "--c-rate-loss": rgbTriplet(n.rateLoss),
+    "--c-rate-poor": rgbTriplet(n.ratePoor),
+    "--c-rate-fair": rgbTriplet(n.rateFair),
+    "--c-rate-good": rgbTriplet(n.rateGood),
+    "--c-rate-best": rgbTriplet(n.rateBest),
   };
   for (const [shade, hex] of Object.entries(n.slate)) out[`--c-slate-${shade}`] = rgbTriplet(hex);
   for (const tone of Object.keys(HUES[mode]) as Tone[]) {
@@ -239,6 +262,11 @@ export const PALETTE = {
   gridline: v("gridline"),
   baseline: v("baseline"),
   hoverBand: v("hover-band"),
+  rateLoss: v("rate-loss"),
+  ratePoor: v("rate-poor"),
+  rateFair: v("rate-fair"),
+  rateGood: v("rate-good"),
+  rateBest: v("rate-best"),
   axis: v("axis"),
   ink: v("ink"),
   /** The card surface: what a hatch pattern's ground, a ribbon's halo and a ring's fill are painted in. */

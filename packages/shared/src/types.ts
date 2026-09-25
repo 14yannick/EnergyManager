@@ -582,6 +582,12 @@ export interface SavingsDayDetail {
 export interface FeedInRatePoint {
   ts: string;
   rateChfPerKwh: number | null;
+  /**
+   * What the household pays for a kWh at the same instant — the bar a
+   * feed-in rate is measured against (see shared/feedInBands.ts). Null
+   * where no purchase period covers the instant.
+   */
+  purchaseRateChfPerKwh: number | null;
 }
 
 export interface SavingsSummary {

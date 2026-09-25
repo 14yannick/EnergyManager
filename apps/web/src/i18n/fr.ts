@@ -652,7 +652,7 @@ export const fr: Record<keyof typeof en, string> = {
   "party.live.ofToday": "sur {total} kWh prévus pour la journée",
   "party.live.tomorrow": "Prévision demain",
   "party.live.chart": "Aujourd'hui, heure par heure",
-  "party.live.chartNote": "Ce que les panneaux ont produit chaque heure jusqu'ici, face à la prévision du jour. L'heure en cours est partielle jusqu'à sa fin.",
+  "party.live.chartNote": "Ce que les panneaux ont produit chaque heure jusqu'ici, face à la prévision du jour. L'heure en cours est partielle jusqu'à sa fin. Le tarif de reprise est coloré selon sa valeur : rouge foncé sous zéro, rouge sous 8 ct., gris sous 14 ct., vert au-dessus, et vert foncé dès qu'il dépasse le prix d'achat.",
   "party.live.viewToday": "Aujourd'hui",
   "party.live.viewTomorrow": "Demain",
   "party.live.tomorrowChart": "Demain, heure par heure",
