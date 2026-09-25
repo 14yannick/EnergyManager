@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { DailySavings } from "@energy-manager/shared";
 import { PALETTE } from "../lib/palette";
 import type { MessageKey } from "../i18n/context";
+import { formatKwhAuto } from "../lib/format";
 
 /**
  * The energy-flow views' shared vocabulary: the six entities, the seven
@@ -118,12 +119,15 @@ export const pct = (part: number, whole: number) => (whole > 0 ? Math.round((par
 /** Text over a drawing: a white edge keeps it legible on any of the tints. */
 export const HALO: CSSProperties = { paintOrder: "stroke", stroke: "#fff", strokeWidth: 3, strokeLinejoin: "round" };
 
-/** kWh as the locale writes them: whole above a hundred, to a tenth below. */
-export function kwhFormatter(tag: string): (kwh: number) => string {
-  const whole = new Intl.NumberFormat(tag, { maximumFractionDigits: 0 });
-  // Always one decimal below a hundred, so "8.0" sits beside "32.2" rather than a bare "8".
-  const tenth = new Intl.NumberFormat(tag, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  return (kwh) => (kwh >= 100 ? whole.format(kwh) : tenth.format(kwh));
+/**
+ * kWh as every figure in the app is now written: whole above a hundred, to
+ * a tenth below (so "8.0" sits beside "32.2" rather than a bare "8"),
+ * grouped, period decimal — fixed rather than following the interface
+ * language (see lib/format.ts), so a flow's figure never reformats under a
+ * reader switching languages.
+ */
+export function kwhFormatter(): (kwh: number) => string {
+  return formatKwhAuto;
 }
 
 /** Which flow the pointer is over, and where, relative to the drawing's wrapper. */

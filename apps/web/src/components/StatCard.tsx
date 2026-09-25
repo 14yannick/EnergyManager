@@ -1,5 +1,6 @@
 import type { Tone } from "../lib/palette";
 import { InfoTip } from "./InfoTip";
+import { formatChf } from "../lib/format";
 
 /**
  * Written out in full rather than built from the tone name: Tailwind only
@@ -19,7 +20,7 @@ export function StatCard({
   value,
   sub,
   hint,
-  format = (v) => `CHF ${v.toFixed(2)}`,
+  format = (v) => `CHF ${formatChf(v)}`,
   emphasis,
   tone,
   size,

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useElementWidth } from "../lib/useElementWidth";
 import type { Granularity } from "../lib/periods";
-import { useI18n, useT } from "../i18n/context";
+import { useT } from "../i18n/context";
 import { InfoTip } from "./InfoTip";
 import { NAME_KEY, kwhFormatter, linksOf, nodeTotals, pct, totalsOf, type Hover, type NodeId } from "./flowModel";
 import { SankeyFlow } from "./SankeyFlow";
@@ -31,7 +31,6 @@ export function EnergyFlowChart({
   granularity: Granularity;
 }) {
   const t = useT();
-  const { tag } = useI18n();
   const radial = useElementWidth();
   const sankey = useElementWidth();
   const [hover, setHover] = useState<(Hover & { pane: Pane }) | null>(null);
@@ -46,7 +45,7 @@ export function EnergyFlowChart({
 
   const links = useMemo(() => linksOf(totalsOf(query.data ?? [])), [query.data]);
   const totals = useMemo(() => nodeTotals(links), [links]);
-  const fmt = useMemo(() => kwhFormatter(tag), [tag]);
+  const fmt = useMemo(() => kwhFormatter(), []);
   const name = useCallback((id: NodeId) => t(NAME_KEY[id]), [t]);
   const ringNames = {
     sun: name("sun"),

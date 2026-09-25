@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { LiveEnergyView } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { formatKwh, formatNumber } from "../lib/format";
 import { useT } from "../i18n/context";
 import { StatCard } from "./StatCard";
 
@@ -46,8 +47,8 @@ export function hasLiveCards(live: LiveEnergyView): boolean {
   );
 }
 
-const kw = (w: number) => `${(w / 1000).toFixed(2)} kW`;
-const kwh = (v: number) => `${v.toFixed(1)} kWh`;
+const kw = (w: number) => `${formatNumber(w / 1000, 2)} kW`;
+const kwh = (v: number) => `${formatKwh(v)} kWh`;
 
 export function LiveCards({ live }: { live: LiveEnergyView }) {
   const t = useT();
@@ -80,7 +81,7 @@ export function LiveCards({ live }: { live: LiveEnergyView }) {
           format={kwh}
           sub={
             live.forecastTodayKwh != null
-              ? t("party.live.ofToday", { total: live.forecastTodayKwh.toFixed(1) })
+              ? t("party.live.ofToday", { total: formatKwh(live.forecastTodayKwh) })
               : undefined
           }
         />

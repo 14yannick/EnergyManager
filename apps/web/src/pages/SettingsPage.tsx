@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CfAccessSyncResult, HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { formatChf } from "../lib/format";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useCanEdit } from "../lib/useIdentity";
@@ -920,12 +921,12 @@ function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boole
                 readOnly
                 hint={row.split ? t("settings.splitItems", { count: row.matching.length }) : undefined}
               >
-                <ReadOnlyValue>CHF {row.total.toFixed(2)}</ReadOnlyValue>
+                <ReadOnlyValue>CHF {formatChf(row.total)}</ReadOnlyValue>
               </Field>
             ),
           )}
           <Field label={t("common.total")} readOnly hint={t("settings.totalHint")}>
-            <ReadOnlyValue>CHF {total.toFixed(2)}</ReadOnlyValue>
+            <ReadOnlyValue>CHF {formatChf(total)}</ReadOnlyValue>
           </Field>
         </div>
       </div>

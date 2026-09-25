@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api/client";
+import { formatChf, formatKwh, formatNumber } from "../lib/format";
 import { PALETTE, type Tone } from "../lib/palette";
 import { useT, type Translate } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
@@ -54,7 +55,7 @@ type RevenueUnit = "chf" | "both" | "kwh";
 const barUnit = (u: RevenueUnit): "chf" | "kwh" => (u === "kwh" ? "kwh" : "chf");
 
 const formatRevenue = (value: number, unit: RevenueUnit) =>
-  barUnit(unit) === "chf" ? `CHF ${value.toFixed(2)}` : `${value.toFixed(1)} kWh`;
+  barUnit(unit) === "chf" ? `CHF ${formatChf(value)}` : `${formatKwh(value)} kWh`;
 
 // Two of the four series are named for the money they earn, which reads wrong
 // once the bars are energy: the same segment is a revenue in one unit and a
@@ -81,9 +82,9 @@ export function DashboardPage() {
       : null;
   /** "CHF 1.23/day avg", or the overall view's "over N days". */
   /** CHF per kWh written in cents, as the provider's own bill does. */
-  const ct = (chfPerKwh: number) => `${(chfPerKwh * 100).toFixed(1)} ${t("billing.centsPerKwh")}`;
+  const ct = (chfPerKwh: number) => `${formatNumber(chfPerKwh * 100, 1)} ${t("billing.centsPerKwh")}`;
   const avgOf = (value: number | undefined) =>
-    value == null ? undefined : (avgSuffix ?? t("dash.avgSuffix", { value: value.toFixed(2), unit }));
+    value == null ? undefined : (avgSuffix ?? t("dash.avgSuffix", { value: formatChf(value), unit }));
 
   const rangeQuery = useQuery({
     queryKey: ["readings-range", site?.id],
@@ -231,13 +232,13 @@ export function DashboardPage() {
             sub={
               summary
                 ? t("dash.soldPriceSub", {
-                    kwh: (summary.sold.gridKwh + summary.sold.neighbourKwh + summary.sold.unpricedKwh).toFixed(0),
+                    kwh: formatKwh(summary.sold.gridKwh + summary.sold.neighbourKwh + summary.sold.unpricedKwh, 0),
                     grid: summary.sold.gridKwh > 0 ? ct(summary.sold.gridChf / summary.sold.gridKwh) : "—",
                     local:
                       summary.sold.neighbourKwh > 0 ? ct(summary.sold.neighbourChf / summary.sold.neighbourKwh) : "—",
                   }) +
                   (summary.sold.unpricedKwh >= 0.5
-                    ? ` · ${t("dash.soldUnpriced", { kwh: summary.sold.unpricedKwh.toFixed(0) })}`
+                    ? ` · ${t("dash.soldUnpriced", { kwh: formatKwh(summary.sold.unpricedKwh, 0) })}`
                     : "")
                 : undefined
             }
@@ -567,8 +568,8 @@ function RevenueTooltip({
         <thead>
           <tr className="text-xs text-slate-400">
             <th className="text-left font-normal" />
-            <th className="text-right font-normal">CHF</th>
             <th className="text-right font-normal">kWh</th>
+            <th className="text-right font-normal">CHF</th>
           </tr>
         </thead>
         <tbody>
@@ -583,22 +584,25 @@ function RevenueTooltip({
                   {f.name}
                 </td>
                 <td className="whitespace-nowrap text-right tabular-nums text-slate-900">
-                  {f.chf.toFixed(2)}
-                  <span className="ml-1 text-xs text-slate-400">
-                    {sc == null ? "—" : `${sc.toFixed(0)}%`}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap text-right tabular-nums text-slate-900">
                   {f.kwh == null ? (
                     <span className="text-slate-400">—</span>
                   ) : (
-                    <>
-                      {f.kwh.toFixed(1)}
-                      <span className="ml-1 text-xs text-slate-400">
-                        {sk == null ? "—" : `${sk.toFixed(0)}%`}
-                      </span>
-                    </>
+                    formatKwh(f.kwh)
                   )}
+                  {/* A fixed-width box, not just a margin: a share that reads
+                      "8%" is narrower than one reading "100%", and without a
+                      constant-width box for it the amount before it would
+                      end at a different distance from the cell's right edge
+                      on every row — which is what broke decimal alignment. */}
+                  <span className="ml-1 inline-block w-7 text-right text-xs text-slate-400">
+                    {sk == null ? "—" : `${sk.toFixed(0)}%`}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap text-right tabular-nums text-slate-900">
+                  {formatChf(f.chf)}
+                  <span className="ml-1 inline-block w-7 text-right text-xs text-slate-400">
+                    {sc == null ? "—" : `${sc.toFixed(0)}%`}
+                  </span>
                 </td>
               </tr>
             );
@@ -606,10 +610,12 @@ function RevenueTooltip({
           <tr className="font-semibold">
             <td className="border-t pt-1 text-slate-600">{t("common.total")}</td>
             <td className="border-t pt-1 text-right tabular-nums text-slate-900">
-              {totalChf.toFixed(2)}
+              {formatKwh(totalKwh)}
+              <span className="ml-1 inline-block w-7" />
             </td>
             <td className="border-t pt-1 text-right tabular-nums text-slate-900">
-              {totalKwh.toFixed(1)}
+              {formatChf(totalChf)}
+              <span className="ml-1 inline-block w-7" />
             </td>
           </tr>
         </tbody>
@@ -663,7 +669,7 @@ function RevenueTooltip({
           <div className="flex items-center justify-between gap-6">
             <span className="text-slate-600">{t("dash.productionPlusCharging")}</span>
             <span className="font-semibold tabular-nums text-slate-900">
-              {row.producedKwh.toFixed(1)} kWh
+              {formatKwh(row.producedKwh)} kWh
             </span>
           </div>
         )}
@@ -1119,7 +1125,7 @@ function PaybackCard({
     <div className="rounded-lg border bg-white p-4">
       <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="mt-1 text-lg font-semibold text-slate-900">
-        {years != null ? t("dash.years", { value: years.toFixed(1) }) : "—"}
+        {years != null ? t("dash.years", { value: formatNumber(years, 1) }) : "—"}
       </p>
       <p className="mt-1 text-xs text-slate-500">
         {t("dash.breakeven", { date: breakeven ?? t("dash.notReached") })}

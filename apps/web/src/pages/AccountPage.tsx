@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invoice, InvoiceStatus } from "@energy-manager/shared";
 import { invoicePeriodLabel } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { formatChf, formatKwh } from "../lib/format";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useCanEdit, useIdentity } from "../lib/useIdentity";
 
-const chf = (n: number) => n.toFixed(2);
-const kwh = (n: number) => n.toFixed(1);
+const chf = (n: number) => formatChf(n);
+const kwh = (n: number) => formatKwh(n);
 
 /** DD.MM.YYYY, the Swiss form used everywhere else in this app. */
 const localDate = (iso: string) =>

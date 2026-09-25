@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatChf, formatKwh, formatNumber } from "../lib/format";
 import {
   Bar,
   BarChart,
@@ -33,8 +34,8 @@ const SALE_COLOR = PALETTE.local;
 const EXPORT_COLOR = PALETTE.grid;
 const EXPORT_HATCH = "neighbourExportHatch";
 
-const chf = (v: number) => `CHF ${v.toFixed(2)}`;
-const ctPerKwh = (chfPerKwh: number, unit: string) => `${(chfPerKwh * 100).toFixed(1)} ${unit}`;
+const chf = (v: number) => `CHF ${formatChf(v)}`;
+const ctPerKwh = (chfPerKwh: number, unit: string) => `${formatNumber(chfPerKwh * 100, 1)} ${unit}`;
 
 export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from: string; to: string }) {
   const t = useT();
@@ -65,7 +66,7 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
           <>
             {data && data.totals.unpricedKwh > 0 && (
               <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                {t("dash.nb.unpriced", { kwh: data.totals.unpricedKwh.toFixed(1) })}
+                {t("dash.nb.unpriced", { kwh: formatKwh(data.totals.unpricedKwh) })}
               </p>
             )}
 
@@ -112,7 +113,7 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
                   {parties.map((p) => (
                     <tr key={p.partyId} className="border-t">
                       <td className="py-1 pr-3 text-slate-900">{p.name}</td>
-                      <td className="py-1 pr-3 text-right">{p.kwh.toFixed(1)}</td>
+                      <td className="py-1 pr-3 text-right">{formatKwh(p.kwh)}</td>
                       <td className="py-1 pr-3 text-right">{chf(p.revenueChf)}</td>
                       <td className="py-1 pr-3 text-right font-medium">{compared(p) > 0 ? chf(p.gainChf) : "—"}</td>
                       <td className="py-1 pr-3 text-right">
@@ -124,7 +125,7 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
                   {data && parties.length > 1 && (
                     <tr className="border-t-2 border-slate-300 font-semibold">
                       <td className="py-1 pr-3 text-slate-900">{t("common.total")}</td>
-                      <td className="py-1 pr-3 text-right">{data.totals.kwh.toFixed(1)}</td>
+                      <td className="py-1 pr-3 text-right">{formatKwh(data.totals.kwh)}</td>
                       <td className="py-1 pr-3 text-right">{chf(data.totals.revenueChf)}</td>
                       <td className="py-1 pr-3 text-right">
                         {compared(data.totals) > 0 ? chf(data.totals.gainChf) : "—"}
@@ -195,7 +196,7 @@ function SaleTooltip({ active, payload }: { active?: boolean; payload?: Array<{ 
   return (
     <div className="w-64 max-w-[calc(100vw-3rem)] space-y-0.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md sm:text-sm">
       <p className="mb-1 font-medium text-slate-900">{p.name}</p>
-      {row("kWh", p.kwh.toFixed(1))}
+      {row("kWh", formatKwh(p.kwh))}
       {row(t("dash.nb.revenue"), chf(p.revenueChf), SALE_COLOR)}
       {row(t("dash.nb.export"), hasComparison ? chf(p.exportValueChf) : "—", EXPORT_COLOR)}
       {row(t("dash.nb.gain"), hasComparison ? chf(p.gainChf) : "—", undefined, true)}

@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { formatChf, formatKwh, formatKwhAuto } from "../lib/format";
 import { PALETTE } from "../lib/palette";
 import { useSelectedPeriod } from "../lib/usePeriod";
 import { useT, type MessageKey } from "../i18n/context";
@@ -62,7 +63,11 @@ const localShare = (p: Pick<PartyConsumptionPeriod, "localKwh" | "gridKwh">) => 
   return total > 0 ? (p.localKwh / total) * 100 : null;
 };
 
-const kwh = (v: number) => `${v.toFixed(v >= 100 ? 0 : 1)} kWh`;
+// Fixed at one decimal (not the auto threshold formatKwhAuto uses
+// elsewhere): the tooltip below shows local and grid side by side, and a
+// figure crossing 100 kWh dropping to zero decimals while the other kept
+// one broke their decimal-point alignment.
+const kwh = (v: number) => `${formatKwh(v)} kWh`;
 
 export function PartyDashboardPage() {
   const t = useT();
@@ -195,7 +200,7 @@ export function PartyDashboardPage() {
             format={kwh}
             sub={
               totals
-                ? t("party.kpi.totalSub", { local: totals.localKwh.toFixed(1), grid: totals.gridKwh.toFixed(1) })
+                ? t("party.kpi.totalSub", { local: formatKwhAuto(totals.localKwh), grid: formatKwhAuto(totals.gridKwh) })
                 : undefined
             }
           />
@@ -207,7 +212,7 @@ export function PartyDashboardPage() {
             value={totals?.rcpCostChf}
             // The direct-supply figure sits under the cost it is compared
             // with, leaving the benefit to stand alone as the headline.
-            sub={totals ? t("party.kpi.savedSub", { direct: totals.directCostChf.toFixed(2) }) : undefined}
+            sub={totals ? t("party.kpi.savedSub", { direct: formatChf(totals.directCostChf) }) : undefined}
           />
         </div>
       </section>
@@ -412,7 +417,7 @@ function ConsumptionTooltip({
   const share = localShare(row);
   const heading = granularity === "overall" ? t("dash.wholePeriod") : row.label;
 
-  const chf = (v: number) => `CHF ${v.toFixed(2)}`;
+  const chf = (v: number) => `CHF ${formatChf(v)}`;
   const line = (label: string, value: string, swatch?: string, strong = false) => (
     <div className={`flex items-center justify-between gap-4 ${strong ? "font-semibold" : ""}`}>
       <span className="min-w-0 text-slate-600">

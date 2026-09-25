@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import type { FeedInRatePoint, LiveDayCurve, TomorrowForecast } from "@energy-manager/shared";
+import { formatKwh, formatNumber } from "../lib/format";
 import { api } from "../api/client";
 import { PALETTE } from "../lib/palette";
 import { useT } from "../i18n/context";
@@ -358,11 +359,11 @@ function DayCurveChart({
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {view === "today" && (
             <>
-              <DayStat label={t("party.live.madeToday")} hint={t("party.live.madeTodayHint")} value={`${madeKwh.toFixed(1)} kWh`} />
-              <DayStat label={t("party.live.leftHouse")} value={`${exportedKwh.toFixed(1)} kWh`} />
+              <DayStat label={t("party.live.madeToday")} hint={t("party.live.madeTodayHint")} value={`${formatKwh(madeKwh)} kWh`} />
+              <DayStat label={t("party.live.leftHouse")} value={`${formatKwh(exportedKwh)} kWh`} />
             </>
           )}
-          <DayStat label={t("party.live.forecastTotal")} value={`${forecastKwh.toFixed(1)} kWh`} />
+          <DayStat label={t("party.live.forecastTotal")} value={`${formatKwh(forecastKwh)} kWh`} />
         </div>
       </div>
       <div className="mt-3 h-56 sm:h-64">
@@ -374,7 +375,7 @@ function DayCurveChart({
                 width and ran together at 390px, where a fixed "show every
                 one under 14" interval showed all of them regardless. */}
             <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
-            <YAxis tick={{ fontSize: 11 }} width={40} domain={[0, "auto"]} tickFormatter={(v: number) => v.toFixed(1)} />
+            <YAxis tick={{ fontSize: 11 }} width={40} domain={[0, "auto"]} tickFormatter={(v: number) => formatKwh(v)} />
             {/* Both domains start at exactly 0, so the zero line lands on the
                 same pixel row for both axes without any further alignment —
                 unlike the revenue chart's, neither can go negative. */}
@@ -385,7 +386,7 @@ function DayCurveChart({
                 tick={{ fontSize: 11, fill: PALETTE.axis }}
                 width={48}
                 domain={[0, "auto"]}
-                tickFormatter={(v: number) => v.toFixed(2)}
+                tickFormatter={(v: number) => formatNumber(v, 2)}
               />
             )}
             <Tooltip
@@ -403,28 +404,28 @@ function DayCurveChart({
                         <p className="text-slate-600">
                           {t("party.live.madeToday")}:{" "}
                           <span className="font-semibold text-slate-900">
-                            {p.made == null ? "—" : `${p.made.toFixed(2)} kWh`}
+                            {p.made == null ? "—" : `${formatKwh(p.made, 2)} kWh`}
                           </span>
                         </p>
                         <p className="pl-2 text-slate-500">
-                          {t("party.live.leftHouse")}: {p.exported == null ? "—" : `${p.exported.toFixed(2)} kWh`}
+                          {t("party.live.leftHouse")}: {p.exported == null ? "—" : `${formatKwh(p.exported, 2)} kWh`}
                         </p>
                         <p className="pl-2 text-slate-500">
-                          {t("party.live.keptAtHome")}: {p.kept == null ? "—" : `${p.kept.toFixed(2)} kWh`}
+                          {t("party.live.keptAtHome")}: {p.kept == null ? "—" : `${formatKwh(p.kept, 2)} kWh`}
                         </p>
                       </>
                     )}
                     <p className="mt-1 text-slate-600">
                       {t("party.live.forecast")}:{" "}
                       <span className="font-semibold text-slate-900">
-                        {p.forecast == null ? "—" : `${p.forecast.toFixed(2)} kWh`}
+                        {p.forecast == null ? "—" : `${formatKwh(p.forecast, 2)} kWh`}
                       </span>
                     </p>
                     {hasRate && (
                       <p className="mt-1 text-slate-600">
                         {t("calc.col.feedInRate")}:{" "}
                         <span className="font-semibold text-slate-900">
-                          {p.feedInRate == null ? "—" : `${p.feedInRate.toFixed(3)} CHF/kWh`}
+                          {p.feedInRate == null ? "—" : `${formatNumber(p.feedInRate, 3)} CHF/kWh`}
                         </span>
                       </p>
                     )}

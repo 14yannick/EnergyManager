@@ -7,6 +7,7 @@ import type {
   SavingsSlot,
 } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { formatNumber } from "../lib/format";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 
@@ -48,9 +49,9 @@ function slotTime(ts: string, tag: string): string {
   });
 }
 
-const kwh = (v: number, digits = 2) => v.toFixed(digits);
-const chf = (v: number, digits = 2) => v.toFixed(digits);
-const rate = (v: number | null) => (v == null ? "—" : v.toFixed(5));
+const kwh = (v: number, digits = 2) => formatNumber(v, digits);
+const chf = (v: number, digits = 2) => formatNumber(v, digits);
+const rate = (v: number | null) => (v == null ? "—" : formatNumber(v, 5));
 
 /** Below this a figure is meter noise, not a quantity worth a row of its own. */
 const EPSILON = 1e-9;
@@ -538,7 +539,7 @@ const ENERGY: Array<{ key: keyof DailySavings; label: MessageKey; unit: string }
 
 function fmtCell(v: number | null | undefined, unit: string): string {
   if (v == null) return "—";
-  return unit === "kWh" ? v.toFixed(2) : unit === "CHF" ? v.toFixed(3) : v.toFixed(5);
+  return unit === "kWh" ? formatNumber(v, 2) : unit === "CHF" ? formatNumber(v, 3) : formatNumber(v, 5);
 }
 
 function PeriodTable({ siteId }: { siteId: string }) {

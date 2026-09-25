@@ -13,6 +13,7 @@ import {
   type TariffSurchargeInput,
 } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { formatNumber } from "../lib/format";
 import { useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 
@@ -209,7 +210,7 @@ export function TariffPeriodsPage() {
                     <span className="text-slate-400">{t("tariff.fromFeed")}</span>
                   ) : (
                     <>
-                      {p.rateChfPerKwh.toFixed(5)}
+                      {formatNumber(p.rateChfPerKwh, 5)}
                       {p.pricingMode === "dynamic" && (
                         <span className="ml-1 text-xs text-slate-400">{t("tariff.fallback")}</span>
                       )}
@@ -464,7 +465,7 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
                 <td className="px-3 py-2">{t(KIND_LABELS[s.kind])}</td>
                 <td className="px-3 py-2">{formatLocal(s.startTs)}</td>
                 <td className="px-3 py-2">{formatLocal(s.endTs)}</td>
-                <td className="px-3 py-2">{s.rateChfPerKwh.toFixed(5)}</td>
+                <td className="px-3 py-2">{formatNumber(s.rateChfPerKwh, 5)}</td>
                 <td className="px-3 py-2">{s.label}</td>
                 <td className="px-3 py-2 text-right">
                   <button

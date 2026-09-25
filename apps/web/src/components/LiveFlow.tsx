@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { allocateLivePower, type LiveEnergyView } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { PALETTE } from "../lib/palette";
+import { formatNumber } from "../lib/format";
 import { useElementWidth } from "../lib/useElementWidth";
-import { useI18n, useT } from "../i18n/context";
+import { useT } from "../i18n/context";
 import { InfoTip } from "./InfoTip";
 import { NAME_KEY, kwhFormatter, linksOf, nodeTotals, pct, totalsOf, type Hover, type NodeId } from "./flowModel";
 import { RadialFlow, type RadialLink, type RingId } from "./RadialFlow";
@@ -26,7 +27,7 @@ import { RadialFlow, type RadialLink, type RingId } from "./RadialFlow";
 const MIN_W = 5;
 const REFRESH_TODAY_MS = 5 * 60 * 1000;
 
-const fmtW = (w: number) => (w >= 1000 ? `${(w / 1000).toFixed(1)} kW` : `${Math.round(w)} W`);
+const fmtW = (w: number) => (w >= 1000 ? `${formatNumber(w / 1000, 1)} kW` : `${formatNumber(w, 0)} W`);
 
 /** Whether there is a live power reading to draw at all. */
 export function hasLiveFlow(live: LiveEnergyView): boolean {
@@ -35,7 +36,6 @@ export function hasLiveFlow(live: LiveEnergyView): boolean {
 
 export function LiveFlow({ siteId, live }: { siteId: string | null | undefined; live: LiveEnergyView }) {
   const t = useT();
-  const { tag } = useI18n();
   const { ref: wrapRef, element: wrapEl, width } = useElementWidth();
   const [hover, setHover] = useState<Hover | null>(null);
 
@@ -50,7 +50,7 @@ export function LiveFlow({ siteId, live }: { siteId: string | null | undefined; 
     refetchInterval: REFRESH_TODAY_MS,
   });
   const today = useMemo(() => nodeTotals(linksOf(totalsOf(todayQuery.data ?? []))), [todayQuery.data]);
-  const kwh = useMemo(() => kwhFormatter(tag), [tag]);
+  const kwh = useMemo(() => kwhFormatter(), []);
   const name = (id: NodeId) => t(NAME_KEY[id]);
   const todayOf = (id: NodeId, side: "inKwh" | "outKwh") => today.get(id)?.[side] ?? 0;
 

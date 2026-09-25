@@ -13,6 +13,7 @@ import type {
 } from "@energy-manager/shared";
 import { billingPeriodLabel, billingPeriodRange, toDateString } from "@energy-manager/shared";
 import { api } from "../api/client";
+import { formatChf, formatKwh, formatNumber } from "../lib/format";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useDefaultSite } from "../lib/useDefaultSite";
 import { useCanEdit, useIdentity } from "../lib/useIdentity";
@@ -39,7 +40,7 @@ const ALLOCATION_LABELS: Record<BillingAllocation, MessageKey> = {
   per_participant: "billing.alloc.perParticipant",
 };
 
-const chf = (n: number) => n.toFixed(2);
+const chf = (n: number) => formatChf(n);
 
 const localDate = (iso: string) =>
   // Numeric DD.MM.YYYY, which is the Swiss form in both languages — so this
@@ -349,7 +350,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
                     <td className="py-1 pr-3 text-slate-500">{t(ALLOCATION_LABELS[p.allocation])}</td>
                     <td className="py-1 pr-3 text-right tabular-nums">
                       {isPerKwhAllocation(p.allocation)
-                        ? `${(p.rateChf * 100).toFixed(2)} ${t("billing.centsPerKwh")}`
+                        ? `${formatNumber(p.rateChf * 100, 2)} ${t("billing.centsPerKwh")}`
                         : `${chf(p.rateChf)} ${t("billing.perYear")}`}
                     </td>
                     <td className="py-1 pr-3 text-slate-500">
@@ -543,7 +544,7 @@ function InvoiceSection({ siteId }: { siteId: string }) {
             {t("billing.summary", { days: result.days, participants: result.participantCount })}
             {result.localRateChf != null &&
               t("billing.localRate", {
-                rate: (result.localRateChf * 100).toFixed(2),
+                rate: formatNumber(result.localRateChf * 100, 2),
                 cents: t("billing.centsPerKwh"),
               })}
           </span>
@@ -687,7 +688,7 @@ function ReconciliationCard({ invoices }: { invoices: IssuedInvoice[] }) {
         <tbody>
           <tr>
             <td className="py-1 text-slate-600">
-              {t("invoice.reconciliationEnergy", { kwh: b.gridKwh.toFixed(1), rate: (energyRate * 100).toFixed(2) })}
+              {t("invoice.reconciliationEnergy", { kwh: formatKwh(b.gridKwh), rate: formatNumber(energyRate * 100, 2) })}
             </td>
             <td className="py-1 text-right tabular-nums text-slate-900">{chf(b.energyChf)}</td>
           </tr>
@@ -699,8 +700,8 @@ function ReconciliationCard({ invoices }: { invoices: IssuedInvoice[] }) {
             <tr>
               <td className="py-1 text-slate-600">
                 {t("invoice.reconciliationFeedIn", {
-                  kwh: b.feedInKwh.toFixed(1),
-                  rate: (feedInRate * 100).toFixed(2),
+                  kwh: formatKwh(b.feedInKwh),
+                  rate: formatNumber(feedInRate * 100, 2),
                 })}
               </td>
               <td className="py-1 text-right tabular-nums text-emerald-700">{chf(b.feedInChf)}</td>
@@ -891,7 +892,7 @@ function InvoiceDocument({ invoice }: { invoice: IssuedInvoice }) {
       {feedInLine && (
         <div className="mb-4 flex justify-between rounded-md bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
           <span>
-            {t(LINE_LABELS.feed_in)} ({feedInLine.quantity.toFixed(1)} kWh)
+            {t(LINE_LABELS.feed_in)} ({formatKwh(feedInLine.quantity)} kWh)
           </span>
           <span className="tabular-nums">{chf(feedInLine.amountChf)}</span>
         </div>
@@ -919,14 +920,14 @@ function InvoiceDocument({ invoice }: { invoice: IssuedInvoice }) {
       <p className="mt-2 text-xs text-slate-500">
         {invoice.selfDirectKwh + invoice.selfBatteryKwh > 0
           ? t("invoice.footnoteOwner", {
-              total: (invoice.gridKwh + invoice.localKwh + invoice.selfDirectKwh + invoice.selfBatteryKwh).toFixed(1),
-              direct: invoice.selfDirectKwh.toFixed(1),
-              battery: invoice.selfBatteryKwh.toFixed(1),
-              grid: invoice.gridKwh.toFixed(1),
+              total: formatKwh(invoice.gridKwh + invoice.localKwh + invoice.selfDirectKwh + invoice.selfBatteryKwh),
+              direct: formatKwh(invoice.selfDirectKwh),
+              battery: formatKwh(invoice.selfBatteryKwh),
+              grid: formatKwh(invoice.gridKwh),
             })
           : t("invoice.footnote", {
-              grid: invoice.gridKwh.toFixed(1),
-              local: invoice.localKwh.toFixed(1),
+              grid: formatKwh(invoice.gridKwh),
+              local: formatKwh(invoice.localKwh),
             })}
       </p>
     </section>
@@ -959,13 +960,13 @@ function LineTable({ lines }: { lines: InvoiceLine[] }) {
               <td className="py-1 pr-3 text-slate-900">{l.kind ? t(LINE_LABELS[l.kind]) : l.label}</td>
               <td className="py-1 text-right tabular-nums text-slate-600">
                 {l.quantityUnit === "kWh"
-                  ? `${l.quantity.toFixed(1)} kWh`
+                  ? `${formatKwh(l.quantity)} kWh`
                   : t("invoice.days", { count: l.quantity })}
               </td>
               <td className="py-1 text-right tabular-nums text-slate-600">
                 {l.quantityUnit === "kWh"
-                  ? `${(l.unitRateChf * 100).toFixed(2)} ${t("billing.cents")}`
-                  : `${(l.unitRateChf * 365).toFixed(2)} ${t("billing.perYear")}`}
+                  ? `${formatNumber(l.unitRateChf * 100, 2)} ${t("billing.cents")}`
+                  : `${formatNumber(l.unitRateChf * 365, 2)} ${t("billing.perYear")}`}
               </td>
               <td className="py-1 text-right tabular-nums text-slate-900">{chf(l.amountChf)}</td>
             </tr>
