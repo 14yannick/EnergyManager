@@ -14,7 +14,28 @@
      accent is one definition rather than seventeen copied class strings. See
      PRIMARY in src/lib/palette.ts for why it is warm and what stays ink. */
   .btn-primary {
-    @apply rounded-md bg-primary font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary;
+    @apply rounded-md bg-primary font-medium hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary;
+    /* A literal white, not `text-white`: that class is the card surface, and
+       goes dark with the mode — 2.9:1 on this button, where white is 5.0:1. */
+    color: #fff;
+  }
+}
+
+@layer base {
+  /* Recharts paints axis ticks and lines #666 by attribute, which reads on
+     white and vanishes on a dark surface. A rule outranks an attribute, so
+     every chart's axis takes the mode's own neutrals from here. The legend
+     text it sets in each series' colour becomes ink for the same reason —
+     and because identity belongs to the swatch, never to the words. */
+  .recharts-cartesian-axis-tick-value {
+    fill: rgb(var(--c-slate-500));
+  }
+  .recharts-cartesian-axis-line,
+  .recharts-cartesian-axis-tick-line {
+    stroke: rgb(var(--c-slate-300));
+  }
+  .recharts-legend-item-text {
+    color: rgb(var(--c-slate-600)) !important;
   }
 }
 

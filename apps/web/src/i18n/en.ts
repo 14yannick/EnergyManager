@@ -33,6 +33,11 @@ export const en = {
   "profile.noAuth": "Authentication is off: this browser is an administrator, with no session to sign out of.",
   "profile.previewNote": "A local preview of this identity (AUTH_DEV_AS) — there is no session behind it to sign out of.",
   "profile.signOutHint": "Ends the Cloudflare Access session and returns to the sign-in page.",
+  "profile.appearance": "Appearance",
+  "profile.appearanceHint": "System follows your device's setting. The choice is kept in this browser, like the language.",
+  "theme.light": "Light",
+  "theme.dark": "Dark",
+  "theme.system": "System",
 
   "noAccess.title": "No access",
   "noAccess.knownAs": "You are signed in as {email}, but that address is not set up in EnergyManager.",

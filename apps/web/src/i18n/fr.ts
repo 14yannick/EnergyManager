@@ -33,6 +33,11 @@ export const fr: Record<keyof typeof en, string> = {
   "profile.noAuth": "Authentification désactivée : ce navigateur est administrateur, sans session à fermer.",
   "profile.previewNote": "Un aperçu local de cette identité (AUTH_DEV_AS) — aucune session derrière, rien à fermer.",
   "profile.signOutHint": "Termine la session Cloudflare Access et revient à la page de connexion.",
+  "profile.appearance": "Apparence",
+  "profile.appearanceHint": "Système suit le réglage de votre appareil. Le choix est conservé dans ce navigateur, comme la langue.",
+  "theme.light": "Clair",
+  "theme.dark": "Sombre",
+  "theme.system": "Système",
 
   "noAccess.title": "Aucun accès",
   "noAccess.knownAs":

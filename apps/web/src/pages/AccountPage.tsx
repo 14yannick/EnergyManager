@@ -28,8 +28,8 @@ const STATUS_LABEL: Record<InvoiceStatus, MessageKey> = {
 
 const STATUS_CLASS: Record<InvoiceStatus, string> = {
   issued: "bg-slate-100 text-slate-700",
-  paid: "bg-emerald-100 text-emerald-800",
-  cancelled: "bg-red-100 text-red-700",
+  paid: "bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300",
+  cancelled: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
 function StatusBadge({ status }: { status: InvoiceStatus }) {
@@ -154,7 +154,7 @@ function MarkUnpaidControl({ invoiceId, onDone }: { invoiceId: string; onDone: (
   });
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
       <button
         type="button"
         onClick={() => mutation.mutate()}
@@ -182,7 +182,7 @@ function MarkPaidControl({ invoiceId, onDone }: { invoiceId: string; onDone: () 
   });
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
       <input
         type="date"
         className="input w-36 text-xs"

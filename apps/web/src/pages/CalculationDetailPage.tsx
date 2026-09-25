@@ -151,7 +151,7 @@ export function CalculationDetailPage() {
       </div>
 
       {dayQuery.isError && (
-        <p className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+        <p className="rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4 text-sm text-red-800 dark:text-red-200">
           {(dayQuery.error as Error).message}
         </p>
       )}
@@ -380,7 +380,7 @@ function Block({
                   </td>
                   <td
                     className={`whitespace-nowrap px-4 py-2 text-right tabular-nums ${
-                      line.chf != null && line.chf < 0 ? "text-red-700" : "text-slate-900"
+                      line.chf != null && line.chf < 0 ? "text-red-700 dark:text-red-300" : "text-slate-900"
                     }`}
                   >
                     {line.chf == null ? "—" : chf(line.chf)}

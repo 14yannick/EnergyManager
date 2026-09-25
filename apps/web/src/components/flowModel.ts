@@ -117,7 +117,7 @@ export function nodeTotals(links: FlowLink[]): Map<NodeId, { inKwh: number; outK
 export const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : null);
 
 /** Text over a drawing: a white edge keeps it legible on any of the tints. */
-export const HALO: CSSProperties = { paintOrder: "stroke", stroke: "#fff", strokeWidth: 3, strokeLinejoin: "round" };
+export const HALO: CSSProperties = { paintOrder: "stroke", stroke: PALETTE.surface, strokeWidth: 3, strokeLinejoin: "round" };
 
 /**
  * kWh as every figure in the app is now written: whole above a hundred, to

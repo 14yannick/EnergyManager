@@ -59,7 +59,7 @@ export function QrBill({ payee, invoice }: QrBillProps) {
 
   if (!data) {
     return (
-      <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 print:hidden">
+      <p className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-3 text-sm text-amber-900 dark:text-amber-200 print:hidden">
         {t("qr.noBill")}
       </p>
     );
@@ -68,7 +68,7 @@ export function QrBill({ payee, invoice }: QrBillProps) {
   return (
     <section className="print-payment rounded-lg border bg-white p-4 print:border-0 print:p-0">
       {error && (
-        <p className="mb-2 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+        <p className="mb-2 rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 p-3 text-sm text-red-800 dark:text-red-200">
           {t("qr.failed", { message: error })}
         </p>
       )}

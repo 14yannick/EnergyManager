@@ -311,7 +311,7 @@ export function RadialFlow({
               style={{ transition: "stroke-opacity 120ms, stroke-width 120ms" }}
             />
             {!reducedMotion && (
-              <circle r={DOT_R} fill={link.color} stroke="#fff" strokeWidth={1.5}>
+              <circle r={DOT_R} fill={link.color} stroke={PALETTE.surface} strokeWidth={1.5}>
                 <animateMotion dur={`${trip.toFixed(1)}s`} repeatCount="indefinite" rotate="auto">
                   <mpath href={`#${pathId}`} />
                 </animateMotion>
@@ -353,7 +353,7 @@ export function RadialFlow({
         const iconY = lines.length === 1 ? y - 13 : lines.length === 2 ? y - 18 : y - 24;
         return (
           <g key={ring} className="pointer-events-none">
-            <circle cx={x} cy={y} r={f.R} fill="#fff" stroke={RING_COLOR[ring]} strokeWidth={RING} />
+            <circle cx={x} cy={y} r={f.R} fill={PALETTE.surface} stroke={RING_COLOR[ring]} strokeWidth={RING} />
             <RingIcon ring={ring} x={x} y={iconY} />
             {lines.length === 1 ? (
               <text x={x} y={y + 18} textAnchor="middle" fontSize={12} fontWeight={600} fill={PALETTE.ink} className="tabular-nums">

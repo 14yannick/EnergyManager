@@ -38,6 +38,11 @@ export const de: Record<keyof typeof en, string> = {
   "profile.noAuth": "Authentifizierung ist aus: Dieser Browser ist Administrator, ohne Sitzung, die man beenden könnte.",
   "profile.previewNote": "Eine lokale Vorschau dieser Identität (AUTH_DEV_AS) — keine Sitzung dahinter, die man beenden könnte.",
   "profile.signOutHint": "Beendet die Cloudflare-Access-Sitzung und kehrt zur Anmeldeseite zurück.",
+  "profile.appearance": "Darstellung",
+  "profile.appearanceHint": "System folgt der Einstellung Ihres Geräts. Die Wahl bleibt in diesem Browser gespeichert, wie die Sprache.",
+  "theme.light": "Hell",
+  "theme.dark": "Dunkel",
+  "theme.system": "System",
 
   "noAccess.title": "Kein Zugriff",
   "noAccess.knownAs":

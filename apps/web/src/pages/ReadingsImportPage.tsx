@@ -104,7 +104,7 @@ export function ReadingsImportPage() {
                   {result.errors.map((e, i) => (
                     <tr key={i} className="border-t">
                       <td className="py-1 pr-4">{e.row}</td>
-                      <td className="py-1 text-red-600">{e.message}</td>
+                      <td className="py-1 text-red-600 dark:text-red-400">{e.message}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -212,9 +212,9 @@ function ExportSection({ siteId }: { siteId: string }) {
           {t("readings.download")}
         </span>
       )}
-      {!rangeValid && <p className="text-sm text-red-600">{t("settings.rangeInvalid")}</p>}
+      {!rangeValid && <p className="text-sm text-red-600 dark:text-red-400">{t("settings.rangeInvalid")}</p>}
       {rangeValid && kinds.length === 0 && (
-        <p className="text-sm text-red-600">{t("readings.pickMetric")}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{t("readings.pickMetric")}</p>
       )}
     </div>
   );
@@ -444,7 +444,7 @@ function PartiesSection({ siteId }: { siteId: string }) {
           {t("parties.addParticipant")}
         </button>
       </form>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {/* Scrolls on a narrow screen instead of widening the page. */}
       <div className="overflow-x-auto">

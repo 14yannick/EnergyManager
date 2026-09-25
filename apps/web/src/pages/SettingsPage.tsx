@@ -135,7 +135,7 @@ export function SettingsPage() {
       </div>
 
       {status && !status.configured && (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <p className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-900 dark:text-amber-200">
           {t("settings.haUnconfigured")}
         </p>
       )}
@@ -234,11 +234,11 @@ function MappingSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
       </div>
 
       {statsQuery.isError && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-red-600 dark:text-red-400">
           {t("settings.statListFailed", { message: (statsQuery.error as Error).message })}
         </p>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <table className="w-full text-sm">
         <thead className="text-left text-slate-500">
@@ -318,7 +318,7 @@ function MappingSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
         </tbody>
       </table>
       {tariffEntitiesQuery.isError && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-red-600 dark:text-red-400">
           {t("settings.statListFailed", { message: (tariffEntitiesQuery.error as Error).message })}
         </p>
       )}
@@ -415,9 +415,9 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
         <p className="mt-1 text-xs text-slate-500">{t("settings.liveNote")}</p>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {failed && (
-        <p className="text-sm text-red-600">{t("settings.statListFailed", { message: (failed.error as Error).message })}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{t("settings.statListFailed", { message: (failed.error as Error).message })}</p>
       )}
 
       <div className="overflow-x-auto">
@@ -529,7 +529,7 @@ function CloudflareAccessSection({ canEdit }: { canEdit: boolean }) {
       </div>
 
       {!configured ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <p className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-3 text-sm text-amber-900 dark:text-amber-200">
           {t("settings.cfAccessUnconfigured")}
         </p>
       ) : (
@@ -542,7 +542,7 @@ function CloudflareAccessSection({ canEdit }: { canEdit: boolean }) {
             {syncMutation.isPending ? t("settings.syncing") : t("settings.cfAccessSyncNow")}
           </button>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
           {result && (
             <div className="space-y-1.5 border-t pt-3 text-sm">
@@ -561,13 +561,13 @@ function CloudflareAccessSection({ canEdit }: { canEdit: boolean }) {
                 <>
                   {result.added.length > 0 && (
                     <p>
-                      <span className="font-medium text-emerald-700">{t("settings.cfAccessAdded")}</span>{" "}
+                      <span className="font-medium text-emerald-700 dark:text-emerald-400">{t("settings.cfAccessAdded")}</span>{" "}
                       {result.added.join(", ")}
                     </p>
                   )}
                   {result.removed.length > 0 && (
                     <p>
-                      <span className="font-medium text-amber-700">{t("settings.cfAccessRemoved")}</span>{" "}
+                      <span className="font-medium text-amber-700 dark:text-amber-300">{t("settings.cfAccessRemoved")}</span>{" "}
                       {result.removed.join(", ")}
                     </p>
                   )}
@@ -622,7 +622,7 @@ function GoogleDriveSection({ siteId, canEdit }: { siteId: string; canEdit: bool
       </div>
 
       {status && !status.configured && (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <p className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-3 text-sm text-amber-900 dark:text-amber-200">
           {t("settings.driveUnconfigured")}
         </p>
       )}
@@ -637,7 +637,7 @@ function GoogleDriveSection({ siteId, canEdit }: { siteId: string; canEdit: bool
 
           {status.folderId ? (
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              <span className="text-emerald-700">
+              <span className="text-emerald-700 dark:text-emerald-400">
                 {t("settings.driveConnected", { name: status.folderName ?? status.folderId })}
               </span>
               {canEdit && (
@@ -673,7 +673,7 @@ function GoogleDriveSection({ siteId, canEdit }: { siteId: string; canEdit: bool
             )
           )}
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         </>
       )}
     </div>
@@ -779,8 +779,8 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
         </button>
       </div>
 
-      {!rangeValid && <p className="text-sm text-red-600">{t("settings.rangeInvalid")}</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {!rangeValid && <p className="text-sm text-red-600 dark:text-red-400">{t("settings.rangeInvalid")}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {result && (
         <div className="space-y-2 border-t pt-3 text-sm">
@@ -812,7 +812,7 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
             </tbody>
           </table>
           {result.skipped.length > 0 && (
-            <ul className="list-inside list-disc text-xs text-amber-700">
+            <ul className="list-inside list-disc text-xs text-amber-700 dark:text-amber-300">
               {result.skipped.map((s, i) => (
                 <li key={i}>{s}</li>
               ))}
@@ -930,7 +930,7 @@ function InvestmentSection({ siteId, canEdit }: { siteId: string; canEdit: boole
           </Field>
         </div>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </section>
   );
 }
@@ -1026,7 +1026,7 @@ function ProductionStartSection({ site, canEdit }: { site: Site; canEdit: boolea
           </button>
         )}
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </section>
   );
 }

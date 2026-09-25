@@ -65,7 +65,7 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
         ) : (
           <>
             {data && data.totals.unpricedKwh > 0 && (
-              <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <p className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
                 {t("dash.nb.unpriced", { kwh: formatKwh(data.totals.unpricedKwh) })}
               </p>
             )}
@@ -76,14 +76,14 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
                   <defs>
                     <pattern id={EXPORT_HATCH} patternUnits="userSpaceOnUse" width={5} height={5}
                       patternTransform="rotate(45)">
-                      <rect width={5} height={5} fill="#ffffff" />
+                      <rect width={5} height={5} fill={PALETTE.surface} />
                       <line x1={0} y1={0} x2={0} y2={5} stroke={EXPORT_COLOR} strokeWidth={3} />
                     </pattern>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.gridline} vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={axisTick} width={56} />
-                  <Tooltip content={<SaleTooltip />} cursor={{ fill: "#f1f5f9" }} />
+                  <Tooltip content={<SaleTooltip />} cursor={{ fill: PALETTE.hoverBand }} />
                   {/* Ink-coloured names: the swatch carries the series colour. */}
                   <Legend formatter={(value: string) => <span className="text-slate-700">{value}</span>} />
                   <Bar dataKey="revenueChf" name={t("dash.nb.revenue")} fill={SALE_COLOR}

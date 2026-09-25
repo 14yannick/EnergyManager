@@ -2,6 +2,7 @@ import { useT } from "../i18n/context";
 import { useSession } from "../lib/useIdentity";
 import { logoutHref } from "../lib/session";
 import { LanguageSwitch } from "../components/LanguageSwitch";
+import { ThemeSwitch } from "../components/ThemeSwitch";
 
 /**
  * Who you are, and the way out of the session — for every role.
@@ -47,9 +48,15 @@ export function ProfilePage() {
         <LanguageSwitch size="md" />
       </section>
 
+      <section className="space-y-3 rounded-lg border bg-white p-4">
+        <h2 className="text-sm font-medium text-slate-700">{t("profile.appearance")}</h2>
+        <ThemeSwitch size="md" />
+        <p className="text-xs text-slate-500">{t("profile.appearanceHint")}</p>
+      </section>
+
       {identity &&
         (identity.simulated ? (
-          <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-900 dark:text-amber-200">
             {t("profile.previewNote")}
           </p>
         ) : (

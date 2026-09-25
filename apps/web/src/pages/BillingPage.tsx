@@ -312,7 +312,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
         )}
       </form>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {positions.length === 0 && (
         <p className="py-6 text-center text-sm text-slate-400">{t("billing.noPositions")}</p>
@@ -344,7 +344,7 @@ function PositionsSection({ siteId }: { siteId: string }) {
               </thead>
               <tbody>
                 {group.items.map((p) => (
-                  <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50" : "border-t"}>
+                  <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50 dark:bg-amber-950" : "border-t"}>
                     <td className="py-1 pr-3 text-slate-500">{t(CATEGORY_LABELS[p.category])}</td>
                     <td className="py-1 pr-3 text-slate-900">{p.label}</td>
                     <td className="py-1 pr-3 text-slate-500">{t(ALLOCATION_LABELS[p.allocation])}</td>
@@ -532,9 +532,9 @@ function InvoiceSection({ siteId }: { siteId: string }) {
                 the fixed positions bill before the energy exists. Say so, so
                 that missing consumption doesn't read as a fault. */}
             {range.from > todayLocal() ? (
-              <span className="ml-2 text-amber-700">{t("billing.futurePeriod")}</span>
+              <span className="ml-2 text-amber-700 dark:text-amber-300">{t("billing.futurePeriod")}</span>
             ) : range.to > todayLocal() ? (
-              <span className="ml-2 text-amber-700">{t("billing.currentPeriod")}</span>
+              <span className="ml-2 text-amber-700 dark:text-amber-300">{t("billing.currentPeriod")}</span>
             ) : null}
           </span>
         )}
@@ -555,12 +555,12 @@ function InvoiceSection({ siteId }: { siteId: string }) {
           and the API says where to split it. Shown where the warnings would
           have been, since it is the same kind of message with a firmer verb. */}
       {invoicesQuery.error && (
-        <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-800 dark:text-red-200">
           {invoicesQuery.error.message}
         </p>
       )}
       {result?.warnings.map((w, i) => (
-        <p key={i} className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 print:hidden">
+        <p key={i} className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-3 text-sm text-amber-900 dark:text-amber-200 print:hidden">
           {w}
         </p>
       ))}
@@ -704,7 +704,7 @@ function ReconciliationCard({ invoices }: { invoices: IssuedInvoice[] }) {
                   rate: formatNumber(feedInRate * 100, 2),
                 })}
               </td>
-              <td className="py-1 text-right tabular-nums text-emerald-700">{chf(b.feedInChf)}</td>
+              <td className="py-1 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{chf(b.feedInChf)}</td>
             </tr>
           )}
           <tr className="border-t font-medium">
@@ -727,7 +727,7 @@ function ReconciliationCard({ invoices }: { invoices: IssuedInvoice[] }) {
           />
         </Field>
         {delta != null && !Number.isNaN(delta) && (
-          <span className={`pb-2 text-sm font-medium ${matches ? "text-emerald-700" : "text-red-700"}`}>
+          <span className={`pb-2 text-sm font-medium ${matches ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-300"}`}>
             {matches
               ? t("invoice.reconciliationMatch")
               : t("invoice.reconciliationDiff", {
@@ -828,7 +828,7 @@ function GenerateInvoicesControl({
       </div>
 
       {lockGroups.map((group) => (
-        <div key={group.batchId} className="flex flex-wrap items-center gap-2 text-xs text-amber-700">
+        <div key={group.batchId} className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
           <span>{t("invoice.generateLocked", { date: localDate(group.issuedAt) })} — {group.partyNames.join(", ")}</span>
           <button
             onClick={() => cancelMutation.mutate(group.batchId)}
@@ -848,7 +848,7 @@ function GenerateInvoicesControl({
       >
         {t("invoice.generateAction")}
       </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }
@@ -890,7 +890,7 @@ function InvoiceDocument({ invoice }: { invoice: IssuedInvoice }) {
       </header>
 
       {feedInLine && (
-        <div className="mb-4 flex justify-between rounded-md bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+        <div className="mb-4 flex justify-between rounded-md bg-emerald-50 dark:bg-emerald-950 px-3 py-2 text-sm font-medium text-emerald-800 dark:text-emerald-300">
           <span>
             {t(LINE_LABELS.feed_in)} ({formatKwh(feedInLine.quantity)} kWh)
           </span>

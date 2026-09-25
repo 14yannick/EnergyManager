@@ -179,7 +179,7 @@ export function TariffPeriodsPage() {
         )}
       </form>
       {(formError || Object.keys(formState.errors).length > 0) && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-red-600 dark:text-red-400">
           {formError ?? Object.values(formState.errors)[0]?.message?.toString()}
         </p>
       )}
@@ -200,7 +200,7 @@ export function TariffPeriodsPage() {
           </thead>
           <tbody>
             {periodsQuery.data?.map((p) => (
-              <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50" : "border-t"}>
+              <tr key={p.id} className={editingId === p.id ? "border-t bg-amber-50 dark:bg-amber-950" : "border-t"}>
                 <td className="px-3 py-2">{t(KIND_LABELS[p.kind])}</td>
                 <td className="px-3 py-2">{formatLocal(p.startTs)}</td>
                 <td className="px-3 py-2">{formatLocal(p.endTs)}</td>
@@ -441,7 +441,7 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
         )}
       </form>
       {(formError || Object.keys(formState.errors).length > 0) && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-red-600 dark:text-red-400">
           {formError ?? Object.values(formState.errors)[0]?.message?.toString()}
         </p>
       )}
@@ -461,7 +461,7 @@ function TariffSurchargesSection({ siteId }: { siteId: string }) {
           </thead>
           <tbody>
             {surchargesQuery.data?.map((s) => (
-              <tr key={s.id} className={editingId === s.id ? "border-t bg-amber-50" : "border-t"}>
+              <tr key={s.id} className={editingId === s.id ? "border-t bg-amber-50 dark:bg-amber-950" : "border-t"}>
                 <td className="px-3 py-2">{t(KIND_LABELS[s.kind])}</td>
                 <td className="px-3 py-2">{formatLocal(s.startTs)}</td>
                 <td className="px-3 py-2">{formatLocal(s.endTs)}</td>

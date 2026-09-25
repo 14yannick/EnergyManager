@@ -52,7 +52,7 @@ export function StatCard({
   const valueClass = toned
     ? `${toned.ink} ${hero || emphasis ? "font-bold" : "font-semibold"}`
     : emphasis === "positive"
-      ? "font-bold text-emerald-700"
+      ? "font-bold text-emerald-700 dark:text-emerald-400"
       : emphasis === "strong"
         ? "font-bold text-slate-900"
         : "font-semibold text-slate-900";

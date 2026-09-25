@@ -13,6 +13,22 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0f172a" />
+    <!-- Before anything renders: the theme lives in this browser, and
+         applying it from React would paint a light page first and switch
+         it a frame later. Same key as src/lib/theme.tsx. -->
+    <script>
+      (function () {
+        try {
+          var choice = localStorage.getItem("em.theme");
+          var dark =
+            choice === "dark" ||
+            ((choice === null || choice === "system") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* No storage: light it is. */
+        }
+      })();
+    </script>
     <!-- iOS never reads the manifest for these: without its own tags, an
          icon added to the home screen opens back inside Safari's UI chrome
          rather than standalone, and the status bar sits at Safari's default

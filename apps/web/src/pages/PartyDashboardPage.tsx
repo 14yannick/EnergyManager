@@ -176,7 +176,7 @@ export function PartyDashboardPage() {
       )}
 
       {data?.warnings.map((w) => (
-        <p key={w} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p key={w} className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
           {t(WARNING_TEXT[w])}
         </p>
       ))}
@@ -347,7 +347,7 @@ function ConsumptionChart({
                   {(["grid", "fixed"] as const).map((key) => (
                     <pattern key={key} id={hatchId(key)} patternUnits="userSpaceOnUse" width={5} height={5}
                       patternTransform="rotate(45)">
-                      <rect width={5} height={5} fill="#ffffff" />
+                      <rect width={5} height={5} fill={PALETTE.surface} />
                       <line x1={0} y1={0} x2={0} y2={5} stroke={COLORS[key]} strokeWidth={3} />
                     </pattern>
                   ))}
@@ -362,9 +362,9 @@ function ConsumptionChart({
                 {unit === "kwh" ? (
                   <>
                     <Bar dataKey="localKwh" name={t("party.series.local")} stackId="s"
-                      fill={COLORS.local} stroke="#ffffff" strokeWidth={2} {...sizing} />
+                      fill={COLORS.local} stroke={PALETTE.surface} strokeWidth={2} {...sizing} />
                     <Bar dataKey="gridKwh" name={t("party.series.grid")} stackId="s"
-                      fill={COLORS.grid} stroke="#ffffff" strokeWidth={2} {...sizing}
+                      fill={COLORS.grid} stroke={PALETTE.surface} strokeWidth={2} {...sizing}
                       radius={[4, 4, 0, 0]} />
                   </>
                 ) : (
@@ -373,11 +373,11 @@ function ConsumptionChart({
                         from before a single kWh is used — the invoice's per-day
                         positions, pro rata to the days each bar covers. */}
                     <Bar dataKey="rcpFixedChf" name={t("party.series.fixed")} stackId="rcp"
-                      fill={COLORS.fixed} stroke="#ffffff" strokeWidth={2} {...sizing} />
+                      fill={COLORS.fixed} stroke={PALETTE.surface} strokeWidth={2} {...sizing} />
                     <Bar dataKey="localEnergyChf" name={t("party.series.localEnergy")} stackId="rcp"
-                      fill={COLORS.local} stroke="#ffffff" strokeWidth={2} {...sizing} />
+                      fill={COLORS.local} stroke={PALETTE.surface} strokeWidth={2} {...sizing} />
                     <Bar dataKey="gridEnergyChf" name={t("party.series.gridPerKwh")} stackId="rcp"
-                      fill={COLORS.grid} stroke="#ffffff" strokeWidth={2} {...sizing}
+                      fill={COLORS.grid} stroke={PALETTE.surface} strokeWidth={2} {...sizing}
                       radius={[4, 4, 0, 0]} />
                     {showDirect && (
                       <>

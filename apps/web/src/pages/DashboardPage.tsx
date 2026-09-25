@@ -927,7 +927,7 @@ function RevenueBreakdownChart({
                   height={5}
                   patternTransform="rotate(45)"
                 >
-                  <rect width={5} height={5} fill="#ffffff" />
+                  <rect width={5} height={5} fill={PALETTE.surface} />
                   <line x1={0} y1={0} x2={0} y2={5} stroke={REVENUE_COLORS[flow]} strokeWidth={3} />
                 </pattern>
               ))}
@@ -938,7 +938,7 @@ function RevenueBreakdownChart({
             <ReferenceLine
               yAxisId="bars"
               y={0}
-              stroke="#cbd5e1"
+              stroke={PALETTE.baseline}
               strokeWidth={1}
               strokeDasharray="4 3"
             />

@@ -123,7 +123,7 @@ function SessionExpired() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-xl rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">
+    <div className="mx-auto max-w-xl rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-6 text-sm text-amber-900 dark:text-amber-200">
       <p>{stuck ? t("session.expiredStuck") : t("session.expired")}</p>
     </div>
   );
@@ -141,7 +141,7 @@ function SessionExpired() {
 function NoAccess({ email, status }: { email: string | null; status: number }) {
   const t = useT();
   return (
-    <div className="mx-auto max-w-xl rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">
+    <div className="mx-auto max-w-xl rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-6 text-sm text-amber-900 dark:text-amber-200">
       <h1 className="text-base font-semibold">{t("noAccess.title")}</h1>
       {status === 403 ? (
         <>
@@ -156,7 +156,7 @@ function NoAccess({ email, status }: { email: string | null; status: number }) {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <a
           href={logoutHref()}
-          className="inline-block rounded-md border border-amber-400 bg-white px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-100"
+          className="inline-block rounded-md border border-amber-400 dark:border-amber-600 bg-white px-3 py-1.5 font-medium text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900"
         >
           {t("session.signOut")}
         </a>
