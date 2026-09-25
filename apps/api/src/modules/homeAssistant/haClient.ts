@@ -365,6 +365,27 @@ export async function fetchHaNumericStates(entityIds: string[]): Promise<Map<str
   return out;
 }
 
+/**
+ * The sun's position from Home Assistant's built-in `sun.sun` — every
+ * install has it, computed from the instance's own coordinates, so the app
+ * needs no location of its own to know night from day. Null if the entity
+ * is off, which is an ordinary state here rather than a failure.
+ */
+export async function fetchHaSunPosition(): Promise<{ elevation: number; rising: boolean } | null> {
+  const { baseUrl, token } = requireHaConfig();
+  const res = await fetch(`${baseUrl}/api/states/sun.sun`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`Home Assistant request failed: ${res.status}`);
+  }
+  const parsed = z
+    .object({ attributes: z.object({ elevation: z.number(), rising: z.boolean() }).passthrough() })
+    .parse(await res.json());
+  return { elevation: parsed.attributes.elevation, rising: parsed.attributes.rising };
+}
+
 export interface HaSensorCandidate {
   entityId: string;
   friendlyName: string | null;

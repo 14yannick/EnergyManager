@@ -774,6 +774,13 @@ export interface LiveEnergyView {
   batterySocPct: number | null;
   /** What the house is consuming at this instant, in watts. */
   loadW: number | null;
+  /**
+   * Where the sun is, from Home Assistant's own `sun.sun`: degrees above
+   * the horizon (negative below it), and whether it is on its way up. What
+   * the brand mark reads for night, dawn and dusk (see shared/sky.ts). Null
+   * when the entity is missing.
+   */
+  sun: { elevation: number; rising: boolean } | null;
   /** Forecast for the whole day, in kWh. */
   forecastTodayKwh: number | null;
   /** Of that, still to come, in kWh. */

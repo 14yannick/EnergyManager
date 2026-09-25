@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { HourKwh, LiveDayCurve, LiveEnergyView, TomorrowForecast } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, sites } from "../../db/schema/index.js";
-import { fetchHaNumericStates, fetchSolarForecast } from "./haClient.js";
+import { fetchHaNumericStates, fetchHaSunPosition, fetchSolarForecast } from "./haClient.js";
 import { SITE_TZ, forecastForDay, localDayHour, mergeForecastSources } from "./forecastCurve.js";
 
 /**
@@ -136,15 +136,20 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
   // Neither needs a live entity: production comes from the store and the
   // forecast from Home Assistant's own energy setup, so a site with no live
   // sensors mapped can still show its day, or tomorrow's forecast.
-  const [today, tomorrow] = await Promise.all([
+  // Best-effort like the forecast: the sun's position needs Home Assistant
+  // but no entity of this site's, and a mark that cannot tell night from
+  // day is not worth taking the live figures down for.
+  const [today, tomorrow, sun] = await Promise.all([
     todaysCurve(siteId, now),
     tomorrowsForecast(localDayHour(now).day),
+    fetchHaSunPosition().catch(() => null),
   ]);
   if (ids.length === 0) {
     return {
       today,
       tomorrow,
       at,
+      sun,
       exportW: null,
       importW: null,
       pvW: null,
@@ -176,6 +181,7 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
     today,
     tomorrow,
     at,
+    sun,
     exportW: gridOut == null ? null : Math.max(gridOut, 0),
     importW: gridOut == null ? null : Math.max(-gridOut, 0),
     pvW: read(site.pvPower),
