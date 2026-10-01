@@ -31,9 +31,51 @@ export interface DailyEnergyAggregate {
  * aggregate is the meaningful figure and a single interval is not.
  */
 /**
- * PV that the household used as it was produced.
+ * Export the panels cannot account for, so it came out of the battery.
  *
- * No charging term: `producedKwh` is now the panels' share of inverter AC
+ * Net metering only reports total export, not its source, so a discharged
+ * kWh can't be traced through the meter directly. Energy balance bounds it:
+ * PV alone can never have exported more than it produced, so anything
+ * exported beyond that had to come out of the battery — capped by the
+ * discharge itself. Consumption takes priority (a self-consumption battery
+ * discharges to cover load), so the battery is credited with export only for
+ * that unexplained remainder.
+ *
+ * Deliberately *not* "export > 0 while discharging": that reads as a
+ * discharge-to-grid signal only at interval resolution. Aggregated to a day,
+ * a summer site exports at noon and discharges at night, so it would flag
+ * every day and price the whole battery at the feed-in rate.
+ *
+ * Shared by the battery's revenue split and by direct use, so the two can
+ * never disagree about where an exported kWh came from.
+ */
+export function dischargeExportedKwh(input: {
+  producedKwh: number;
+  exportedKwh: number;
+  batteryDischargeKwh: number;
+}): number {
+  // `producedKwh` is already the panels' share of AC output, so energy that
+  // went into the battery was excluded upstream by the split. Subtracting it
+  // again here understated what PV could have exported.
+  const pvAvailableToExportKwh = Math.max(input.producedKwh, 0);
+  const unexplainedExportKwh = Math.max(input.exportedKwh - pvAvailableToExportKwh, 0);
+  return Math.min(unexplainedExportKwh, Math.max(input.batteryDischargeKwh, 0));
+}
+
+/**
+ * PV that the household used as it was produced: the panels' output less the
+ * part of it that left the house.
+ *
+ * Only the *panels'* part. What left the house also carries whatever the
+ * battery pushed out to the grid, and that was never PV reaching the load,
+ * so it must not be taken off the panels' figure. Without the discharge term
+ * a battery discharging to the grid at dawn read as negative direct use for
+ * the hour — and, through `selfConsumptionValueChf`, as negative savings.
+ * The battery's share is the same `dischargeExportedKwh` the revenue split
+ * credits to it, so a kWh is either the panels' export or the battery's,
+ * never both or neither.
+ *
+ * No charging term: `producedKwh` is the panels' share of inverter AC
  * output, and energy that went into the battery never reached the inverter, so
  * it was already excluded upstream (see homeAssistant/split.ts). Subtracting
  * charging here as well would remove it twice.
@@ -44,9 +86,14 @@ export interface DailyEnergyAggregate {
  * overnight, reporting solar self-consumption at 3am.
  */
 export function computeDirectUseKwh(
-  day: Pick<DailyEnergyAggregate, "producedKwh" | "exportedKwh">,
+  day: Pick<DailyEnergyAggregate, "producedKwh" | "exportedKwh"> & Partial<Pick<DailyEnergyAggregate, "batteryDischargeKwh">>,
 ): number {
-  return day.producedKwh - day.exportedKwh;
+  const fromBattery = dischargeExportedKwh({
+    producedKwh: day.producedKwh,
+    exportedKwh: day.exportedKwh,
+    batteryDischargeKwh: day.batteryDischargeKwh ?? 0,
+  });
+  return day.producedKwh - (day.exportedKwh - fromBattery);
 }
 
 /**
@@ -143,45 +190,26 @@ export interface BatteryRevenue {
  * earned as an export instead of being stored (priced at the feed-in rate);
  * discharging earns the purchase rate for the portion that covered load
  * (avoided import) or the feed-in rate for the portion pushed back out to
- * the grid (a deliberate discharge-to-grid / arbitrage interval).
- *
- * Net metering only reports total export, not its source, so a discharged
- * kWh can't be traced through the meter directly. Energy balance bounds it:
- * production splits into direct use, charging, and export, so PV alone can
- * never have exported more than `produced - charged`. Anything exported
- * beyond that had to come out of the battery. Consumption takes priority
- * (a self-consumption battery discharges to cover load), so the battery is
- * credited with export only for that unexplained remainder, capped by the
- * discharge itself.
- *
- * Deliberately *not* "export > 0 while discharging": that reads as a
- * discharge-to-grid signal only at interval resolution. Aggregated to a day,
- * a summer site exports at noon and discharges at night, so it would flag
- * every day and price the whole battery at the feed-in rate.
+ * the grid (a deliberate discharge-to-grid / arbitrage interval). Which
+ * portion is which is `dischargeExportedKwh`'s call.
  */
 export function computeBatteryRevenue(inputs: BatteryRevenueInputs): BatteryRevenue {
   const { producedKwh, batteryChargeKwh, batteryDischargeKwh, exportedKwh, purchaseRateChfPerKwh, sellRateChfPerKwh } =
     inputs;
   const conversionLoss = inputs.batteryConversionLoss ?? DEFAULT_BATTERY_CONVERSION_LOSS;
 
-  // No charge term: `producedKwh` is already the panels' share of AC output, so
-  // energy that went into the battery was excluded upstream by the split.
-  // Subtracting it again here understated what PV could have exported.
-  const pvAvailableToExportKwh = Math.max(producedKwh, 0);
-  const unexplainedExportKwh = Math.max(exportedKwh - pvAvailableToExportKwh, 0);
-  const dischargeExportedKwh = Math.min(unexplainedExportKwh, batteryDischargeKwh);
-  const dischargeConsumedKwh = batteryDischargeKwh - dischargeExportedKwh;
+  const exported = dischargeExportedKwh({ producedKwh, exportedKwh, batteryDischargeKwh });
+  const dischargeConsumedKwh = batteryDischargeKwh - exported;
 
   const chargeAcKwh = chargeAcEquivalentKwh(batteryChargeKwh, conversionLoss);
   const chargingCostChf = sellRateChfPerKwh != null ? chargeAcKwh * sellRateChfPerKwh : 0;
   const dischargeConsumedValueChf =
     purchaseRateChfPerKwh != null ? dischargeConsumedKwh * purchaseRateChfPerKwh : 0;
-  const dischargeExportedValueChf =
-    sellRateChfPerKwh != null ? dischargeExportedKwh * sellRateChfPerKwh : 0;
+  const dischargeExportedValueChf = sellRateChfPerKwh != null ? exported * sellRateChfPerKwh : 0;
 
   return {
     dischargeConsumedKwh,
-    dischargeExportedKwh,
+    dischargeExportedKwh: exported,
     chargingCostChf,
     dischargeConsumedValueChf,
     dischargeExportedValueChf,
@@ -371,12 +399,13 @@ function aggregateByPeriod(rows: DailySavings[], periodKey: (date: string) => st
 }
 
 /**
- * Direct use is `produced - charged - exported`, which goes negative over a
- * whole period only when the battery was charged from the grid: more went into
- * it than the panels made. The honest reading of that is "no PV reached the
- * load directly", not a negative quantity of energy — so the floor belongs
- * here, on a summed period, rather than on a single interval where it would
- * instead be discarding meter-timing noise (see `computeDirectUseKwh`).
+ * Direct use is the panels' output less the panels' share of what left the
+ * house, which goes negative over a whole period only when the meters
+ * disagree: more left than the panels and the battery together could have
+ * supplied. The honest reading of that is "no PV reached the load directly",
+ * not a negative quantity of energy — so the floor belongs here, on a summed
+ * period, rather than on a single interval where it would instead be
+ * discarding meter-timing noise (see `computeDirectUseKwh`).
  */
 function clampDirectUse(row: DailySavings): DailySavings {
   if (row.directUseKwh >= 0) return row;

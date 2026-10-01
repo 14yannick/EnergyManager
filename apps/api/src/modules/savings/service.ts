@@ -191,8 +191,9 @@ async function loadPricedSlots(
       batteryConversionLoss,
       producedKwh,
       // Against everything that left the house, so energy sold to a
-      // participant is not also counted as used at home.
-      directUseKwh: computeDirectUseKwh({ producedKwh, exportedKwh: exportLocalKwh }),
+      // participant is not also counted as used at home — less what the
+      // battery pushed out, which was never the panels' to begin with.
+      directUseKwh: computeDirectUseKwh({ producedKwh, exportedKwh: exportLocalKwh, batteryDischargeKwh }),
       batteryChargeKwh,
       batteryDischargeKwh,
       exportedKwh,

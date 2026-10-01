@@ -10,6 +10,7 @@ import {
   chargeAcEquivalentKwh,
   computeBatteryRevenue,
   computeDirectUseKwh,
+  dischargeExportedKwh,
   addOwnerFixedAdvantage,
   energyLeftHouseKwh,
   computeSavingsFromInputs,
@@ -84,11 +85,59 @@ describe("computeDirectUseKwh", () => {
     expect(computeDirectUseKwh({ producedKwh: 100, exportedKwh: 30 })).toBe(70);
   });
 
-  it("goes negative when the battery exported more than the panels made", () => {
-    // Real, if rare: the battery can discharge to the grid. The floor belongs
-    // on the summed period (see clampDirectUse), not here, so interval-level
-    // meter timing noise can still cancel out.
+  it("goes negative when more left the house than the panels made", () => {
+    // Meter timing: the energy was produced in one interval and exported in
+    // the next. The floor belongs on the summed period (see clampDirectUse),
+    // not here, so interval-level noise can still cancel out.
     expect(computeDirectUseKwh({ producedKwh: 1, exportedKwh: 3 })).toBe(-2);
+  });
+
+  it("does not charge the battery's export to the panels", () => {
+    // A dawn hour as the Huawei site had it on 2026-10-01: the panels made
+    // 0.15 kWh, the battery pushed 2.73 kWh out, the meter exported 2.62.
+    // Without the discharge term this read as -2.47 kWh of direct use — and
+    // negative savings for the hour. The panels' own export is what they
+    // made, so nothing of theirs was used at home.
+    expect(computeDirectUseKwh({ producedKwh: 0.15, exportedKwh: 2.62, batteryDischargeKwh: 2.73 })).toBeCloseTo(0, 10);
+    // And an ordinary hour is untouched by a battery that only covered load.
+    expect(computeDirectUseKwh({ producedKwh: 100, exportedKwh: 30, batteryDischargeKwh: 20 })).toBe(70);
+  });
+
+  it("agrees with the revenue split about whose export it was", () => {
+    const s = { producedKwh: 2, exportedKwh: 5, batteryDischargeKwh: 4 };
+    const fromBattery = dischargeExportedKwh(s);
+    expect(fromBattery).toBe(3);
+    expect(computeDirectUseKwh(s) + (s.exportedKwh - fromBattery)).toBeCloseTo(s.producedKwh, 10);
+    // Capped by the discharge: a meter that exported more than both could
+    // supply leaves the remainder as (negative) direct use, not as battery.
+    expect(dischargeExportedKwh({ producedKwh: 2, exportedKwh: 9, batteryDischargeKwh: 4 })).toBe(4);
+  });
+});
+
+describe("a battery discharging to the grid", () => {
+  const dawnHour = () =>
+    computeSavingsFromInputs({
+      date: "2026-10-01T07",
+      producedKwh: 0.15,
+      directUseKwh: computeDirectUseKwh({ producedKwh: 0.15, exportedKwh: 2.62, batteryDischargeKwh: 2.73 }),
+      batteryChargeKwh: 0,
+      batteryDischargeKwh: 2.73,
+      exportedKwh: 2.62,
+      exportLocalKwh: 2.62,
+      neighborConsumptionKwh: 0,
+      purchaseRateChfPerKwh: 0.248,
+      sellRateChfPerKwh: 0.24,
+      neighborSellRateChfPerKwh: null,
+    });
+
+  it("earns, rather than costing, the hour", () => {
+    const row = dawnHour();
+    expect(row.directUseKwh).toBeCloseTo(0, 10);
+    expect(row.batteryDischargeExportedKwh).toBeCloseTo(2.47, 10);
+    // The 0.26 kWh that covered load, at the purchase rate; nothing negative.
+    expect(row.selfConsumptionValueChf).toBeCloseTo(0.26 * 0.248, 10);
+    expect(row.savingsWithoutBatteryChf).toBeGreaterThanOrEqual(0);
+    expect(row.savingsWithBatteryChf).toBeGreaterThan(row.savingsWithoutBatteryChf);
   });
 });
 
