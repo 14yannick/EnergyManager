@@ -563,7 +563,7 @@ export const en = {
   "flow.view.radial": "Radial",
   "flow.view.sankey": "Sankey",
   "flow.liveTitle": "Now, and today so far",
-  "flow.liveNote": "Connectors: the power flowing at this instant, live from Home Assistant — the dots move the way the energy goes. Rings: the energy so far today, from the readings, which trail the inverter by a sync; the battery's ring also shows how full it is.",
+  "flow.liveNote": "Connectors: the power flowing at this instant, live from Home Assistant — the dots move the way the energy goes. Rings: the energy so far today, from the readings, which trail the inverter by a sync; the battery's ring also shows how full it is, and the participants' ring what they have drawn from the vZEV.",
   "flow.ofHouse": "{pct} % of what the house draws ({load})",
   "dash.avgSuffix": "CHF {value}/{unit} avg",
 
@@ -644,7 +644,7 @@ export const en = {
   "party.live.ofToday": "of {total} kWh forecast for the day",
   "party.live.tomorrow": "Forecast tomorrow",
   "party.live.chart": "Today, hour by hour",
-  "party.live.chartNote": "What the panels made in each hour so far, against the forecast for the day. The hour in progress is partial until it ends. The feed-in rate is coloured by how good it is: dark red below zero, red under 8 ct., grey under 14 ct., green above, and dark green once it beats the purchase price.",
+  "party.live.chartNote": "What the panels made in each hour so far, against the forecast for the day. The hour in progress is partial until it ends. The feed-in rate is coloured by how good it is: dark red below zero, red under 8 ct., grey under 14 ct., green above, and dark green once it beats the purchase price. What the battery sends out counts as available too, so an hour can show more than the panels made in it.",
   "party.live.viewToday": "Today",
   "party.live.viewTomorrow": "Tomorrow",
   "party.live.tomorrowChart": "Tomorrow, hour by hour",

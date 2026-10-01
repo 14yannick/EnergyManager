@@ -571,7 +571,7 @@ export const fr: Record<keyof typeof en, string> = {
   "flow.view.radial": "Radial",
   "flow.view.sankey": "Sankey",
   "flow.liveTitle": "Maintenant, et aujourd'hui jusqu'ici",
-  "flow.liveNote": "Liaisons : la puissance qui circule à cet instant, en direct depuis Home Assistant — les points se déplacent dans le sens de l'énergie. Anneaux : l'énergie depuis ce matin, d'après les mesures, qui ont une synchronisation de retard sur l'onduleur ; l'anneau de la batterie indique aussi son remplissage.",
+  "flow.liveNote": "Liaisons : la puissance qui circule à cet instant, en direct depuis Home Assistant — les points se déplacent dans le sens de l'énergie. Anneaux : l'énergie depuis ce matin, d'après les mesures, qui ont une synchronisation de retard sur l'onduleur ; l'anneau de la batterie indique aussi son remplissage, et celui des participants ce qu'ils ont tiré du RCPv.",
   "flow.ofHouse": "{pct} % de ce que la maison tire ({load})",
   "dash.avgSuffix": "CHF {value}/{unit} en moyenne",
 
@@ -652,7 +652,7 @@ export const fr: Record<keyof typeof en, string> = {
   "party.live.ofToday": "sur {total} kWh prévus pour la journée",
   "party.live.tomorrow": "Prévision demain",
   "party.live.chart": "Aujourd'hui, heure par heure",
-  "party.live.chartNote": "Ce que les panneaux ont produit chaque heure jusqu'ici, face à la prévision du jour. L'heure en cours est partielle jusqu'à sa fin. Le tarif de reprise est coloré selon sa valeur : rouge foncé sous zéro, rouge sous 8 ct., gris sous 14 ct., vert au-dessus, et vert foncé dès qu'il dépasse le prix d'achat.",
+  "party.live.chartNote": "Ce que les panneaux ont produit chaque heure jusqu'ici, face à la prévision du jour. L'heure en cours est partielle jusqu'à sa fin. Le tarif de reprise est coloré selon sa valeur : rouge foncé sous zéro, rouge sous 8 ct., gris sous 14 ct., vert au-dessus, et vert foncé dès qu'il dépasse le prix d'achat. Ce que la batterie renvoie compte aussi comme disponible, une heure peut donc afficher plus que ce que les panneaux y ont produit.",
   "party.live.viewToday": "Aujourd'hui",
   "party.live.viewTomorrow": "Demain",
   "party.live.tomorrowChart": "Demain, heure par heure",

@@ -63,7 +63,8 @@ export function EnergyFlowChart({
   const ringFigures = (ring: RingId): string[] => {
     switch (ring) {
       case "grid":
-        return [`← ${fmt(kwhOf("gridExport", "inKwh"))}`, `→ ${fmt(kwhOf("gridImport", "outKwh"))}`];
+        // The grid sits on the right: export leaves towards it, import arrives from it.
+        return [`→ ${fmt(kwhOf("gridExport", "inKwh"))}`, `← ${fmt(kwhOf("gridImport", "outKwh"))}`];
       case "battery":
         return [`↓ ${fmt(kwhOf("battery", "inKwh"))}`, `↑ ${fmt(kwhOf("battery", "outKwh"))}`];
       case "sun":
@@ -139,6 +140,7 @@ export function EnergyFlowChart({
                   names={ringNames}
                   format={fmt}
                   ringFigures={ringFigures}
+                  layout="houseLeft"
                   hoverIndex={hover?.index ?? null}
                   onHover={onHover("radial")}
                   onLeave={onLeave}

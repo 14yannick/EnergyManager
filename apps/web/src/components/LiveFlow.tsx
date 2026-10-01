@@ -18,6 +18,11 @@ import { RadialFlow, type RadialLink, type RingId } from "./RadialFlow";
  * question at a glance is "where is the power going", and the ring answers
  * "and how much has, today".
  *
+ * Drawn with the house on the left and the grid on the right, so the
+ * participants' ring in the top-right corner stands between the two the
+ * way the vZEV does on the wire: what leaves the house is theirs first and
+ * the grid's after.
+ *
  * Who fed whom is not something the meters say (see allocateLivePower in
  * the shared package); the readings' side is the same flow model the range
  * views use, applied to one day.
@@ -71,7 +76,10 @@ export function LiveFlow({ siteId, live }: { siteId: string | null | undefined; 
   // the sun at night still made today's kWh. The battery and the
   // participants only once there is something to say about them.
   const hasBattery = live.batteryChargeW != null || todayOf("battery", "inKwh") > 0 || todayOf("battery", "outKwh") > 0;
-  const rings: RingId[] = ["sun", "grid", "house", ...(hasBattery ? (["battery"] as const) : []), ...(todayOf("vzev", "inKwh") > 0 ? (["vzev"] as const) : [])];
+  // The participants always stand, figure or not: they are an entity of the
+  // vZEV between the house and the grid, not a flow that shows up once it
+  // has happened.
+  const rings: RingId[] = ["sun", "grid", "house", "vzev", ...(hasBattery ? (["battery"] as const) : [])];
   const ringFigures = (ring: RingId): string[] => {
     switch (ring) {
       case "sun":
@@ -85,7 +93,8 @@ export function LiveFlow({ siteId, live }: { siteId: string | null | undefined; 
           `↑ ${kwh(todayOf("battery", "outKwh"))}`,
         ];
       case "grid":
-        return [`← ${kwh(todayOf("gridExport", "inKwh"))}`, `→ ${kwh(todayOf("gridImport", "outKwh"))}`];
+        // The grid sits on the right: export leaves towards it, import arrives from it.
+        return [`→ ${kwh(todayOf("gridExport", "inKwh"))}`, `← ${kwh(todayOf("gridImport", "outKwh"))}`];
       case "vzev":
         return [`${kwh(todayOf("vzev", "inKwh"))} kWh`];
     }
@@ -115,6 +124,7 @@ export function LiveFlow({ siteId, live }: { siteId: string | null | undefined; 
             format={fmtW}
             ringFigures={ringFigures}
             rings={rings}
+            layout="houseLeft"
             hoverIndex={hover?.index ?? null}
             onHover={onHover}
             onLeave={() => setHover(null)}

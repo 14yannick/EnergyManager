@@ -581,7 +581,7 @@ export const de: Record<keyof typeof en, string> = {
   "flow.view.radial": "Radial",
   "flow.view.sankey": "Sankey",
   "flow.liveTitle": "Jetzt, und heute bisher",
-  "flow.liveNote": "Verbindungen: die Leistung, die in diesem Moment fliesst, live aus Home Assistant — die Punkte laufen in Richtung der Energie. Ringe: die Energie seit heute Morgen, aus den Messwerten, die dem Wechselrichter eine Synchronisation hinterherhinken; der Batteriering zeigt auch ihren Füllstand.",
+  "flow.liveNote": "Verbindungen: die Leistung, die in diesem Moment fliesst, live aus Home Assistant — die Punkte laufen in Richtung der Energie. Ringe: die Energie seit heute Morgen, aus den Messwerten, die dem Wechselrichter eine Synchronisation hinterherhinken; der Batteriering zeigt auch ihren Füllstand, der Teilnehmerring, was sie aus dem vZEV bezogen haben.",
   "flow.ofHouse": "{pct} % dessen, was das Haus bezieht ({load})",
   "dash.avgSuffix": "CHF {value}/{unit} im Schnitt",
 
@@ -663,7 +663,7 @@ export const de: Record<keyof typeof en, string> = {
   "party.live.ofToday": "von {total} kWh Tagesprognose",
   "party.live.tomorrow": "Prognose morgen",
   "party.live.chart": "Heute, Stunde für Stunde",
-  "party.live.chartNote": "Was die Panels bisher in jeder Stunde erzeugt haben, gegenüber der Tagesprognose. Die laufende Stunde ist bis zu ihrem Ende unvollständig. Der Einspeisetarif ist nach seiner Güte gefärbt: dunkelrot unter null, rot unter 8 Rp., grau unter 14 Rp., grün darüber und dunkelgrün, sobald er den Bezugspreis übertrifft.",
+  "party.live.chartNote": "Was die Panels bisher in jeder Stunde erzeugt haben, gegenüber der Tagesprognose. Die laufende Stunde ist bis zu ihrem Ende unvollständig. Der Einspeisetarif ist nach seiner Güte gefärbt: dunkelrot unter null, rot unter 8 Rp., grau unter 14 Rp., grün darüber und dunkelgrün, sobald er den Bezugspreis übertrifft. Was die Batterie abgibt, zählt ebenfalls als verfügbar; eine Stunde kann daher mehr zeigen, als die Panels in ihr erzeugt haben.",
   "party.live.viewToday": "Heute",
   "party.live.viewTomorrow": "Morgen",
   "party.live.tomorrowChart": "Morgen, Stunde für Stunde",

@@ -210,9 +210,9 @@ interface CurvePoint {
   label: string;
   /** production_hour + batteryCharge_hour — everything the panels made that hour. */
   made: number | null;
-  /** What left the house that hour, capped at `made` — see the doc comment below. */
+  /** What left the house that hour — from the panels or out of the battery, see the doc comment below. */
   exported: number | null;
-  /** made − exported: self-consumed directly, plus whatever charged the battery. */
+  /** made − exported, floored at zero: self-consumed directly, plus whatever charged the battery. */
   kept: number | null;
   forecast: number | null;
   /** The forecast again, but only from the current hour on — what is still to come. */
@@ -417,12 +417,14 @@ function DayCurveChart({
     for (let hour = first; hour <= last; hour++) {
       const prod = production.get(hour);
       const made = prod == null ? null : prod + (charge.get(hour) ?? 0);
-      // Capped at `made`, not taken as-is: a heavier-cycling day could
-      // export more in an hour than the panels made in it, by discharging
-      // what an earlier hour charged — see LiveDayCurve.exportedLocal. The
-      // cap is what keeps "kept" (made − exported) from going negative.
-      const exported = made == null ? null : Math.min(exportedLocal.get(hour) ?? 0, made);
-      const kept = made == null || exported == null ? null : made - exported;
+      // Taken as-is, not capped at `made`: an hour can export more than the
+      // panels made in it when the battery discharges what an earlier hour
+      // charged — see LiveDayCurve.exportedLocal. That energy is available
+      // to the vZEV all the same, so it belongs in the bar; the bar then
+      // stands taller than the hour's own production, which is the point.
+      // What it cannot do is pull "kept" below zero.
+      const exported = made == null ? null : (exportedLocal.get(hour) ?? 0);
+      const kept = made == null || exported == null ? null : Math.max(made - exported, 0);
       const f = forecast.get(hour) ?? null;
       out.push({
         hour,

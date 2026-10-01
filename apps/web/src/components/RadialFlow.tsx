@@ -14,6 +14,14 @@ import { HALO, NODE_COLOR, type NodeId } from "./flowModel";
 /** The rings. Grid import and export are one ring with two figures. */
 export type RingId = "sun" | "grid" | "house" | "battery" | "vzev";
 
+/**
+ * Which side the house and the grid take. The sun is always at the top and
+ * the battery at the bottom; the participants sit in the top-right corner,
+ * so with the house on the left they stand between the house and the grid,
+ * the way the vZEV does on the wire.
+ */
+export type RadialLayout = "gridLeft" | "houseLeft";
+
 /** A flow to draw, in whatever unit the caller formats. */
 export interface RadialLink {
   source: NodeId;
@@ -83,10 +91,14 @@ export function radialHeightFor(width: number): number {
   return Math.round((Math.min(width, MAX_WIDTH) * f.H) / f.W);
 }
 
-const centers = (f: Frame): Record<RingId, { x: number; y: number }> => ({
+/** Which way from the centre a side ring lies: +1 right, -1 left. */
+const sideOf = (layout: RadialLayout, ring: "house" | "grid"): 1 | -1 =>
+  (layout === "houseLeft") === (ring === "house") ? -1 : 1;
+
+const centers = (f: Frame, layout: RadialLayout): Record<RingId, { x: number; y: number }> => ({
   sun: { x: f.CX, y: f.EDGE },
-  grid: { x: f.EDGE, y: f.CY },
-  house: { x: f.W - f.EDGE, y: f.CY },
+  grid: { x: f.CX + sideOf(layout, "grid") * (f.CX - f.EDGE), y: f.CY },
+  house: { x: f.CX + sideOf(layout, "house") * (f.CX - f.EDGE), y: f.CY },
   battery: { x: f.CX, y: f.H - f.EDGE },
   vzev: { x: f.W - f.EDGE, y: f.EDGE },
 });
@@ -108,49 +120,60 @@ interface Connector {
  * Each flow's path, from its source ring's edge to its target's, so a dot
  * following it moves the way the energy did. The paired connectors flank
  * the centre lines a lane apart; the figures sit where nothing else does.
+ * The side rings' connectors are written for either side, so a layout that
+ * swaps the house and the grid only swaps which way they turn.
  */
-function connector(f: Frame, source: NodeId, target: NodeId): Connector | null {
+function connector(f: Frame, source: NodeId, target: NodeId, layout: RadialLayout): Connector | null {
   const { R, LANE, BEND, CX, CY, EDGE } = f;
   const sunBottom = EDGE + R;
   const batteryTop = f.H - EDGE - R;
-  const gridRight = EDGE + R;
-  const houseLeft = f.W - EDGE - R;
+  const houseSide = sideOf(layout, "house");
+  const gridSide = sideOf(layout, "grid");
+  /** A side ring's inner edge, where a connector meets it. */
+  const edgeX = (side: 1 | -1) => (side > 0 ? f.W - EDGE - R : EDGE + R);
+  /** A figure sits just inside the ring it reaches, reading away from it. */
+  const labelAt = (side: 1 | -1, y: number): Connector["label"] => ({
+    x: edgeX(side) - side * 10,
+    y,
+    anchor: side > 0 ? "end" : "start",
+  });
+  /** From the sun (down) or the battery (up) along its lane, round the bend, and across to a side. */
+  const toSide = (from: "sun" | "battery", side: 1 | -1): Connector => {
+    const laneX = CX + side * LANE;
+    const laneY = from === "sun" ? CY - LANE : CY + LANE;
+    const startY = from === "sun" ? sunBottom : batteryTop;
+    const bendY = from === "sun" ? CY - LANE - BEND : CY + LANE + BEND;
+    return {
+      d: `M${laneX},${startY} V${bendY} Q${laneX},${laneY} ${laneX + side * BEND},${laneY} H${edgeX(side)}`,
+      label: labelAt(side, from === "sun" ? laneY - 6 : laneY + 14),
+    };
+  };
   switch (`${source}>${target}`) {
     case "sun>house":
-      return {
-        d: `M${CX + LANE},${sunBottom} V${CY - LANE - BEND} Q${CX + LANE},${CY - LANE} ${CX + LANE + BEND},${CY - LANE} H${houseLeft}`,
-        label: { x: houseLeft - 10, y: CY - LANE - 6, anchor: "end" },
-      };
+      return toSide("sun", houseSide);
     case "sun>gridExport":
-      return {
-        d: `M${CX - LANE},${sunBottom} V${CY - LANE - BEND} Q${CX - LANE},${CY - LANE} ${CX - LANE - BEND},${CY - LANE} H${gridRight}`,
-        label: { x: gridRight + 10, y: CY - LANE - 6, anchor: "start" },
-      };
+      return toSide("sun", gridSide);
     case "sun>battery":
       return { d: `M${CX},${sunBottom} V${batteryTop}`, label: { x: CX, y: CY - LANE - BEND - 10, anchor: "middle" } };
     case "sun>vzev":
       return {
-        d: `M${CX + R},${EDGE} H${houseLeft}`,
-        label: { x: (CX + R + houseLeft) / 2, y: EDGE - 7, anchor: "middle" },
+        d: `M${CX + R},${EDGE} H${f.W - EDGE - R}`,
+        label: { x: (CX + R + f.W - EDGE - R) / 2, y: EDGE - 7, anchor: "middle" },
       };
     case "battery>house":
-      return {
-        d: `M${CX + LANE},${batteryTop} V${CY + LANE + BEND} Q${CX + LANE},${CY + LANE} ${CX + LANE + BEND},${CY + LANE} H${houseLeft}`,
-        label: { x: houseLeft - 10, y: CY + LANE + 14, anchor: "end" },
-      };
+      return toSide("battery", houseSide);
     case "battery>gridExport":
-      return {
-        d: `M${CX - LANE},${batteryTop} V${CY + LANE + BEND} Q${CX - LANE},${CY + LANE} ${CX - LANE - BEND},${CY + LANE} H${gridRight}`,
-        label: { x: gridRight + 10, y: CY + LANE + 14, anchor: "start" },
-      };
+      return toSide("battery", gridSide);
     case "gridImport>house":
-      return { d: `M${gridRight},${CY} H${houseLeft}`, label: { x: houseLeft - 10, y: CY - 4, anchor: "end" } };
-    case "gridImport>battery":
+      return { d: `M${edgeX(gridSide)},${CY} H${edgeX(houseSide)}`, label: labelAt(houseSide, CY - 4) };
+    case "gridImport>battery": {
       // The battery→grid connector, travelled the other way.
+      const laneX = CX + gridSide * LANE;
       return {
-        d: `M${gridRight},${CY + LANE} H${CX - LANE - BEND} Q${CX - LANE},${CY + LANE} ${CX - LANE},${CY + LANE + BEND} V${batteryTop}`,
-        label: { x: gridRight + 10, y: CY + LANE + 14, anchor: "start" },
+        d: `M${edgeX(gridSide)},${CY + LANE} H${laneX + gridSide * BEND} Q${laneX},${CY + LANE} ${laneX},${CY + LANE + BEND} V${batteryTop}`,
+        label: labelAt(gridSide, CY + LANE + 14),
       };
+    }
     default:
       return null;
   }
@@ -226,6 +249,7 @@ export function RadialFlow({
   format,
   ringFigures,
   rings: ringsWanted,
+  layout = "gridLeft",
   hoverIndex,
   onHover,
   onLeave,
@@ -241,6 +265,8 @@ export function RadialFlow({
   ringFigures: (ring: RingId) => string[];
   /** Which rings to draw; by default those a connector touches. */
   rings?: RingId[];
+  /** Which side the house and the grid take; the grid on the left by default. */
+  layout?: RadialLayout;
   hoverIndex: number | null;
   onHover: (index: number, e: MouseEvent<SVGElement>) => void;
   onLeave: () => void;
@@ -250,10 +276,10 @@ export function RadialFlow({
   const uid = useId().replace(/:/g, "");
   const reducedMotion = usePrefersReducedMotion();
   const f = frameFor(width);
-  const center = centers(f);
+  const center = centers(f, layout);
   const maxValue = Math.max(...links.map((l) => l.value), 0);
   const drawn = links
-    .map((l, index) => ({ link: l, index, connector: connector(f, l.source, l.target) }))
+    .map((l, index) => ({ link: l, index, connector: connector(f, l.source, l.target, layout) }))
     .filter((d): d is { link: RadialLink; index: number; connector: Connector } => d.connector != null);
   const rings = (Object.keys(center) as RingId[]).filter(
     (ring) =>
