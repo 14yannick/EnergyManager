@@ -9,12 +9,20 @@ import { ApiError, SessionExpiredError, api } from "../api/client";
  * indefinitely and never retried — a failure here must not spin in a loop
  * behind a login redirect. One shared query key means every caller reads the
  * same answer rather than each polling `/api/me` on its own.
+ *
+ * Whether you are still signed in does change, though: a tab left open
+ * overnight comes back to a cookie that has expired. So the one time this is
+ * asked again of its own accord is when the tab regains focus — a page with
+ * nothing else to refetch would otherwise sit on yesterday's data behind a
+ * dead session until something was clicked. Any other request that finds
+ * the session gone also asks again (see main.tsx).
  */
 export function useIdentity() {
   return useQuery<AuthIdentity>({
     queryKey: ["me"],
     queryFn: api.me,
     staleTime: Infinity,
+    refetchOnWindowFocus: "always",
     retry: false,
   });
 }
