@@ -129,8 +129,15 @@ export function EnergyFlowChart({
         // Side by side once there is room for both to be read: at a glance
         // on the left, to the kWh on the right. The Sankey takes the
         // radial's height so the two cards sit level.
+        //
+        // `min-w-0` on each card: a grid cell will not shrink below its
+        // content, and the drawings are laid out in pixels at the width
+        // they last measured. Without it, a phone turned to landscape and
+        // back kept the cards at landscape width — the measurement could
+        // never fall, because the drawing it had produced held the cell
+        // open — and the page scrolled sideways.
         <div className="grid gap-3 xl:grid-cols-2">
-          <div className="rounded-lg border bg-white p-4">
+          <div className="min-w-0 rounded-lg border bg-white p-4">
             <h3 className="mb-2 text-sm font-medium text-slate-900">{t("flow.view.radial")}</h3>
             <div ref={radial.ref} className="relative w-full">
               {radial.width > 0 && (
@@ -150,7 +157,7 @@ export function EnergyFlowChart({
               {tooltip("radial", radial.width)}
             </div>
           </div>
-          <div className="rounded-lg border bg-white p-4">
+          <div className="min-w-0 rounded-lg border bg-white p-4">
             <h3 className="mb-2 text-sm font-medium text-slate-900">{t("flow.view.sankey")}</h3>
             <div ref={sankey.ref} className="relative w-full">
               {sankey.width > 0 && (

@@ -303,7 +303,12 @@ export function SankeyFlow({
 
   return (
     <svg
-      width={width}
+      // Laid out in pixels at the measured width, but displayed at the
+      // wrapper's: an SVG with a pixel width is content the wrapper cannot
+      // shrink below, so the measurement would never fall once it had
+      // risen (see EnergyFlowChart). While the two differ for a frame the
+      // viewBox scales the drawing; the next measurement lays it out again.
+      width="100%"
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       role="img"
