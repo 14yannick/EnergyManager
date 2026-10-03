@@ -9,7 +9,7 @@ import type {
 import { api } from "../api/client";
 import { formatNumber } from "../lib/format";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
-import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCurrentSite } from "../lib/useCurrentSite";
 
 type Granularity = NonNullable<SavingsQuery["granularity"]>;
 
@@ -96,7 +96,7 @@ function avgRate(line: Pick<Line, "kwh" | "chf">): number | null {
 }
 
 export function CalculationDetailPage() {
-  const { site } = useDefaultSite();
+  const { site } = useCurrentSite();
   const { t, tag } = useI18n();
   const [date, setDate] = useState(today);
 

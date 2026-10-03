@@ -5,7 +5,7 @@ import { invoicePeriodLabel } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { formatChf, formatKwh } from "../lib/format";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
-import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCurrentSite } from "../lib/useCurrentSite";
 import { useCanEdit, useIdentity } from "../lib/useIdentity";
 
 const chf = (n: number) => formatChf(n);
@@ -206,7 +206,7 @@ export function AccountPage() {
   const identity = useIdentity();
   const isParticipant = identity.data?.role === "participant";
   const { canEdit } = useCanEdit();
-  const { site } = useDefaultSite({ enabled: identity.isSuccess && !isParticipant });
+  const { site } = useCurrentSite({ enabled: identity.isSuccess && !isParticipant });
   const siteId = isParticipant ? identity.data?.siteId : site?.id;
   const queryClient = useQueryClient();
   const [showAll, setShowAll] = useState(false);

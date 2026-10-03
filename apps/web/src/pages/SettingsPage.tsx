@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CfAccessSyncResult, HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { formatChf } from "../lib/format";
-import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCurrentSite } from "../lib/useCurrentSite";
+import { PartiesSection } from "../components/PartiesSection";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useCanEdit } from "../lib/useIdentity";
 
@@ -98,7 +99,7 @@ function daysAgo(n: number) {
 }
 
 export function SettingsPage() {
-  const { site } = useDefaultSite();
+  const { site } = useCurrentSite();
   const t = useT();
   // Everything on this page is an admin-only write in the API's policy table,
   // so the whole page reads rather than edits for anyone else. The controls
@@ -124,6 +125,10 @@ export function SettingsPage() {
           {t("common.readOnly")}
         </p>
       )}
+
+      {/* Who is in the site comes first: it is what an administrator is
+          here for most often, and the rest of the page is set once. */}
+      <PartiesSection siteId={site.id} />
 
       <ProductionStartSection site={site} canEdit={canEdit} />
 

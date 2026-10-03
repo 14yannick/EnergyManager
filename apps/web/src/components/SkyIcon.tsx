@@ -1,7 +1,7 @@
 import { skyFor, type Sky } from "@energy-manager/shared";
 import { useT } from "../i18n/context";
 import { useIdentity } from "../lib/useIdentity";
-import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCurrentSite } from "../lib/useCurrentSite";
 import { useLiveView } from "./LiveCards";
 
 /**
@@ -21,7 +21,7 @@ export function SkyIcon() {
   // expired session, and an admin browser with authentication off.
   const identity = useIdentity();
   const participant = identity.data?.role === "participant";
-  const { site } = useDefaultSite({ enabled: identity.isSuccess && !participant });
+  const { site } = useCurrentSite({ enabled: identity.isSuccess && !participant });
   const siteId = participant ? identity.data?.siteId : site?.id;
   const live = useLiveView(siteId).data;
 

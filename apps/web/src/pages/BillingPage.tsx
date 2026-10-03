@@ -15,7 +15,7 @@ import { billingPeriodLabel, billingPeriodRange, toDateString } from "@energy-ma
 import { api } from "../api/client";
 import { formatChf, formatKwh, formatNumber } from "../lib/format";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
-import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCurrentSite } from "../lib/useCurrentSite";
 import { useCanEdit, useIdentity } from "../lib/useIdentity";
 
 const LINE_LABELS: Record<InvoiceLineKind, MessageKey> = {
@@ -111,7 +111,7 @@ export function BillingPage() {
   const isParticipant = identity.data?.role === "participant";
   // A participant learns their site from /api/me: the site list is closed to
   // them, since a site row carries the owner's investment figures.
-  const { site } = useDefaultSite({ enabled: identity.isSuccess && !isParticipant });
+  const { site } = useCurrentSite({ enabled: identity.isSuccess && !isParticipant });
   const siteId = isParticipant ? identity.data?.siteId : site?.id;
   if (!siteId) return <p className="text-slate-500">{t("common.loading")}</p>;
 

@@ -18,7 +18,7 @@ import { api } from "../api/client";
 import { formatChf, formatKwh, formatNumber } from "../lib/format";
 import { PALETTE, type Tone } from "../lib/palette";
 import { useT, type Translate } from "../i18n/context";
-import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCurrentSite } from "../lib/useCurrentSite";
 import { useSelectedPeriod } from "../lib/usePeriod";
 import { PeriodControls } from "../components/PeriodControls";
 import { PeriodHeader } from "../components/PeriodHeader";
@@ -72,7 +72,7 @@ const seriesNames = (unit: RevenueUnit, t: Translate) => ({
 });
 
 export function DashboardPage() {
-  const { site } = useDefaultSite();
+  const { site } = useCurrentSite();
   const t = useT();
   const { from, to, granularity, mode, set: setPeriod } = useSelectedPeriod();
   const unit = t(PERIOD_UNIT[granularity]);

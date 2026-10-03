@@ -12,7 +12,7 @@ export const fr: Record<keyof typeof en, string> = {
   "nav.tariffs": "Périodes tarifaires",
   "nav.calculation": "Détail du calcul",
   "nav.readings": "Import des relevés",
-  "nav.settings": "Paramètres",
+  "nav.settings": "Administration du site",
   "nav.billing": "Facturation",
   "nav.consumption": "Consommation",
   "nav.account": "Compte",
@@ -37,6 +37,10 @@ export const fr: Record<keyof typeof en, string> = {
   "profile.party": "Facturé comme",
   "profile.email": "E-mail",
   "profile.role": "Rôle",
+  "profile.site": "Site",
+  "profile.siteAssigned": "Rattaché à",
+  "profile.siteViewing": "Affiché",
+  "profile.siteHint": "Toutes les pages affichent le site choisi ici. Le choix est conservé dans ce navigateur, comme la langue.",
   "profile.noAuth": "Authentification désactivée : ce navigateur est administrateur, sans session à fermer.",
   "profile.previewNote": "Un aperçu local de cette identité (AUTH_DEV_AS) — aucune session derrière, rien à fermer.",
   "profile.signOutHint": "Termine la session Cloudflare Access et revient à la page de connexion.",
@@ -153,9 +157,9 @@ export const fr: Record<keyof typeof en, string> = {
   "calc.col.batteryOnly": "Gain de la batterie seule",
 
   // ---- Settings ----------------------------------------------------------
-  "settings.title": "Paramètres",
+  "settings.title": "Administration du site",
   "settings.intro":
-    "Montants d'investissement utilisés pour l'amortissement, et la connexion Home Assistant qui fournit les données d'énergie.",
+    "Qui fait partie du site, les montants d'investissement utilisés pour l'amortissement, et la connexion Home Assistant qui fournit les données d'énergie.",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":
@@ -640,7 +644,7 @@ export const fr: Record<keyof typeof en, string> = {
   "party.periodTitle": "Consommation et économies",
   "party.periodIntro": "La consommation de {name}, répartie entre le solaire du RCPv et le réseau, et l'économie réalisée par rapport à une fourniture directe.",
   "party.pick": "Participant",
-  "party.none": "Aucun participant pour l'instant — ajoutez-les dans les Paramètres.",
+  "party.none": "Aucun participant pour l'instant — ajoutez-les dans l'administration du site.",
   "party.noData": "Aucune consommation enregistrée sur cette période.",
   "party.live": "En ce moment",
   "party.liveNote": "En direct de l'installation, actualisé chaque minute : ce qui quitte la maison en ce moment, et le soleil qu'il reste pour la journée.",

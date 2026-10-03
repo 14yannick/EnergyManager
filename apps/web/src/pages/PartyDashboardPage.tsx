@@ -17,7 +17,7 @@ import { PALETTE } from "../lib/palette";
 import { useSelectedPeriod } from "../lib/usePeriod";
 import { useT, type MessageKey } from "../i18n/context";
 import { useIdentity } from "../lib/useIdentity";
-import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCurrentSite } from "../lib/useCurrentSite";
 import { PeriodControls } from "../components/PeriodControls";
 import { PeriodHeader } from "../components/PeriodHeader";
 import { InfoTip } from "../components/InfoTip";
@@ -75,7 +75,7 @@ export function PartyDashboardPage() {
   const isParticipant = identity.data?.role === "participant";
   // A participant is told their site and party by /api/me; everyone else
   // reads the site list and picks a party.
-  const { site } = useDefaultSite({ enabled: identity.isSuccess && !isParticipant });
+  const { site } = useCurrentSite({ enabled: identity.isSuccess && !isParticipant });
   const siteId = isParticipant ? identity.data?.siteId : site?.id;
 
   const partiesQuery = useQuery({

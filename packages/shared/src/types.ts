@@ -829,6 +829,15 @@ export interface AuthIdentity {
   /** The site this identity belongs to. Null for admin/viewer, who see all. */
   siteId: string | null;
   /**
+   * The site this address is assigned to, through its party — for every
+   * role, and only ever to be shown or used as a starting point. It is not
+   * a scope: `siteId` is what confines a participant, and an admin or a
+   * viewer may look at any site whatever theirs is. Null when the address
+   * has no party behind it (the configured admin list, or authentication
+   * off).
+   */
+  homeSite: { id: string; name: string } | null;
+  /**
    * A local preview (AUTH_DEV_AS) rather than a real sign-in: there is no
    * Cloudflare session behind it to sign out of.
    */

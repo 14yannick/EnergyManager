@@ -15,7 +15,7 @@ import {
 import { api } from "../api/client";
 import { formatNumber } from "../lib/format";
 import { useT, type MessageKey } from "../i18n/context";
-import { useDefaultSite } from "../lib/useDefaultSite";
+import { useCurrentSite } from "../lib/useCurrentSite";
 
 const KIND_LABELS: Record<TariffKind, MessageKey> = {
   purchase: "tariff.kind.purchase",
@@ -29,7 +29,7 @@ const PRICING_MODE_LABELS: Record<TariffPricingMode, MessageKey> = {
 };
 
 export function TariffPeriodsPage() {
-  const { site } = useDefaultSite();
+  const { site } = useCurrentSite();
   const t = useT();
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);

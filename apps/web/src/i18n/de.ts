@@ -17,7 +17,7 @@ export const de: Record<keyof typeof en, string> = {
   "nav.tariffs": "Tarifperioden",
   "nav.calculation": "Berechnungsdetails",
   "nav.readings": "Messwerte importieren",
-  "nav.settings": "Einstellungen",
+  "nav.settings": "Standortverwaltung",
   "nav.billing": "Fakturierung",
   "nav.consumption": "Verbrauch",
   "nav.account": "Konto",
@@ -42,6 +42,10 @@ export const de: Record<keyof typeof en, string> = {
   "profile.party": "Fakturiert als",
   "profile.email": "E-Mail",
   "profile.role": "Rolle",
+  "profile.site": "Standort",
+  "profile.siteAssigned": "Zugeordnet zu",
+  "profile.siteViewing": "Angezeigt",
+  "profile.siteHint": "Alle Seiten zeigen den hier gewählten Standort. Die Wahl bleibt in diesem Browser gespeichert, wie die Sprache.",
   "profile.noAuth": "Authentifizierung ist aus: Dieser Browser ist Administrator, ohne Sitzung, die man beenden könnte.",
   "profile.previewNote": "Eine lokale Vorschau dieser Identität (AUTH_DEV_AS) — keine Sitzung dahinter, die man beenden könnte.",
   "profile.signOutHint": "Beendet die Cloudflare-Access-Sitzung und kehrt zur Anmeldeseite zurück.",
@@ -159,9 +163,9 @@ export const de: Record<keyof typeof en, string> = {
   "calc.col.batteryOnly": "Ersparnis nur durch Batterie",
 
   // ---- Settings ----------------------------------------------------------
-  "settings.title": "Einstellungen",
+  "settings.title": "Standortverwaltung",
   "settings.intro":
-    "Investitionssummen für die Amortisation, und die Home-Assistant-Verbindung, welche die Energiedaten liefert.",
+    "Wer zum Standort gehört, die Investitionssummen für die Amortisation, und die Home-Assistant-Verbindung, welche die Energiedaten liefert.",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":
@@ -651,7 +655,7 @@ export const de: Record<keyof typeof en, string> = {
   "party.periodTitle": "Verbrauch und Ersparnis",
   "party.periodIntro": "Der Verbrauch von {name}, aufgeteilt in vZEV-Solarstrom und Netz, und die Ersparnis gegenüber der Direktversorgung.",
   "party.pick": "Teilnehmer",
-  "party.none": "Noch keine Teilnehmer — erfassen Sie sie in den Einstellungen.",
+  "party.none": "Noch keine Teilnehmer — erfassen Sie sie in der Standortverwaltung.",
   "party.noData": "In diesem Zeitraum wurde kein Verbrauch erfasst.",
   "party.live": "Gerade jetzt",
   "party.liveNote": "Live aus der Anlage, jede Minute aktualisiert: was das Haus gerade verlässt, und wie viel Sonne der Tag noch bringt.",

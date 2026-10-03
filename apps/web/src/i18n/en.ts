@@ -12,7 +12,7 @@ export const en = {
   "nav.tariffs": "Tariff periods",
   "nav.calculation": "Calculation detail",
   "nav.readings": "Import readings",
-  "nav.settings": "Settings",
+  "nav.settings": "Site administration",
   "nav.billing": "Billing",
   "nav.consumption": "Consumption",
   "nav.account": "Account",
@@ -37,6 +37,10 @@ export const en = {
   "profile.party": "Invoiced as",
   "profile.email": "Email",
   "profile.role": "Role",
+  "profile.site": "Site",
+  "profile.siteAssigned": "Assigned to",
+  "profile.siteViewing": "Viewing",
+  "profile.siteHint": "Every page shows the site chosen here. The choice is kept in this browser, like the language.",
   "profile.noAuth": "Authentication is off: this browser is an administrator, with no session to sign out of.",
   "profile.previewNote": "A local preview of this identity (AUTH_DEV_AS) — there is no session behind it to sign out of.",
   "profile.signOutHint": "Ends the Cloudflare Access session and returns to the sign-in page.",
@@ -150,9 +154,9 @@ export const en = {
   "calc.col.batteryOnly": "Battery-only saving",
 
   // ---- Settings ----------------------------------------------------------
-  "settings.title": "Settings",
+  "settings.title": "Site administration",
   "settings.intro":
-    "Investment totals used for payback, and the Home Assistant connection that supplies the energy data.",
+    "Who is part of the site, the investment totals used for payback, and the Home Assistant connection that supplies the energy data.",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":
@@ -632,7 +636,7 @@ export const en = {
   "party.periodTitle": "Consumption & savings",
   "party.periodIntro": "{name}'s consumption, split between the vZEV's own solar and the grid, and what that saved against direct supply.",
   "party.pick": "Participant",
-  "party.none": "No participants yet — add them in Settings.",
+  "party.none": "No participants yet — add them under Site administration.",
   "party.noData": "No consumption recorded in this range.",
   "party.live": "Right now",
   "party.liveNote": "Live from the installation, refreshed every minute: what is leaving the house right now, and how much sun the day still holds.",
