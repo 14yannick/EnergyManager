@@ -166,6 +166,10 @@ export const fr: Record<keyof typeof en, string> = {
   "sites.viewing": "Affiché",
   "sites.view": "Y passer",
   "sites.created": "créé le {date}",
+  "sites.externalId": "ID externe",
+  "sites.syncPaused": "Synchronisation suspendue",
+  "settings.syncPause": "Suspendre la synchronisation automatique de ce site",
+  "settings.syncPauseHint": "La synchronisation planifiée ignore ce site, pour les mesures d'énergie comme pour les tarifs de reprise dynamiques. « Synchroniser » fonctionne toujours. Le mappage et le capteur de prix restent inchangés.",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":

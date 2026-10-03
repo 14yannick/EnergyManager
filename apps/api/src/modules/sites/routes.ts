@@ -11,6 +11,8 @@ function toDomain(row: Row): Site {
   return {
     id: row.id,
     name: row.name,
+    externalUuid: row.externalUuid,
+    syncPaused: row.syncPaused,
     timezone: row.timezone,
     // drizzle's `date` column is already "YYYY-MM-DD".
     productionStartDate: row.productionStartDate,
@@ -58,12 +60,14 @@ export async function siteRoutes(app: FastifyInstance) {
     const [taken] = await db
       .select({ id: sites.id })
       .from(sites)
-      .where(sql`lower(${sites.name}) = lower(${name})`)
+      .where(sql`lower(${sites.name}) = lower(${name}) or lower(${sites.externalUuid}) = lower(${name})`)
       .limit(1);
     if (taken) {
       return reply.status(409).send({ error: "name_taken", message: `A site named "${name}" already exists.` });
     }
-    const [row] = await db.insert(sites).values({ name }).returning();
+    // The external identifier starts as the name (see the schema): the two
+    // are checked unique together above, since the name is what it is.
+    const [row] = await db.insert(sites).values({ name, externalUuid: name }).returning();
     return reply.status(201).send(toDomain(row!));
   });
 
@@ -96,6 +100,7 @@ export async function siteRoutes(app: FastifyInstance) {
         ...set("forecastTodayEntityId", d.forecastTodayEntityId),
         ...set("forecastRemainingEntityId", d.forecastRemainingEntityId),
         ...set("forecastTomorrowEntityId", d.forecastTomorrowEntityId),
+        ...set("syncPaused", d.syncPaused),
         updatedAt: new Date(),
       })
       .where(eq(sites.id, req.params.id))

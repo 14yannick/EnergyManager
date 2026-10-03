@@ -45,8 +45,11 @@ if (env.HA_SYNC_ENABLED && env.HA_URL && env.HA_TOKEN) {
   const runHaSync = () => {
     void (async () => {
       try {
-        const allSites = await db.select({ id: sites.id }).from(sites);
+        // A paused site is left alone by the timer, statistics and rates
+        // alike (see `sites.syncPaused`); a sync asked for by hand still runs.
+        const allSites = await db.select({ id: sites.id, syncPaused: sites.syncPaused }).from(sites);
         for (const site of allSites) {
+          if (site.syncPaused) continue;
           const result = await syncHomeAssistant(site.id, {
             granularity: "quarter_hour",
             lookbackHours: env.HA_SYNC_LOOKBACK_HOURS,

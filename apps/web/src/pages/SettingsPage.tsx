@@ -157,7 +157,7 @@ export function SettingsPage() {
           </div>
           <MappingSection site={site} canEdit={canEdit} />
           <LiveViewSection site={site} canEdit={canEdit} />
-          <SyncSection siteId={site.id} canEdit={canEdit} />
+          <SyncSection site={site} canEdit={canEdit} />
         </>
       )}
 
@@ -201,7 +201,15 @@ function SitesSection({ sites, current, canEdit }: { sites: Site[]; current: Sit
         {sites.map((s) => (
           <li key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
             <span className="font-medium text-slate-900">{s.name}</span>
+            <span className="text-xs text-slate-500">
+              {t("sites.externalId")}: <span className="font-mono">{s.externalUuid}</span>
+            </span>
             <span className="text-xs text-slate-500">{t("sites.created", { date: swissDate(s.createdAt.slice(0, 10)) })}</span>
+            {s.syncPaused && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                {t("sites.syncPaused")}
+              </span>
+            )}
             <span className="ml-auto">
               {s.id === current.id ? (
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
@@ -770,8 +778,22 @@ function GoogleDriveSection({ siteId, canEdit }: { siteId: string; canEdit: bool
   );
 }
 
-function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
+function SyncSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
   const { t, tag } = useI18n();
+  const siteId = site.id;
+  const queryClient = useQueryClient();
+  // The site's own switch for the timer (see `Site.syncPaused`). Sent with
+  // the production start date like every other save on this page: the API
+  // reads a missing one as "cleared".
+  const pauseMutation = useMutation({
+    mutationFn: (syncPaused: boolean) =>
+      api.sites.update(site.id, { productionStartDate: site.productionStartDate, syncPaused }),
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
   const [granularity, setGranularity] = useState<"quarter_hour" | "hour">("quarter_hour");
   const [useRange, setUseRange] = useState(false);
   const [from, setFrom] = useState(() => daysAgo(7));
@@ -799,6 +821,19 @@ function SyncSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) 
       <div>
         <h2 className="text-sm font-medium text-slate-700">{t("settings.sync")}</h2>
         <p className="mt-1 text-xs text-slate-500">{t("settings.syncNote")}</p>
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2 text-sm text-slate-900">
+          <input
+            type="checkbox"
+            checked={site.syncPaused}
+            disabled={!canEdit || pauseMutation.isPending}
+            onChange={(e) => pauseMutation.mutate(e.target.checked)}
+          />
+          {t("settings.syncPause")}
+        </label>
+        <p className="mt-1 max-w-3xl text-xs text-slate-500">{t("settings.syncPauseHint")}</p>
       </div>
 
       <div className="flex flex-wrap items-end gap-4">

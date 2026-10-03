@@ -1,6 +1,13 @@
 export interface Site {
   id: string;
   name: string;
+  /**
+   * What the site is called outside the app, and the name of the Drive
+   * folder its invoices are filed under. Carries the site's name for now.
+   */
+  externalUuid: string;
+  /** The scheduled Home Assistant pull leaves this site alone. */
+  syncPaused: boolean;
   timezone: string;
   /** "YYYY-MM-DD", or null when not stated. */
   productionStartDate: string | null;

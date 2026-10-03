@@ -172,6 +172,10 @@ export const de: Record<keyof typeof en, string> = {
   "sites.viewing": "Angezeigt",
   "sites.view": "Dorthin wechseln",
   "sites.created": "erstellt am {date}",
+  "sites.externalId": "Externe ID",
+  "sites.syncPaused": "Synchronisation pausiert",
+  "settings.syncPause": "Automatische Synchronisation für diesen Standort pausieren",
+  "settings.syncPauseHint": "Die geplante Abfrage überspringt diesen Standort, für die Energiemesswerte wie für die dynamischen Rückliefertarife. «Jetzt synchronisieren» funktioniert weiterhin. Zuordnung und Preissensor bleiben unverändert.",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":

@@ -103,6 +103,8 @@ export const siteUpdateInputSchema = z.object({
   forecastTodayEntityId: z.string().trim().min(1).max(200).nullable().optional(),
   forecastRemainingEntityId: z.string().trim().min(1).max(200).nullable().optional(),
   forecastTomorrowEntityId: z.string().trim().min(1).max(200).nullable().optional(),
+  // Omitted: untouched, like the rest.
+  syncPaused: z.boolean().optional(),
 });
 export type SiteUpdateInput = z.infer<typeof siteUpdateInputSchema>;
 

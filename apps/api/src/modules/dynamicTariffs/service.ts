@@ -5,6 +5,7 @@ import { dynamicTariffRates, sites } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { fetchHaEntityDynamicTariff } from "../homeAssistant/haClient.js";
 import { EXPECTED_UNIT, isChfPerKwh } from "./unit.js";
+import { sitesToSync } from "./selection.js";
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -136,7 +137,7 @@ async function syncSite(
 
 /**
  * Fetches the current feed-in window from Home Assistant and upserts it, one
- * site at a time, each from its own configured entity
+ * site at a time (which sites: see below), each from its own configured entity
  * (`Site.dynamicTariffEntityId`). Re-running this naturally picks up revised
  * prices via onConflictDoUpdate, same pattern as upsertReadings in
  * modules/readings/service.ts.
@@ -150,13 +151,19 @@ async function syncSite(
  * polling BKW independently, so the app reads the result from there instead
  * of polling it a second time.
  */
-export async function syncDynamicTariffs(): Promise<SyncResult> {
+export async function syncDynamicTariffs(options: { siteId?: string } = {}): Promise<SyncResult> {
   const allSites = await db
-    .select({ id: sites.id, name: sites.name, dynamicTariffEntityId: sites.dynamicTariffEntityId })
+    .select({
+      id: sites.id,
+      name: sites.name,
+      dynamicTariffEntityId: sites.dynamicTariffEntityId,
+      syncPaused: sites.syncPaused,
+    })
     .from(sites);
+  const selected = sitesToSync(allSites, options.siteId);
 
   const result: SyncResult = { inserted: 0, updated: 0, source: "", publicationTimestamp: null, warnings: [] };
-  for (const site of allSites) {
+  for (const site of selected) {
     const one = await syncSite(site);
     result.inserted += one.inserted;
     result.updated += one.updated;

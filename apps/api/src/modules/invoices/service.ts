@@ -6,8 +6,8 @@ import { db } from "../../db/client.js";
 import { invoices, sites } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { runInvoices } from "../billing/service.js";
-import { findOrCreateSubfolder, googleDriveConfigured, uploadPdf } from "../googleDrive/service.js";
-import { filenameFor, periodLabelFor } from "./naming.js";
+import { findOrCreateFolderPath, googleDriveConfigured, uploadPdf } from "../googleDrive/service.js";
+import { driveFolderPathFor, filenameFor, periodLabelFor } from "./naming.js";
 import { buildInvoicePdf } from "./pdf.js";
 
 type Row = typeof invoices.$inferSelect;
@@ -164,15 +164,20 @@ export async function generateInvoices(
   // Only read once per batch, not once per invoice — and only at all if
   // there is any point, i.e. the server has a service account configured.
   // The subfolder is resolved (or created) once here too, rather than once
-  // per party: they all land in the same "Q1.2027"-style folder.
+  // per party: they all land in the same "<site>/Q1.2027"-style folder (see
+  // driveFolderPathFor).
   let uploadFolderId: string | null = null;
   if (googleDriveConfigured) {
-    const [site] = await db.select({ driveFolderId: sites.driveFolderId }).from(sites).where(eq(sites.id, siteId));
+    const [site] = await db
+      .select({ driveFolderId: sites.driveFolderId, externalUuid: sites.externalUuid })
+      .from(sites)
+      .where(eq(sites.id, siteId));
     if (site?.driveFolderId) {
+      const path = driveFolderPathFor(site, periodLabel);
       try {
-        uploadFolderId = await findOrCreateSubfolder(site.driveFolderId, periodLabel);
+        uploadFolderId = await findOrCreateFolderPath(site.driveFolderId, path);
       } catch (err) {
-        log?.error({ err, periodLabel }, "Couldn't resolve this period's Drive subfolder");
+        log?.error({ err, path }, "Couldn't resolve this period's Drive subfolder");
       }
     }
   }

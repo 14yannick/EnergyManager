@@ -119,7 +119,7 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
       // holds today and tomorrow), so they are refreshed either way, and
       // anything that stopped them is reported alongside the statistics that
       // were skipped.
-      const tariffs = await syncDynamicTariffs();
+      const tariffs = await syncDynamicTariffs({ siteId: req.params.siteId });
       return {
         ...result,
         skipped: [...result.skipped, ...tariffs.warnings],

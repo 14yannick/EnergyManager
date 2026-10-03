@@ -211,6 +211,13 @@
       "when": 1790282240030,
       "tag": "0029_add_live_flow_entities",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791055188388,
+      "tag": "0030_add_site_external_uuid_and_sync_pause",
+      "breakpoints": true
     }
   ]
 }

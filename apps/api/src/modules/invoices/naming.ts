@@ -30,3 +30,15 @@ export function filenameFor(
   const base = (invoice.partyReference || invoice.partyName).replace(/[^\w.-]+/g, "_");
   return `${periodLabel}_${base}.pdf`;
 }
+
+/**
+ * Where a batch's PDFs are filed, as folder names below the Drive folder
+ * the site connected: the site's external identifier, then the period.
+ *
+ * The site's own level is what lets several sites share one connected
+ * folder without their invoices landing in the same "Q1.2027" — two sites
+ * bill the same quarter, and often the same party names.
+ */
+export function driveFolderPathFor(site: { externalUuid: string }, periodLabel: string): string[] {
+  return [site.externalUuid, periodLabel];
+}

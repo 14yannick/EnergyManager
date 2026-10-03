@@ -163,6 +163,10 @@ export const en = {
   "sites.viewing": "Viewing",
   "sites.view": "Switch to it",
   "sites.created": "created {date}",
+  "sites.externalId": "External ID",
+  "sites.syncPaused": "Sync paused",
+  "settings.syncPause": "Pause the automatic sync for this site",
+  "settings.syncPauseHint": "The scheduled pull skips this site, for the energy readings and the dynamic feed-in rates alike. “Sync now” still works. The mapping and the price sensor stay as they are.",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":

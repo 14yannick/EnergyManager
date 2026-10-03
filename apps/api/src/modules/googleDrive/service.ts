@@ -140,6 +140,17 @@ export async function findOrCreateSubfolder(parentId: string, name: string): Pro
 }
 
 /**
+ * Walks `names` down from `parentId`, one subfolder each, creating whatever
+ * is missing, and returns the last one's id. Sequential on purpose: each
+ * level is the parent of the next.
+ */
+export async function findOrCreateFolderPath(parentId: string, names: string[]): Promise<string> {
+  let current = parentId;
+  for (const name of names) current = await findOrCreateSubfolder(current, name);
+  return current;
+}
+
+/**
  * Uploads one PDF into an already-verified folder. Called from invoice
  * generation, always best-effort — a failure here must never fail the
  * generate call itself, so callers catch and log rather than propagate.

@@ -14,7 +14,7 @@ async function main() {
   const existing = await db.select({ id: sites.id }).from(sites).limit(1);
   if (existing.length === 0) {
     console.log("Seeding default site...");
-    await db.insert(sites).values({ name: "Home" });
+    await db.insert(sites).values({ name: "Home", externalUuid: "Home" });
   }
 
   await migrationClient.end();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filenameFor, periodLabelFor } from "./naming.js";
+import { filenameFor, periodLabelFor, driveFolderPathFor } from "./naming.js";
 
 describe("periodLabelFor", () => {
   it("labels a whole calendar quarter", () => {
@@ -42,5 +42,18 @@ describe("filenameFor", () => {
     expect(filenameFor({ partyReference: null, partyName: "Jean-Pierre Rossel" }, "Q1.2027")).toBe(
       "Q1.2027_Jean-Pierre_Rossel.pdf",
     );
+  });
+});
+
+describe("driveFolderPathFor", () => {
+  it("files a batch under the site's external identifier, then the period", () => {
+    expect(driveFolderPathFor({ externalUuid: "Home" }, "Q1.2027")).toEqual(["Home", "Q1.2027"]);
+  });
+
+  it("keeps two sites that share a connected folder and a quarter apart", () => {
+    const a = driveFolderPathFor({ externalUuid: "Home" }, "Q1.2027");
+    const b = driveFolderPathFor({ externalUuid: "Home 2" }, "Q1.2027");
+    expect(a[1]).toBe(b[1]);
+    expect(a[0]).not.toBe(b[0]);
   });
 });
