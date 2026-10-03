@@ -20,6 +20,7 @@ import { useT } from "../i18n/context";
 import { InfoTip } from "./InfoTip";
 import { LiveCards, hasLiveCards, useLiveView } from "./LiveCards";
 import { LiveFlow, hasLiveFlow } from "./LiveFlow";
+import { VzevFlow } from "./VzevFlow";
 
 /**
  * What the site is doing right now, and what the day still holds — the
@@ -74,14 +75,28 @@ function hourlyRate(
 export function LiveSection({
   siteId,
   owner,
+  flow,
+  partyId,
 }: {
   siteId: string | null | undefined;
   /**
-   * The producer's own view: the feed-in rate on the day's curve, and the
-   * house's live flow. A participant sees the cards and the curve alone —
-   * what the house draws and how full its battery is are the owner's.
+   * Whether the viewer may see what is the producer's alone: the feed-in
+   * rate on the day's curve. A participant sees the cards and the curve
+   * without it.
    */
   owner: boolean;
+  /**
+   * Which picture of the instant to draw beside the day's curve: the
+   * plant's own (panels, battery, house — the Dashboard's), or the vZEV's
+   * (what was fed in and who took it — a participant's).
+   */
+  flow: "plant" | "vzev";
+  /**
+   * For the vZEV's picture, whose it is — an admin looking at one
+   * participant's page. A participant passes none: the API shows them
+   * their own.
+   */
+  partyId?: string | null;
 }) {
   const showFeedInRate = owner;
   const t = useT();
@@ -123,6 +138,7 @@ export function LiveSection({
   // own energy setup. Show whichever the site has, and nothing when it has
   // neither: an unset-up view is not a failure worth shouting about.
   if (!hasLiveCards(live) && !live.today) return null;
+  const hasFlow = flow === "vzev" || hasLiveFlow(live);
 
   return (
     <section className="space-y-3">
@@ -136,8 +152,12 @@ export function LiveSection({
       {/* Side by side once there is room: the flow is square, the curve is
           wide, and a full-width square below a full-width chart is a
           screen of scrolling for two things that belong together. */}
-      <div className={owner && hasLiveFlow(live) ? "grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]" : undefined}>
-        {owner && hasLiveFlow(live) && <LiveFlow siteId={siteId} live={live} />}
+      <div className={hasFlow ? "grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]" : undefined}>
+        {/* Two pictures of the same instant. The plant's — panels, battery,
+            house — is the producer's, on the Dashboard. The vZEV's — what
+            was fed in and who took it — is every participant's. */}
+        {flow === "plant" && hasLiveFlow(live) && <LiveFlow siteId={siteId} live={live} />}
+        {flow === "vzev" && <VzevFlow siteId={siteId} partyId={partyId} />}
         {live.today && (
           <DayCurveChart
             today={live.today}

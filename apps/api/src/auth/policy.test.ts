@@ -54,6 +54,8 @@ describe("route policy", () => {
     expect(isAllowed("viewer", "/api/price-feeds", "GET")).toBe(true);
     expect(isAllowed("participant", "/api/sites/:siteId/billing/invoices", "GET")).toBe(true);
     expect(isAllowed("participant", "/api/sites/:siteId/community/summary", "GET")).toBe(true);
+    // Their own view of the vZEV: the plants summed, the others as one total.
+    expect(isAllowed("participant", "/api/sites/:siteId/vzev/live", "GET")).toBe(true);
     // The provider's rates their invoice is built from — not the owner's tariffs.
     expect(isAllowed("participant", "/api/sites/:siteId/billing/positions", "GET")).toBe(true);
   });

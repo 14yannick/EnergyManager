@@ -70,6 +70,9 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   // The participants' live view — this is the one Home Assistant route they
   // reach, and it carries site-level power only, never anyone's own figures.
   "/api/sites/:siteId/home-assistant/live": { GET: PARTICIPANT_READ },
+  // The same instant from the participant's side: the plants summed, their
+  // own draw, and the other participants' only ever as one total.
+  "/api/sites/:siteId/vzev/live": { GET: PARTICIPANT_READ },
   "/api/sites/:siteId/home-assistant/sync": { POST: ADMIN },
 
   // Setup-only — where a generated PDF is archived, not billing data itself.

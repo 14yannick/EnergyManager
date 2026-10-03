@@ -230,7 +230,7 @@ function RingIcon({ ring, x, y }: { ring: RingId; x: number; y: number }) {
 }
 
 /** Whether the viewer asked the OS for less motion; the dots then stand still and arrowheads carry direction. */
-function usePrefersReducedMotion(): boolean {
+export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");

@@ -140,7 +140,9 @@ export function PartyDashboardPage() {
       {/* The feed-in rate would reveal the owner's revenue, so it is drawn
           only for admin/viewer — same boundary as the dynamic-tariffs and
           neighbours routes (see policy.ts). */}
-      <LiveSection siteId={siteId} owner={!isParticipant} />
+      {/* The vZEV's picture, for the participant in view: a participant's
+          own (the API knows who they are), or the one an admin picked. */}
+      <LiveSection siteId={siteId} owner={!isParticipant} flow="vzev" partyId={isParticipant ? null : partyId} />
 
       {/* Nothing above this line answers to the period selector, so it sits
           here — with the participant picker, which scopes the same figures. */}

@@ -42,6 +42,7 @@ import type {
   TariffPeriodInput,
   TariffSurcharge,
   TariffSurchargeInput,
+  VzevLiveView,
 } from "@energy-manager/shared";
 
 /**
@@ -136,6 +137,11 @@ export const api = {
         body: JSON.stringify(input),
       }),
     remove: (id: string) => request<void>(`/tariff-surcharges/${id}`, { method: "DELETE" }),
+  },
+  vzev: {
+    /** A participant gets their own view whatever is asked; an admin or viewer names whose. */
+    live: (siteId: string, partyId?: string) =>
+      request<VzevLiveView>(`/sites/${siteId}/vzev/live${partyId ? `?partyId=${partyId}` : ""}`),
   },
   priceFeeds: {
     list: () => request<PriceFeed[]>("/price-feeds"),

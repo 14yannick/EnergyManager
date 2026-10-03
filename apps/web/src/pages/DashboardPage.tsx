@@ -164,7 +164,7 @@ export function DashboardPage() {
           question, just about their own roof — with the feed-in rate drawn
           in, since the owner is who it is paid to. Absent entirely, not
           dashed out, while nothing live is configured. */}
-      <LiveSection siteId={site.id} owner />
+      <LiveSection siteId={site.id} owner flow="plant" />
 
       {/* The period selector lives here rather than beside the page title:
           nothing above this line answers to it. */}

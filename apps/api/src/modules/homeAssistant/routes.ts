@@ -4,6 +4,7 @@ import { env } from "../../config/env.js";
 import { syncDynamicTariffs } from "../dynamicTariffs/service.js";
 import { listHaSensorsByDeviceClass } from "./haClient.js";
 import { getLiveEnergyView } from "./liveView.js";
+import { getVzevLiveView } from "./vzevView.js";
 import { listHaDynamicTariffEntities, listHaStatistics, syncHomeAssistant } from "./service.js";
 
 export async function homeAssistantRoutes(app: FastifyInstance) {
@@ -56,6 +57,22 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
     "/api/sites/:siteId/home-assistant/live",
     async (req, reply) => {
       const view = await getLiveEnergyView(req.params.siteId);
+      if (!view) return reply.status(404).send({ error: "not_found" });
+      return view;
+    },
+  );
+
+  // The vZEV as a participant sees it: the plants' production and feed-in,
+  // summed, and who draws it. A participant is always shown their own view;
+  // an admin or a viewer may ask for anybody's with `?partyId=`.
+  app.get<{ Params: { siteId: string }; Querystring: { partyId?: string } }>(
+    "/api/sites/:siteId/vzev/live",
+    async (req, reply) => {
+      const partyId = req.identity.role === "participant" ? req.identity.partyId : (req.query.partyId ?? null);
+      if (partyId != null && !/^[0-9a-f-]{36}$/i.test(partyId)) {
+        return reply.status(400).send({ error: "invalid_query", message: "partyId must be a party's id." });
+      }
+      const view = await getVzevLiveView(req.params.siteId, partyId);
       if (!view) return reply.status(404).send({ error: "not_found" });
       return view;
     },
