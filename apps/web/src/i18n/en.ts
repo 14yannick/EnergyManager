@@ -40,8 +40,6 @@ export const en = {
   "profile.role": "Role",
   "profile.site": "Site",
   "profile.siteAssigned": "Assigned to",
-  "profile.siteViewing": "Viewing",
-  "profile.siteHint": "Every page shows the site chosen here. The choice is kept in this browser, like the language.",
   "profile.noAuth": "Authentication is off: this browser is an administrator, with no session to sign out of.",
   "profile.previewNote": "A local preview of this identity (AUTH_DEV_AS) — there is no session behind it to sign out of.",
   "profile.signOutHint": "Ends the Cloudflare Access session and returns to the sign-in page.",

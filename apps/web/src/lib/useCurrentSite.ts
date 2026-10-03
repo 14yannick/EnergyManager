@@ -7,8 +7,9 @@ import { useIdentity } from "./useIdentity";
 /**
  * Which site an admin or a viewer is looking at.
  *
- * They may see every site, so the one in front of them is a choice: made on
- * the Profile page, remembered in this browser, and shared by every page —
+ * They may see every site, so the one in front of them is a choice: made in
+ * the Sites list under Site administration, remembered in this browser, and
+ * shared by every page —
  * each query is keyed by the site's id, so changing it refetches what is on
  * screen and nothing else. A participant has no choice to make: their site
  * is the one their party belongs to, and the API confines them to it.

@@ -1,6 +1,5 @@
 import { useT } from "../i18n/context";
 import { useSession } from "../lib/useIdentity";
-import { chooseSite, useCurrentSite } from "../lib/useCurrentSite";
 import { logoutHref } from "../lib/session";
 import { LanguageSwitch } from "../components/LanguageSwitch";
 import { ThemeSwitch } from "../components/ThemeSwitch";
@@ -17,11 +16,9 @@ export function ProfilePage() {
   const t = useT();
   const session = useSession();
   const identity = session.kind === "active" ? session.identity : null;
-  // An admin or a viewer may look at any site, so which one is a choice
-  // made here. A participant is shown theirs and has nothing to choose:
-  // the site list is closed to them, and so is every other site.
-  const participant = identity?.role === "participant";
-  const { site, sites } = useCurrentSite({ enabled: session.kind !== "loading" && !participant });
+  // Where this address is assigned. Shown, not chosen: which site an admin
+  // or a viewer looks at is picked under Site administration, beside the
+  // list of sites it is a choice among.
   const homeSite = identity?.homeSite ?? null;
 
   return (
@@ -51,41 +48,13 @@ export function ProfilePage() {
         )}
       </section>
 
-      {(homeSite || site) && (
+      {homeSite && (
         <section className="space-y-3 rounded-lg border bg-white p-4">
           <h2 className="text-sm font-medium text-slate-700">{t("profile.site")}</h2>
-          <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
-            {homeSite && (
-              <>
-                <dt className="text-slate-500">{t("profile.siteAssigned")}</dt>
-                <dd className="font-medium text-slate-900">{homeSite.name}</dd>
-              </>
-            )}
-            {!participant && site && (
-              <>
-                <dt className="text-slate-500">
-                  <label htmlFor="profile-site">{t("profile.siteViewing")}</label>
-                </dt>
-                <dd>
-                  {/* A select even with one site to pick from: it says the
-                      site is a choice, and where the next one will appear. */}
-                  <select
-                    id="profile-site"
-                    value={site.id}
-                    onChange={(e) => chooseSite(e.target.value)}
-                    className="max-w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900"
-                  >
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </dd>
-              </>
-            )}
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            <dt className="text-slate-500">{t("profile.siteAssigned")}</dt>
+            <dd className="font-medium text-slate-900">{homeSite.name}</dd>
           </dl>
-          {!participant && site && <p className="text-xs text-slate-500">{t("profile.siteHint")}</p>}
         </section>
       )}
 

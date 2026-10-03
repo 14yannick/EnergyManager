@@ -45,8 +45,6 @@ export const de: Record<keyof typeof en, string> = {
   "profile.role": "Rolle",
   "profile.site": "Standort",
   "profile.siteAssigned": "Zugeordnet zu",
-  "profile.siteViewing": "Angezeigt",
-  "profile.siteHint": "Alle Seiten zeigen den hier gewählten Standort. Die Wahl bleibt in diesem Browser gespeichert, wie die Sprache.",
   "profile.noAuth": "Authentifizierung ist aus: Dieser Browser ist Administrator, ohne Sitzung, die man beenden könnte.",
   "profile.previewNote": "Eine lokale Vorschau dieser Identität (AUTH_DEV_AS) — keine Sitzung dahinter, die man beenden könnte.",
   "profile.signOutHint": "Beendet die Cloudflare-Access-Sitzung und kehrt zur Anmeldeseite zurück.",

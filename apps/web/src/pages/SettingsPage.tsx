@@ -121,7 +121,8 @@ export function SettingsPage() {
 /**
  * The sites this installation holds, and the way to add one. Everything
  * below it on the page is about the one being viewed, so this is also
- * where to change which that is — the same choice as on the Profile page.
+ * where to change which that is — the only place: the Profile page says
+ * which site an address is assigned to, and offers no choice.
  */
 function SitesSection({ sites, current, canEdit }: { sites: Site[]; current: Site; canEdit: boolean }) {
   const t = useT();
