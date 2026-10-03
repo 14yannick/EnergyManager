@@ -18,6 +18,7 @@ export const de: Record<keyof typeof en, string> = {
   "nav.calculation": "Berechnungsdetails",
   "nav.readings": "Messwerte importieren",
   "nav.settings": "Standortverwaltung",
+  "nav.integrations": "Integrationen",
   "nav.billing": "Fakturierung",
   "nav.consumption": "Verbrauch",
   "nav.account": "Konto",
@@ -165,7 +166,12 @@ export const de: Record<keyof typeof en, string> = {
   // ---- Settings ----------------------------------------------------------
   "settings.title": "Standortverwaltung",
   "settings.intro":
-    "Wer zum Standort gehört, die Investitionssummen für die Amortisation, und die Home-Assistant-Verbindung, welche die Energiedaten liefert.",
+    "Wer zum Standort gehört, die Investitionssummen für die Amortisation, und die Home-Assistant-Sensoren, welche seine Energiedaten liefern.",
+  "integrations.title": "Integrationen",
+  "integrations.intro": "Die externen Dienste, mit denen diese Installation spricht, und ob sie erreichbar sind. Welche Sensoren ein Standort liest, wird in der Standortverwaltung festgelegt.",
+  "integrations.driveSite": "Ordner des angezeigten Standorts: {site}",
+  "settings.haSiteIntro": "Welche Home-Assistant-Sensoren diesen Standort speisen und wann sie abgefragt werden. Die Verbindung selbst steht unter Integrationen.",
+  "settings.haNotConnected": "Home Assistant ist nicht verbunden, es gibt daher keine Sensoren zuzuordnen. Siehe",
   "sites.title": "Standorte",
   "sites.note": "Alle Standorte dieser Installation. Ein neuer beginnt leer: wechseln Sie dorthin und erfassen Sie hier seine Teilnehmer, Tarife und Sensoren.",
   "sites.name": "Name des neuen Standorts",

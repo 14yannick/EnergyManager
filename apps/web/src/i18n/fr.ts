@@ -13,6 +13,7 @@ export const fr: Record<keyof typeof en, string> = {
   "nav.calculation": "Détail du calcul",
   "nav.readings": "Import des relevés",
   "nav.settings": "Administration du site",
+  "nav.integrations": "Intégrations",
   "nav.billing": "Facturation",
   "nav.consumption": "Consommation",
   "nav.account": "Compte",
@@ -159,7 +160,12 @@ export const fr: Record<keyof typeof en, string> = {
   // ---- Settings ----------------------------------------------------------
   "settings.title": "Administration du site",
   "settings.intro":
-    "Qui fait partie du site, les montants d'investissement utilisés pour l'amortissement, et la connexion Home Assistant qui fournit les données d'énergie.",
+    "Qui fait partie du site, les montants d'investissement utilisés pour l'amortissement, et les capteurs Home Assistant qui fournissent ses données d'énergie.",
+  "integrations.title": "Intégrations",
+  "integrations.intro": "Les services externes avec lesquels cette installation communique, et leur état de connexion. Les capteurs lus par un site se règlent dans l'administration du site.",
+  "integrations.driveSite": "Dossier du site affiché : {site}",
+  "settings.haSiteIntro": "Les capteurs Home Assistant qui alimentent ce site, et le moment où ils sont lus. La connexion elle-même se trouve sous Intégrations.",
+  "settings.haNotConnected": "Home Assistant n'est pas connecté, il n'y a donc aucun capteur à associer. Voir",
   "sites.title": "Sites",
   "sites.note": "Tous les sites de cette installation. Un nouveau site démarre vide : passez-y, puis ajoutez ici ses participants, ses tarifs et ses capteurs.",
   "sites.name": "Nom du nouveau site",

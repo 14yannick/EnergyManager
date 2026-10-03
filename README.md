@@ -32,9 +32,11 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
   the energy-weighted average rate it was priced at. Any line expands into the metering
   intervals behind it, so an average can be traced to the slots that produced it. The
   full engine output over a range, and its CSV export, is folded away underneath
-- **Site administration** holding the participants, the Home Assistant connection and entity mapping, investment
+- **Site administration** holding the participants, the Home Assistant entity mapping, investment
   costs (battery vs. solar, subsidies, tax reductions), the production start date, and
   the battery's round-trip conversion loss
+- **Integrations** showing the outside services and their state: the Home Assistant
+  connection, the Cloudflare Access sync and the Google Drive archive
 - **Role-based access** via Cloudflare Access — admin, read-only, and a
   participant role: a neighbour sees the rates they are billed at, but only
   their own consumption and invoices. Off by default; see
@@ -115,7 +117,7 @@ Three roles, resolved from the verified address:
 
 The API is the enforcement point — every route is denied by default and listed
 explicitly in `apps/api/src/auth/policy.ts`. The web app follows it where a
-page would otherwise offer a control that can only fail: **Site administration** and the
+page would otherwise offer a control that can only fail: **Site administration**, **Integrations** and the
 billing tariff positions render read-only for anyone who is not an admin, and
 a participant's navigation holds only the two pages they can use.
 
@@ -208,7 +210,7 @@ Set `CF_API_TOKEN` and `CF_ACCOUNT_ID` and that step happens automatically:
 every party save (and every change to `AUTH_ADMIN_EMAILS`, picked up on the
 next sync) pushes the addresses that should be allowed into a Cloudflare
 Access policy, and pulls out any it no longer wants there. A manual "Sync
-now" button on the Site administration page covers the case where the automatic push
+now" button on the Integrations page covers the case where the automatic push
 failed.
 
 No policy id to configure. The policy is found — or, the very first time,
@@ -225,7 +227,7 @@ in `apps/api/src/modules/cfAccess/engine.ts`.
 hand.** Creating a *reusable* policy through the API doesn't attach it to
 anything: it sits on the account doing nothing until it's added as a rule on
 the actual Access application that gates this app's hostname. After the
-first sync (the Site administration page says when it had to create one, naming it), go
+first sync (the Integrations page says when it had to create one, naming it), go
 to Zero Trust → Access → Applications → your application → Policies, and add
 the policy by that name. From then on, every sync keeps updating the same
 policy in place — nothing further to wire up.
@@ -233,7 +235,7 @@ policy in place — nothing further to wire up.
 If a policy already existed before this feature was turned on — created by
 hand, the way onboarding does it — the sync won't find or touch it unless
 its name happens to match exactly. Simplest fix: rename the existing one to
-match (Site administration tells you the name it's looking for) rather than ending up
+match (Integrations tells you the name it's looking for) rather than ending up
 with two policies, only one of which is actually attached to the app.
 
 **The token is more powerful than this feature strictly needs.** Cloudflare
@@ -326,13 +328,13 @@ not something this app's code can route around.
    into the app itself.
 3. **Create a Shared Drive** (requires Google Workspace) for invoices, and
    add the service account's email as a member with at least Content Manager
-   access — that address is shown under Site administration → Google Drive once the
+   access — that address is shown under Integrations → Google Drive once the
    credential is configured, something like
    `energymanager@your-project.iam.gserviceaccount.com`.
 4. **Paste the Shared Drive's id** (from its URL:
    `drive.google.com/drive/folders/`**`<this part>`**, or
    `drive.google.com/drive/u/0/folders/`**`<this part>`** — either way, the
-   part after the last `/`) into Site administration → Google Drive → Connect. The app
+   part after the last `/`) into Integrations → Google Drive → Connect. The app
    verifies access before saving anything.
 
 **Every archived PDF is set to "anyone with the link can view".** A

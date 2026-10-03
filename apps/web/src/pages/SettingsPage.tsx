@@ -1,60 +1,14 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { swissDate, type CfAccessSyncResult, type HaSyncResult, type IntervalMetricKind, type Site, type SiteUpdateInput } from "@energy-manager/shared";
+import { swissDate, type HaSyncResult, type IntervalMetricKind, type Site, type SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { formatChf } from "../lib/format";
 import { chooseSite, useCurrentSite } from "../lib/useCurrentSite";
+import { Field, FIELD_GRID, ReadOnlyValue } from "../components/Field";
 import { PartiesSection } from "../components/PartiesSection";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useCanEdit } from "../lib/useIdentity";
-
-/**
- * One labelled control with its explanation underneath.
- *
- * The two forms on this page each had their own idea of a field — different
- * label colours, three different input widths, hints that wrapped at whatever
- * width the flex row happened to leave. Sharing one component, laid out on
- * `FIELD_GRID`, is what makes a label, an input and a hint line up with their
- * counterparts in the section above or below.
- *
- * Read-only figures pass `readOnly` so the wrapper is not a `<label>` with no
- * control to point at.
- */
-function Field({
-  label,
-  hint,
-  readOnly,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  readOnly?: boolean;
-  children: ReactNode;
-}) {
-  const Wrapper = readOnly ? "div" : "label";
-  return (
-    <Wrapper className="flex min-w-0 flex-col gap-1">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
-      {children}
-      {hint ? <span className="text-xs leading-snug text-slate-400">{hint}</span> : null}
-    </Wrapper>
-  );
-}
-
-/** Equal columns, so fields align across every card on the page. */
-const FIELD_GRID = "grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 xl:max-w-4xl";
-
-/**
- * A computed figure standing in a field's place. Bordered transparently so it
- * is exactly as tall as an input and the row does not step.
- */
-function ReadOnlyValue({ children }: { children: ReactNode }) {
-  return (
-    <p className="rounded-md border border-transparent px-2 py-1.5 text-sm font-semibold text-slate-900">
-      {children}
-    </p>
-  );
-}
 
 // Only site-level flows are pullable from Home Assistant: per-party
 // consumption needs a party attached, which a single statistic can't express.
@@ -136,34 +90,30 @@ export function SettingsPage() {
 
       <InvestmentSection siteId={site.id} canEdit={canEdit} />
 
+      {/* What follows is this site's use of Home Assistant: which sensors
+          feed it and when they are pulled. The connection itself, like the
+          other services the installation talks to, is under Integrations. */}
       <div>
         <h2 className="text-sm font-medium text-slate-700">{t("settings.ha")}</h2>
-        <p className="text-sm text-slate-500">{t("settings.haIntro")}</p>
+        <p className="text-sm text-slate-500">{t("settings.haSiteIntro")}</p>
       </div>
 
       {status && !status.configured && (
         <p className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-900 dark:text-amber-200">
-          {t("settings.haUnconfigured")}
+          {t("settings.haNotConnected")}{" "}
+          <Link to="/integrations" className="font-medium underline">
+            {t("nav.integrations")}
+          </Link>
         </p>
       )}
 
       {status?.configured && (
         <>
-          <div className="rounded-lg border bg-white p-4 text-sm text-slate-600">
-            {t("settings.haConnected", { url: status.url ?? "" })}{" "}
-            {status.syncEnabled
-              ? t("settings.haSyncing", { minutes: status.syncIntervalMinutes ?? 0 })
-              : t("settings.haSyncOff")}
-          </div>
           <MappingSection site={site} canEdit={canEdit} />
           <LiveViewSection site={site} canEdit={canEdit} />
           <SyncSection site={site} canEdit={canEdit} />
         </>
       )}
-
-      <CloudflareAccessSection canEdit={canEdit} />
-
-      <GoogleDriveSection siteId={site.id} canEdit={canEdit} />
     </div>
   );
 }
@@ -587,193 +537,6 @@ function LiveViewSection({ site, canEdit }: { site: Site; canEdit: boolean }) {
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-/**
- * Whether the Cloudflare Access allow-list stays in step with the parties
- * table, and a way to push it by hand.
- *
- * Every party save already triggers this automatically (see
- * parties/routes.ts) — the button here exists for when that background push
- * failed (a bad token, Cloudflare briefly unreachable) and the admin wants
- * to retry it without re-saving a party. Shown whether or not it's
- * configured, same as the Home Assistant section above: an unconfigured
- * integration is useful to see, not just to use.
- */
-function CloudflareAccessSection({ canEdit }: { canEdit: boolean }) {
-  const t = useT();
-  const statusQuery = useQuery({ queryKey: ["cf-access-status"], queryFn: api.cloudflareAccess.status });
-  const [result, setResult] = useState<CfAccessSyncResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const syncMutation = useMutation({
-    mutationFn: api.cloudflareAccess.sync,
-    onSuccess: (data) => {
-      setError(null);
-      setResult(data);
-    },
-    onError: (err: Error) => setError(err.message),
-  });
-
-  const configured = statusQuery.data?.configured ?? false;
-
-  return (
-    <div className="space-y-3 rounded-lg border bg-white p-4">
-      <div>
-        <h2 className="text-sm font-medium text-slate-700">{t("settings.cfAccess")}</h2>
-        <p className="mt-1 text-xs text-slate-500">{t("settings.cfAccessNote")}</p>
-      </div>
-
-      {!configured ? (
-        <p className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-3 text-sm text-amber-900 dark:text-amber-200">
-          {t("settings.cfAccessUnconfigured")}
-        </p>
-      ) : (
-        <>
-          <button
-            onClick={() => syncMutation.mutate()}
-            disabled={!canEdit || syncMutation.isPending}
-            className="btn-primary px-4 py-2 text-sm"
-          >
-            {syncMutation.isPending ? t("settings.syncing") : t("settings.cfAccessSyncNow")}
-          </button>
-
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-
-          {result && (
-            <div className="space-y-1.5 border-t pt-3 text-sm">
-              {result.policyName && (
-                <p className="text-xs text-slate-400">
-                  {result.created
-                    ? t("settings.cfAccessCreated", { name: result.policyName })
-                    : t("settings.cfAccessPolicy", { name: result.policyName })}
-                </p>
-              )}
-              {result.added.length === 0 && result.removed.length === 0 ? (
-                <p className="text-slate-500">
-                  {t("settings.cfAccessUnchanged", { count: result.unchangedCount })}
-                </p>
-              ) : (
-                <>
-                  {result.added.length > 0 && (
-                    <p>
-                      <span className="font-medium text-emerald-700 dark:text-emerald-400">{t("settings.cfAccessAdded")}</span>{" "}
-                      {result.added.join(", ")}
-                    </p>
-                  )}
-                  {result.removed.length > 0 && (
-                    <p>
-                      <span className="font-medium text-amber-700 dark:text-amber-300">{t("settings.cfAccessRemoved")}</span>{" "}
-                      {result.removed.join(", ")}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * Where generated invoice PDFs are archived, alongside the zip every Generate
- * click already downloads (see BillingPage). A service account, not an OAuth
- * app: its whole access boundary is Drive's own sharing model, so connecting
- * a folder here means the admin already shared it with the address shown
- * below — nothing is typed or picked from inside this app itself.
- */
-function GoogleDriveSection({ siteId, canEdit }: { siteId: string; canEdit: boolean }) {
-  const t = useT();
-  const queryClient = useQueryClient();
-  const statusQuery = useQuery({
-    queryKey: ["drive-status", siteId],
-    queryFn: () => api.googleDrive.status(siteId),
-  });
-  const [folderId, setFolderId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const verifyMutation = useMutation({
-    mutationFn: (id: string) => api.googleDrive.verifyFolder(siteId, id),
-    onSuccess: () => {
-      setError(null);
-      setFolderId("");
-      void queryClient.invalidateQueries({ queryKey: ["drive-status", siteId] });
-    },
-    onError: (err: Error) => setError(err.message),
-  });
-  const disconnectMutation = useMutation({
-    mutationFn: () => api.googleDrive.disconnectFolder(siteId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["drive-status", siteId] }),
-  });
-
-  const status = statusQuery.data;
-
-  return (
-    <div className="space-y-3 rounded-lg border bg-white p-4">
-      <div>
-        <h2 className="text-sm font-medium text-slate-700">{t("settings.drive")}</h2>
-        <p className="mt-1 text-xs text-slate-500">{t("settings.driveNote")}</p>
-      </div>
-
-      {status && !status.configured && (
-        <p className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 p-3 text-sm text-amber-900 dark:text-amber-200">
-          {t("settings.driveUnconfigured")}
-        </p>
-      )}
-
-      {status?.configured && (
-        <>
-          {status.serviceAccountEmail && (
-            <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              {t("settings.driveServiceAccount", { email: status.serviceAccountEmail })}
-            </p>
-          )}
-
-          {status.folderId ? (
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <span className="text-emerald-700 dark:text-emerald-400">
-                {t("settings.driveConnected", { name: status.folderName ?? status.folderId })}
-              </span>
-              {canEdit && (
-                <button
-                  onClick={() => disconnectMutation.mutate()}
-                  disabled={disconnectMutation.isPending}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {t("settings.driveDisconnect")}
-                </button>
-              )}
-            </div>
-          ) : (
-            canEdit && (
-              <div className="flex flex-wrap items-end gap-3">
-                <Field label={t("settings.driveFolderId")} hint={t("settings.driveFolderIdHint")}>
-                  <input
-                    type="text"
-                    className="input w-64"
-                    value={folderId}
-                    onChange={(e) => setFolderId(e.target.value)}
-                    placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz"
-                  />
-                </Field>
-                <button
-                  onClick={() => verifyMutation.mutate(folderId)}
-                  disabled={!folderId.trim() || verifyMutation.isPending}
-                  className="btn-primary px-4 py-2 text-sm"
-                >
-                  {verifyMutation.isPending ? t("settings.driveConnecting") : t("settings.driveConnect")}
-                </button>
-              </div>
-            )
-          )}
-
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-        </>
-      )}
     </div>
   );
 }

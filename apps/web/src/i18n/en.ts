@@ -13,6 +13,7 @@ export const en = {
   "nav.calculation": "Calculation detail",
   "nav.readings": "Import readings",
   "nav.settings": "Site administration",
+  "nav.integrations": "Integrations",
   "nav.billing": "Billing",
   "nav.consumption": "Consumption",
   "nav.account": "Account",
@@ -156,7 +157,12 @@ export const en = {
   // ---- Settings ----------------------------------------------------------
   "settings.title": "Site administration",
   "settings.intro":
-    "Who is part of the site, the investment totals used for payback, and the Home Assistant connection that supplies the energy data.",
+    "Who is part of the site, the investment totals used for payback, and the Home Assistant sensors that supply its energy data.",
+  "integrations.title": "Integrations",
+  "integrations.intro": "The outside services this installation talks to, and whether each is reachable. Which sensors a site reads is set under Site administration.",
+  "integrations.driveSite": "Folder of the site being viewed: {site}",
+  "settings.haSiteIntro": "Which Home Assistant sensors feed this site, and when they are pulled. The connection itself is under Integrations.",
+  "settings.haNotConnected": "Home Assistant is not connected, so there are no sensors to map. See",
   "sites.title": "Sites",
   "sites.note": "Every site this installation holds. A new one starts empty: switch to it, then add its participants, tariffs and sensors here.",
   "sites.name": "Name of the new site",

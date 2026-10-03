@@ -11,6 +11,7 @@ import { TariffPeriodsPage } from "./pages/TariffPeriodsPage";
 import { CalculationDetailPage } from "./pages/CalculationDetailPage";
 import { ReadingsImportPage } from "./pages/ReadingsImportPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountPage } from "./pages/AccountPage";
 import { BillingPage } from "./pages/BillingPage";
 import { PartyDashboardPage } from "./pages/PartyDashboardPage";
@@ -51,6 +52,8 @@ function navItems(participant: boolean): NavItem[] {
         // What the system did, then what it bills, then the inputs that
         // produced both — tariffs and readings — with the audit view last
         // before settings, because it is where you go to check the others.
+        // Integrations closes the row: the installation's own connections,
+        // set once and looked at least.
         { to: "/", label: "nav.dashboard", end: true },
         { to: "/consumption", label: "nav.consumption" },
         { to: "/account", label: "nav.account" },
@@ -60,6 +63,7 @@ function navItems(participant: boolean): NavItem[] {
         { to: "/readings", label: "nav.readings" },
         { to: "/calculation", label: "nav.calculation" },
         { to: "/settings", label: "nav.settings" },
+        { to: "/integrations", label: "nav.integrations" },
       ];
 }
 
@@ -225,6 +229,7 @@ export function App() {
             <Route path="/cost-items" element={<Navigate to="/settings" replace />} />
             <Route path="/readings" element={<ReadingsImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/profile" element={<ProfilePage />} />
