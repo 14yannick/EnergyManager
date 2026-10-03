@@ -12,6 +12,7 @@ import {
   getFirstProductionDate,
   getReadingsRange,
   listReadings,
+  AmbiguousProducerError,
   upsertReadings,
 } from "./service.js";
 
@@ -31,9 +32,15 @@ export async function readingsRoutes(app: FastifyInstance) {
 
       const buffer = await file.toBuffer();
       const { rows, errors } = parseMetricsCsv(buffer.toString("utf-8"), modeParsed.data);
-      const { inserted, updated } = await upsertReadings(req.params.siteId, rows);
-
-      return { inserted, updated, skipped: errors.length, errors };
+      try {
+        const { inserted, updated } = await upsertReadings(req.params.siteId, rows);
+        return { inserted, updated, skipped: errors.length, errors };
+      } catch (err) {
+        if (err instanceof AmbiguousProducerError) {
+          return reply.status(409).send({ error: "ambiguous_producer", message: err.message });
+        }
+        throw err;
+      }
     },
   );
 

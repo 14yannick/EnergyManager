@@ -24,12 +24,17 @@ describe("route policy", () => {
   it("lets a viewer read but never write", () => {
     const writes: Array<[string, string]> = [
       ["/api/sites", "POST"],
+      ["/api/price-feeds", "POST"],
+      ["/api/price-feeds/:id", "PATCH"],
+      ["/api/price-feeds/:id", "DELETE"],
       ["/api/sites/:id", "PATCH"],
       ["/api/sites/:siteId/tariff-periods", "POST"],
       ["/api/tariff-periods/:id", "DELETE"],
       ["/api/sites/:siteId/readings", "DELETE"],
       ["/api/sites/:siteId/readings/import", "POST"],
       ["/api/parties/:id", "PATCH"],
+      ["/api/parties/:partyId/sensors", "PUT"],
+      ["/api/party-sensors/:id", "DELETE"],
       ["/api/billing/positions/:id", "DELETE"],
       ["/api/sites/:siteId/home-assistant/sync", "POST"],
     ];
@@ -41,6 +46,12 @@ describe("route policy", () => {
 
   it("confines a participant to their own invoice and community context", () => {
     expect(isAllowed("participant", "/api/me", "GET")).toBe(true);
+    // Which sensors a household has is configuration, not theirs to read.
+    expect(isAllowed("participant", "/api/sites/:siteId/party-sensors", "GET")).toBe(false);
+    expect(isAllowed("viewer", "/api/sites/:siteId/party-sensors", "GET")).toBe(true);
+    // Nor are the installation's price feeds.
+    expect(isAllowed("participant", "/api/price-feeds", "GET")).toBe(false);
+    expect(isAllowed("viewer", "/api/price-feeds", "GET")).toBe(true);
     expect(isAllowed("participant", "/api/sites/:siteId/billing/invoices", "GET")).toBe(true);
     expect(isAllowed("participant", "/api/sites/:siteId/community/summary", "GET")).toBe(true);
     // The provider's rates their invoice is built from — not the owner's tariffs.

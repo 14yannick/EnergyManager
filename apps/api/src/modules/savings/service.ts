@@ -21,7 +21,6 @@ import {
   dynamicTariffRates,
   intervalMetrics,
   parties,
-  sites,
   tariffPeriods,
   tariffSurcharges,
 } from "../../db/schema/index.js";
@@ -50,6 +49,7 @@ import {
   summarizeSavings,
   summarizeYearlySavings,
 } from "./engine.js";
+import { plantSettingsOf } from "../sites/plant.js";
 
 /**
  * Every rate that can apply inside the bounds: tariff periods, the day-ahead
@@ -123,8 +123,8 @@ async function loadPricedSlots(
   // exportedKwh deliberately comes only from export_grid, not export_local —
   // locally-shared-to-neighbours energy doesn't feed savings math yet (needs
   // a real per-neighbour allocation model first).
-  const [siteRows, readingRows, resolveRate] = await Promise.all([
-    db.select({ loss: sites.batteryConversionLoss }).from(sites).where(eq(sites.id, siteId)),
+  const [plant, readingRows, resolveRate] = await Promise.all([
+    plantSettingsOf(siteId),
     db
       .select({
         ts: intervalMetrics.ts,
@@ -147,7 +147,12 @@ async function loadPricedSlots(
         // Unpriced: the savings maths never touches it. It is here so the
         // energy-flow view can show where the house's power came from without
         // a second query over the same intervals.
-        importedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'import_grid'), 0)`,
+        //
+        // Only what a *producer's* meter drew. Any member may map their own
+        // grid import now, and a neighbour's draw is not the plant's: it is
+        // not part of this balance at all. A reading with no participant
+        // predates that distinction and was the producer's.
+        importedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'import_grid' and (${intervalMetrics.partyId} is null or ${intervalMetrics.partyId} in (select ${parties.id} from ${parties} where ${parties.siteId} = ${siteId} and ${parties.feedIn}))), 0)`,
       })
       .from(intervalMetrics)
       .where(
@@ -172,7 +177,8 @@ async function loadPricedSlots(
     loadRateResolver(siteId, fromBound, toBoundExclusive),
   ]);
 
-  const batteryConversionLoss = siteRows[0] ? toNumber(siteRows[0].loss) : undefined;
+  // The producers' own figure, combined for the site (see sites/plant.ts).
+  const batteryConversionLoss = plant.batteryConversionLoss;
 
   const slots = readingRows.map((row) => {
     const instantIso = row.ts.toISOString();

@@ -1,4 +1,4 @@
-import { check, date, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, check, date, numeric, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { sites } from "./sites.js";
 
@@ -80,6 +80,52 @@ export const parties = pgTable(
      */
     startDate: date("start_date"),
     endDate: date("end_date"),
+    /**
+     * Whether this member feeds energy in — has a plant behind their meter.
+     *
+     * Deliberately not more values of `role`. The role says what a party is
+     * to the vZEV (member, administrator, onlooker) and every check on it is
+     * about billing or access; this says what their house does, and a member
+     * and an administrator can each be either. Folding it into the role
+     * would have doubled the roles and put a second condition in every one
+     * of those checks. The form still offers it the way people think of it —
+     * "member with feed-in" — as one choice.
+     *
+     * It opens the export sensors (see party_sensors) and the investment
+     * figures. Only meaningful on a member; cleared on anyone else when the
+     * party is saved.
+     */
+    feedIn: boolean("feed_in").notNull().default(false),
+    /**
+     * The plant's own counters are mapped too — inverter, panels, battery,
+     * load — so revenue can be split by where the energy went rather than
+     * read off the export alone. Needs `feedIn`.
+     */
+    detailedRevenue: boolean("detailed_revenue").notNull().default(false),
+    /** The plant's other live readings and its forecast are mapped too. Needs `feedIn`. */
+    detailedLiveView: boolean("detailed_live_view").notNull().default(false),
+    /**
+     * When this participant's plant started producing. Bounds payback:
+     * savings accrued before the panels existed would understate how long
+     * the investment takes to repay. Null means "not stated", in which case
+     * callers fall back to the first day with recorded production.
+     *
+     * A plant's, so the participant's — it used to sit on the site, when a
+     * site had one plant. Part of the detailed revenue option.
+     */
+    productionStartDate: date("production_start_date"),
+    /**
+     * Share of energy lost converting this plant's battery charge to usable
+     * AC, as a fraction. Null means "not stated": the default applies.
+     *
+     * Charging is metered DC while everything priced is AC, so the
+     * opportunity cost of charging — the export forgone — has to be reduced
+     * by whatever the conversion would have cost anyway. Configurable rather
+     * than derived: the implied figure is only stable over a day or more
+     * (hourly it swings from 40% to 400% on counter-read timing), so a
+     * stated value is steadier than a computed one.
+     */
+    batteryConversionLoss: numeric("battery_conversion_loss", { precision: 5, scale: 4 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

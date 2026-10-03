@@ -1,5 +1,5 @@
 import { eq, ne, sql } from "drizzle-orm";
-import type { Party, PartyInput } from "@energy-manager/shared";
+import { effectiveSensorProfile, type Party, type PartyInput } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { parties } from "../../db/schema/index.js";
 
@@ -21,6 +21,12 @@ function toDomain(row: Row): Party {
     iban: row.iban,
     startDate: row.startDate,
     endDate: row.endDate,
+    feedIn: row.feedIn,
+    detailedRevenue: row.detailedRevenue,
+    detailedLiveView: row.detailedLiveView,
+    // drizzle's `date` column is already "YYYY-MM-DD".
+    productionStartDate: row.productionStartDate,
+    batteryConversionLoss: row.batteryConversionLoss == null ? null : Number(row.batteryConversionLoss),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -68,6 +74,37 @@ export async function listParties(siteId: string): Promise<Party[]> {
   return rows.map(toDomain);
 }
 
+/**
+ * The three options as they can hold for this role (see
+ * effectiveSensorProfile): saved that way, so a role changed to "viewer"
+ * does not leave a feed-in flag standing that the form no longer shows.
+ */
+function optionsFor(
+  input: PartyInput,
+  current: Pick<Row, "role" | "feedIn" | "detailedRevenue" | "detailedLiveView"> | null,
+) {
+  const { feedIn, detailedRevenue, detailedLiveView } = effectiveSensorProfile({
+    role: input.role ?? current?.role ?? "rcp_party",
+    feedIn: input.feedIn ?? current?.feedIn ?? false,
+    detailedRevenue: input.detailedRevenue ?? current?.detailedRevenue ?? false,
+    detailedLiveView: input.detailedLiveView ?? current?.detailedLiveView ?? false,
+  });
+  return { feedIn, detailedRevenue, detailedLiveView };
+}
+
+/**
+ * The plant's two figures, only where the request carried them: the main
+ * form does not, and saving a name must not blank a date. Null clears.
+ */
+function plantFiguresFor(input: PartyInput) {
+  return {
+    ...(input.productionStartDate !== undefined ? { productionStartDate: input.productionStartDate } : {}),
+    ...(input.batteryConversionLoss !== undefined
+      ? { batteryConversionLoss: input.batteryConversionLoss == null ? null : input.batteryConversionLoss.toString() }
+      : {}),
+  };
+}
+
 export async function createParty(siteId: string, input: PartyInput): Promise<Party> {
   await assertEmailsUnclaimed(input.emails ?? [], null);
   const [row] = await db
@@ -86,6 +123,8 @@ export async function createParty(siteId: string, input: PartyInput): Promise<Pa
       iban: input.iban ?? null,
       startDate: input.startDate ?? null,
       endDate: input.endDate ?? null,
+      ...optionsFor(input, null),
+      ...plantFiguresFor(input),
     })
     .returning();
   return toDomain(row!);
@@ -93,6 +132,8 @@ export async function createParty(siteId: string, input: PartyInput): Promise<Pa
 
 export async function updateParty(id: string, input: PartyInput): Promise<Party | null> {
   await assertEmailsUnclaimed(input.emails ?? [], id);
+  const [current] = await db.select().from(parties).where(eq(parties.id, id));
+  if (!current) return null;
   const [row] = await db
     .update(parties)
     .set({
@@ -108,6 +149,8 @@ export async function updateParty(id: string, input: PartyInput): Promise<Party 
       iban: input.iban ?? null,
       startDate: input.startDate ?? null,
       endDate: input.endDate ?? null,
+      ...optionsFor(input, current),
+      ...plantFiguresFor(input),
       updatedAt: new Date(),
     })
     .where(eq(parties.id, id))

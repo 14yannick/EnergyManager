@@ -1,6 +1,33 @@
 # Design proposal: several vZEVs, sensors per party
 
-Status: proposal, nothing implemented. Written 2026-10-03.
+Status: proposal, partly implemented. Written 2026-10-03.
+
+**Implemented on 2026-10-04**, differently from the proposal in places:
+
+- Sensors moved from the site to the participant, in `party_sensors`, as
+  proposed. `ha_entity_map` and the `live_*` / `forecast_*` columns on
+  `sites` are gone. The kinds and who may have which live in
+  `packages/shared/src/partySensors.ts`.
+- Feed-in is a flag on the party (`feed_in`), beside two options
+  (`detailed_revenue`, `detailed_live_view`), rather than further roles.
+  The form offers "member with feed-in" as one choice.
+- Readings carry their participant: the sync writes each sensor's rows
+  under the party it belongs to, and existing plant readings were moved to
+  the producing party. `party_id` stays nullable and both partial indexes
+  stay, for a site with no producer.
+- `cost_items` has `party_id`.
+- `production_start_date` and `battery_conversion_loss` moved from the site
+  to the party, under the detailed revenue option. The site-wide views
+  combine the producers' figures (`apps/api/src/modules/sites/plant.ts`).
+- The dynamic price sensor left the site as well: `price_feeds` holds a
+  key and its entity for the installation, and a site references one
+  (`sites.price_feed_id`). Rates are still stored per site.
+- New, not in the proposal: a reading keeps the sensor's figure
+  (`sensor_value_kwh`) beside the value in force. The grid provider's data
+  takes precedence without erasing it.
+
+**Not implemented**: `vzevs`, the tariff join tables, and everything under
+"Open questions". A site still stands for one vZEV.
 
 ## Goal
 

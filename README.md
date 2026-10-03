@@ -32,11 +32,19 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
   the energy-weighted average rate it was priced at. Any line expands into the metering
   intervals behind it, so an average can be traced to the slots that produced it. The
   full engine output over a range, and its CSV export, is folded away underneath
-- **Site administration** holding the participants, the Home Assistant entity mapping, investment
-  costs (battery vs. solar, subsidies, tax reductions), the production start date, and
-  the battery's round-trip conversion loss
+- **Site administration** holding the sites and their participants. A participant's role
+  says what they are to the vZEV; a member can also have **feed-in**, which is what makes
+  them a producer. Sensors are mapped per participant, not per site: every member their grid
+  import, a producer their feed-in, and with the *detailed revenue* and *detailed live view*
+  options the plant's own counters, live readings and forecast. Investment costs (battery vs.
+  solar, subsidies, tax reductions) are entered per producer too, and so are the plant's
+  production start date and its battery's conversion loss, under detailed revenue. The
+  choice of price feed and the sync stay with the site
+- **Sensor readings are provisional**: they count until the grid provider's data for the same
+  interval is imported, which then takes precedence. The sensor's own figure is kept beside it
 - **Integrations** showing the outside services and their state: the Home Assistant
-  connection, the Cloudflare Access sync and the Google Drive archive
+  connection, the price feeds (each a key and the sensor that carries the series), the
+  Cloudflare Access sync and the Google Drive archive
 - **Role-based access** via Cloudflare Access — admin, read-only, and a
   participant role: a neighbour sees the rates they are billed at, but only
   their own consumption and invoices. Off by default; see
@@ -530,8 +538,11 @@ So the pricing stands as it is. Two things follow from it:
 ### Currency
 
 Everything stored and displayed by the app is **CHF**: tariff periods, surcharges,
-and the dynamic feed-in rates read from the Home Assistant sensor chosen for the
-site under Site administration → Home Assistant (its `price` attributes, in CHF/kWh).
+and the dynamic feed-in rates read from a price feed's Home Assistant sensor (its
+`price` attributes, in CHF/kWh). A price feed is defined once under Integrations, with
+a key such as `public_bkw_dynamic_feed_in` and the sensor that carries the series; each
+site then chooses which feed prices its feed-in, under Site administration. The key is
+stored with every rate synced from the feed.
 
 The app does no EUR→CHF conversion of its own on this path — it trusts that
 entity's own values, whatever produced them. That used to be a direct call to

@@ -48,7 +48,22 @@ export const intervalMetrics = pgTable(
     ts: timestamp("ts", { withTimezone: true }).notNull(),
     metricKind: intervalMetricKindEnum("metric_kind").notNull(),
     partyId: uuid("party_id").references(() => parties.id, { onDelete: "cascade" }),
+    /**
+     * The reading that counts — what every total, price and invoice is
+     * computed from. A sensor's figure until the grid provider's arrives for
+     * the same interval; the provider's from then on, since that is what the
+     * bill is settled on. `source` says which of the two it currently is.
+     */
     valueKwh: numeric("value_kwh", { precision: 9, scale: 4 }).notNull().default("0"),
+    /**
+     * What the participant's own sensor said for this interval, kept beside
+     * the value that counts. The provider's data takes precedence over it —
+     * it does not erase it: the sync goes on writing here after the official
+     * figure has taken over `valueKwh`, so the two can be compared and the
+     * sensor's reading is never lost to an import. Null where no sensor ever
+     * reported the interval.
+     */
+    sensorValueKwh: numeric("sensor_value_kwh", { precision: 9, scale: 4 }),
     source: text("source").notNull().default("csv_import"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

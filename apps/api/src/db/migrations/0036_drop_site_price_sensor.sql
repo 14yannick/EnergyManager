@@ -1,0 +1,1 @@
+ALTER TABLE "sites" DROP COLUMN "dynamic_tariff_entity_id";

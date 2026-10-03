@@ -1,17 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { haEntityMappingInputSchema, haSyncRequestSchema } from "@energy-manager/shared";
+import { haSyncRequestSchema } from "@energy-manager/shared";
 import { env } from "../../config/env.js";
 import { syncDynamicTariffs } from "../dynamicTariffs/service.js";
 import { listHaSensorsByDeviceClass } from "./haClient.js";
 import { getLiveEnergyView } from "./liveView.js";
-import {
-  deleteMapping,
-  listHaDynamicTariffEntities,
-  listHaStatistics,
-  listMappings,
-  syncHomeAssistant,
-  upsertMapping,
-} from "./service.js";
+import { listHaDynamicTariffEntities, listHaStatistics, syncHomeAssistant } from "./service.js";
 
 export async function homeAssistantRoutes(app: FastifyInstance) {
   app.get("/api/home-assistant/status", async () => ({
@@ -67,27 +60,6 @@ export async function homeAssistantRoutes(app: FastifyInstance) {
       return view;
     },
   );
-
-  app.get<{ Params: { siteId: string } }>("/api/sites/:siteId/home-assistant/entities", async (req) => {
-    return listMappings(req.params.siteId);
-  });
-
-  app.put<{ Params: { siteId: string } }>(
-    "/api/sites/:siteId/home-assistant/entities",
-    async (req, reply) => {
-      const parsed = haEntityMappingInputSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.status(400).send({ error: "invalid_input", issues: parsed.error.issues });
-      }
-      return upsertMapping(req.params.siteId, parsed.data);
-    },
-  );
-
-  app.delete<{ Params: { id: string } }>("/api/home-assistant/entities/:id", async (req, reply) => {
-    const deleted = await deleteMapping(req.params.id);
-    if (!deleted) return reply.status(404).send({ error: "not_found" });
-    return reply.status(204).send();
-  });
 
   app.post<{ Params: { siteId: string } }>(
     "/api/sites/:siteId/home-assistant/sync",

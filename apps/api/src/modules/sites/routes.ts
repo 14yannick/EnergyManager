@@ -4,30 +4,26 @@ import type { Site } from "@energy-manager/shared";
 import { siteCreateInputSchema, siteUpdateInputSchema } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { sites } from "../../db/schema/index.js";
+import { DEFAULT_BATTERY_CONVERSION_LOSS } from "../savings/engine.js";
+import { plantSettingsBySite, type PlantSettings } from "./plant.js";
 
 type Row = typeof sites.$inferSelect;
 
-function toDomain(row: Row): Site {
+/**
+ * A site with its two plant figures. They are no longer the site's own
+ * columns — they are entered per producer and combined for the site (see
+ * plant.ts) — but the site-wide views still read them here.
+ */
+function toDomain(row: Row, plant: PlantSettings | undefined): Site {
   return {
     id: row.id,
     name: row.name,
     externalUuid: row.externalUuid,
     syncPaused: row.syncPaused,
     timezone: row.timezone,
-    // drizzle's `date` column is already "YYYY-MM-DD".
-    productionStartDate: row.productionStartDate,
-    batteryConversionLoss: Number(row.batteryConversionLoss),
-    dynamicTariffEntityId: row.dynamicTariffEntityId,
-    liveExportPowerEntityId: row.liveExportPowerEntityId,
-    liveExportNegative: row.liveExportNegative,
-    livePvPowerEntityId: row.livePvPowerEntityId,
-    liveBatteryPowerEntityId: row.liveBatteryPowerEntityId,
-    liveBatteryChargeNegative: row.liveBatteryChargeNegative,
-    liveBatterySocEntityId: row.liveBatterySocEntityId,
-    liveLoadPowerEntityId: row.liveLoadPowerEntityId,
-    forecastTodayEntityId: row.forecastTodayEntityId,
-    forecastRemainingEntityId: row.forecastRemainingEntityId,
-    forecastTomorrowEntityId: row.forecastTomorrowEntityId,
+    productionStartDate: plant?.productionStartDate ?? null,
+    batteryConversionLoss: plant?.batteryConversionLoss ?? DEFAULT_BATTERY_CONVERSION_LOSS,
+    priceFeedId: row.priceFeedId,
     driveFolderId: row.driveFolderId,
     driveFolderName: row.driveFolderName,
     createdAt: row.createdAt.toISOString(),
@@ -37,8 +33,8 @@ function toDomain(row: Row): Site {
 
 export async function siteRoutes(app: FastifyInstance) {
   app.get("/api/sites", async (): Promise<Site[]> => {
-    const rows = await db.select().from(sites);
-    return rows.map(toDomain);
+    const [rows, plants] = await Promise.all([db.select().from(sites), plantSettingsBySite()]);
+    return rows.map((row) => toDomain(row, plants.get(row.id)));
   });
 
   /**
@@ -68,7 +64,8 @@ export async function siteRoutes(app: FastifyInstance) {
     // The external identifier starts as the name (see the schema): the two
     // are checked unique together above, since the name is what it is.
     const [row] = await db.insert(sites).values({ name, externalUuid: name }).returning();
-    return reply.status(201).send(toDomain(row!));
+    // Brand new: no participant yet, so no plant to speak of.
+    return reply.status(201).send(toDomain(row!, undefined));
   });
 
   app.patch<{ Params: { id: string } }>("/api/sites/:id", async (req, reply) => {
@@ -76,10 +73,8 @@ export async function siteRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: "invalid_input", issues: parsed.error.issues });
     }
-    // Only fields the request actually carried are written, so the Settings
-    // page can save one section without blanking another. `productionStartDate`
-    // keeps its old behaviour of being cleared by an absent value, because its
-    // input sends an empty string to mean "not stated".
+    // Only fields the request actually carried are written, so the page can
+    // save one section without blanking another.
     const d = parsed.data;
     const set = <K extends string, V>(key: K, value: V | undefined) =>
       value === undefined ? {} : ({ [key]: value } as Record<K, V>);
@@ -87,25 +82,13 @@ export async function siteRoutes(app: FastifyInstance) {
     const [row] = await db
       .update(sites)
       .set({
-        productionStartDate: d.productionStartDate ?? null,
-        ...set("batteryConversionLoss", d.batteryConversionLoss?.toString()),
-        ...set("dynamicTariffEntityId", d.dynamicTariffEntityId),
-        ...set("liveExportPowerEntityId", d.liveExportPowerEntityId),
-        ...set("liveExportNegative", d.liveExportNegative),
-        ...set("livePvPowerEntityId", d.livePvPowerEntityId),
-        ...set("liveBatteryPowerEntityId", d.liveBatteryPowerEntityId),
-        ...set("liveBatteryChargeNegative", d.liveBatteryChargeNegative),
-        ...set("liveBatterySocEntityId", d.liveBatterySocEntityId),
-        ...set("liveLoadPowerEntityId", d.liveLoadPowerEntityId),
-        ...set("forecastTodayEntityId", d.forecastTodayEntityId),
-        ...set("forecastRemainingEntityId", d.forecastRemainingEntityId),
-        ...set("forecastTomorrowEntityId", d.forecastTomorrowEntityId),
+        ...set("priceFeedId", d.priceFeedId),
         ...set("syncPaused", d.syncPaused),
         updatedAt: new Date(),
       })
       .where(eq(sites.id, req.params.id))
       .returning();
     if (!row) return reply.status(404).send({ error: "not_found" });
-    return toDomain(row);
+    return toDomain(row, (await plantSettingsBySite(row.id)).get(row.id));
   });
 }

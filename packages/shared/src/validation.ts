@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PARTY_SENSOR_KINDS } from "./partySensors.js";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
 
@@ -85,32 +86,42 @@ export const siteCreateInputSchema = z.object({
 export type SiteCreateInput = z.infer<typeof siteCreateInputSchema>;
 
 export const siteUpdateInputSchema = z.object({
-  productionStartDate: optionalWhenBlank(isoDate).nullable(),
-  // A fraction, not a percentage — the form divides before sending.
-  batteryConversionLoss: z.coerce.number().min(0).max(0.9).optional(),
   // Omitted entirely: leave the stored value untouched (so saving one
-  // Settings section never blanks another). Explicit null: clear it, which
-  // leaves the site with no dynamic feed-in rates to sync.
-  dynamicTariffEntityId: z.string().trim().min(1).max(200).nullable().optional(),
-  // Same three states as above, one per live-view entity.
-  liveExportPowerEntityId: z.string().trim().min(1).max(200).nullable().optional(),
-  liveExportNegative: z.boolean().optional(),
-  livePvPowerEntityId: z.string().trim().min(1).max(200).nullable().optional(),
-  liveBatteryPowerEntityId: z.string().trim().min(1).max(200).nullable().optional(),
-  liveBatteryChargeNegative: z.boolean().optional(),
-  liveBatterySocEntityId: z.string().trim().min(1).max(200).nullable().optional(),
-  liveLoadPowerEntityId: z.string().trim().min(1).max(200).nullable().optional(),
-  forecastTodayEntityId: z.string().trim().min(1).max(200).nullable().optional(),
-  forecastRemainingEntityId: z.string().trim().min(1).max(200).nullable().optional(),
-  forecastTomorrowEntityId: z.string().trim().min(1).max(200).nullable().optional(),
+  // section never blanks another). Explicit null: clear it, which leaves
+  // the site with no dynamic feed-in rates to sync.
+  priceFeedId: z.string().uuid().nullable().optional(),
   // Omitted: untouched, like the rest.
   syncPaused: z.boolean().optional(),
 });
 export type SiteUpdateInput = z.infer<typeof siteUpdateInputSchema>;
 
+/**
+ * A price feed's key: what the series is called everywhere else, so it is
+ * kept to what reads the same in a URL, a log line and a database column.
+ */
+export const priceFeedKeySchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(64)
+  .regex(/^[a-z0-9]+(_[a-z0-9]+)*$/, "Lower-case letters, digits and underscores only, e.g. public_bkw_dynamic_feed_in");
+
+export const priceFeedInputSchema = z.object({
+  key: priceFeedKeySchema,
+  label: optionalWhenBlank(z.string().trim().max(120)).nullable(),
+  entityId: z.string().trim().min(1).max(200),
+});
+export type PriceFeedInput = z.infer<typeof priceFeedInputSchema>;
+
 export const costCategorySchema = z.enum(["battery", "solar"]);
 
 export const costItemInputSchema = z.object({
+  /**
+   * The participant whose plant the money went into. Required to create an
+   * item; an update leaves it where it is, so it is optional here and the
+   * route insists on it for a POST.
+   */
+  partyId: z.string().uuid().optional(),
   category: costCategorySchema,
   label: z.string().trim().min(1).max(200),
   amountChf: z.number(),
@@ -138,12 +149,21 @@ export const intervalMetricKindSchema = z.enum([
 
 export const haGranularitySchema = z.enum(["quarter_hour", "hour"]);
 
-export const haEntityMappingInputSchema = z.object({
-  metricKind: intervalMetricKindSchema,
-  statisticId: z.string().trim().min(1).max(255),
+export const partySensorKindSchema = z.enum(PARTY_SENSOR_KINDS);
+
+/**
+ * One sensor of a participant, set by kind: sending a kind again replaces
+ * the entity behind it. Whether the participant may have that kind at all
+ * is decided against their role and options in the route, where the party
+ * is known (see sensorKindAllowed).
+ */
+export const partySensorInputSchema = z.object({
+  kind: partySensorKindSchema,
+  entityId: z.string().trim().min(1).max(255),
+  inverted: z.boolean().optional().default(false),
   enabled: z.boolean().optional().default(true),
 });
-export type HaEntityMappingInput = z.input<typeof haEntityMappingInputSchema>;
+export type PartySensorInput = z.input<typeof partySensorInputSchema>;
 
 export const billingCategorySchema = z.enum(["energie", "netznutzung", "messung", "abgaben"]);
 export const billingAllocationSchema = z.enum(["per_kwh", "per_kwh_total", "pool_shared", "per_participant"]);
@@ -184,6 +204,24 @@ export const partyInputSchema = z.object({
   /** When this party's membership starts/ends — blank means no bound either way. */
   startDate: optionalWhenBlank(isoDate).nullable(),
   endDate: optionalWhenBlank(isoDate).nullable(),
+  /**
+   * Feed-in and the two detailed options (see Party). Omitted means
+   * untouched on an update and off on a create. What cannot hold — feed-in
+   * on a viewer, a detailed option without feed-in — is cleared when the
+   * party is saved rather than refused here: changing a role must not fail
+   * on an option the form no longer even shows.
+   */
+  feedIn: z.boolean().optional(),
+  detailedRevenue: z.boolean().optional(),
+  detailedLiveView: z.boolean().optional(),
+  /**
+   * The plant's own two figures (see Party). Omitted: untouched — the main
+   * form does not carry them, and saving a name must not blank a date.
+   * Null: cleared, back to "not stated".
+   */
+  productionStartDate: isoDate.nullable().optional(),
+  // A fraction, not a percentage — the form divides before sending.
+  batteryConversionLoss: z.coerce.number().min(0).max(0.9).nullable().optional(),
 }).refine((v) => !v.startDate || !v.endDate || v.endDate > v.startDate, {
   message: "End date must be after the start date.",
   path: ["endDate"],

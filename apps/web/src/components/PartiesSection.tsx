@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { swissDate, type PartyRole } from "@energy-manager/shared";
+import { isVzevMember, swissDate, type Party, type PartyRole } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { useT, type MessageKey } from "../i18n/context";
+import { PartyInvestment } from "./PartyInvestment";
+import { PartyPlant } from "./PartyPlant";
+import { PartySensors } from "./PartySensors";
 
 /**
  * The site's parties: who is in it, in which role, and under which
@@ -23,6 +26,10 @@ const EMPTY_PARTY = {
   // The operator is the party that bills the others; their IBAN is what the
   // QR-bill is payable to.
   role: "rcp_party" as PartyRole,
+  // Whether the member has a plant, and how much of it is mapped (see Party).
+  feedIn: false,
+  detailedRevenue: false,
+  detailedLiveView: false,
   iban: "",
   // Membership bounds — a tenant moving in or out mid-period, say. Blank
   // means no bound either way, which is what almost every party has.
@@ -31,18 +38,86 @@ const EMPTY_PARTY = {
 };
 
 /**
- * Why each role exists, in the order somebody picks from. `rcp_party` first
- * because it is what almost every row is.
+ * What a participant can be, in the order somebody picks from — `rcp_party`
+ * first because it is what almost every row is.
+ *
+ * Six choices over two stored things: the role, and whether the member
+ * feeds in. They are kept apart in the database (see `parties.feedIn`) and
+ * offered together here, because "a member with feed-in" is how the person
+ * filling in the form thinks of it.
  */
-const ROLE_OPTIONS: Array<{ role: PartyRole; label: MessageKey; hint: MessageKey }> = [
-  { role: "rcp_party", label: "parties.role.party", hint: "parties.role.partyHint" },
-  { role: "rcp_admin", label: "parties.role.admin", hint: "parties.role.adminHint" },
-  { role: "rcp_admin_only", label: "parties.role.adminOnly", hint: "parties.role.adminOnlyHint" },
-  { role: "viewer", label: "parties.role.viewer", hint: "parties.role.viewerHint" },
+type RoleChoice = "party" | "partyFeedIn" | "admin" | "adminFeedIn" | "adminOnly" | "viewer";
+const ROLE_CHOICES: Array<{ choice: RoleChoice; role: PartyRole; feedIn: boolean; label: MessageKey; hint: MessageKey }> = [
+  { choice: "party", role: "rcp_party", feedIn: false, label: "parties.role.party", hint: "parties.role.partyHint" },
+  { choice: "partyFeedIn", role: "rcp_party", feedIn: true, label: "parties.role.partyFeedIn", hint: "parties.role.partyFeedInHint" },
+  { choice: "admin", role: "rcp_admin", feedIn: false, label: "parties.role.admin", hint: "parties.role.adminHint" },
+  { choice: "adminFeedIn", role: "rcp_admin", feedIn: true, label: "parties.role.adminFeedIn", hint: "parties.role.adminFeedInHint" },
+  { choice: "adminOnly", role: "rcp_admin_only", feedIn: false, label: "parties.role.adminOnly", hint: "parties.role.adminOnlyHint" },
+  { choice: "viewer", role: "viewer", feedIn: false, label: "parties.role.viewer", hint: "parties.role.viewerHint" },
 ];
-const ROLE_LABEL = Object.fromEntries(
-  ROLE_OPTIONS.map((o) => [o.role, o.label]),
-) as Record<PartyRole, MessageKey>;
+const choiceOf = (v: { role: PartyRole; feedIn: boolean }) =>
+  ROLE_CHOICES.find((c) => c.role === v.role && c.feedIn === (v.feedIn && isVzevMember(v.role))) ?? ROLE_CHOICES[0]!;
+
+/**
+ * The role, and under it the two options a plant opens. One control for the
+ * add form and the edit row, so the two cannot offer different choices.
+ */
+function RoleFields<V extends { role: PartyRole; feedIn: boolean; detailedRevenue: boolean; detailedLiveView: boolean }>({
+  value,
+  onChange,
+  selectClass,
+}: {
+  value: V;
+  onChange: (next: V) => void;
+  selectClass: string;
+}) {
+  const t = useT();
+  return (
+    <>
+      <select
+        className={selectClass}
+        value={choiceOf(value).choice}
+        onChange={(e) => {
+          const picked = ROLE_CHOICES.find((c) => c.choice === e.target.value)!;
+          // Leaving feed-in takes the two options with it: they describe a plant.
+          onChange({
+            ...value,
+            role: picked.role,
+            feedIn: picked.feedIn,
+            detailedRevenue: picked.feedIn && value.detailedRevenue,
+            detailedLiveView: picked.feedIn && value.detailedLiveView,
+          });
+        }}
+      >
+        {ROLE_CHOICES.map((o) => (
+          <option key={o.choice} value={o.choice} title={t(o.hint)}>
+            {t(o.label)}
+          </option>
+        ))}
+      </select>
+      {value.feedIn && (
+        <span className="flex flex-col gap-1 pt-1 text-xs font-normal text-slate-700">
+          <label className="flex items-center gap-2" title={t("parties.detailedRevenueHint")}>
+            <input
+              type="checkbox"
+              checked={value.detailedRevenue}
+              onChange={(e) => onChange({ ...value, detailedRevenue: e.target.checked })}
+            />
+            {t("parties.detailedRevenue")}
+          </label>
+          <label className="flex items-center gap-2" title={t("parties.detailedLiveViewHint")}>
+            <input
+              type="checkbox"
+              checked={value.detailedLiveView}
+              onChange={(e) => onChange({ ...value, detailedLiveView: e.target.checked })}
+            />
+            {t("parties.detailedLiveView")}
+          </label>
+        </span>
+      )}
+    </>
+  );
+}
 
 /** One address per line, or comma-separated — whichever the user finds natural. */
 function parseEmails(raw: string): string[] {
@@ -52,22 +127,31 @@ function parseEmails(raw: string): string[] {
     .filter((e) => e !== "");
 }
 
-export function PartiesSection({ siteId }: { siteId: string }) {
+export function PartiesSection({ siteId, canEdit = true }: { siteId: string; canEdit?: boolean }) {
   const t = useT();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState({ ...EMPTY_PARTY });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [edit, setEdit] = useState({ ...EMPTY_PARTY });
   const [error, setError] = useState<string | null>(null);
+  // Whose sensors (and investment) are open below their row — one at a time.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const partiesQuery = useQuery({
     queryKey: ["parties", siteId],
     queryFn: () => api.parties.list(siteId),
   });
+  const sensorsQuery = useQuery({
+    queryKey: ["party-sensors", siteId],
+    queryFn: () => api.partySensors.list(siteId),
+  });
+  const sensorsOf = (party: Party) => (sensorsQuery.data ?? []).filter((x) => x.partyId === party.id);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["parties", siteId] });
     void queryClient.invalidateQueries({ queryKey: ["billing-invoices", siteId] });
+    // A role or an option changed decides which sensors count.
+    void queryClient.invalidateQueries({ queryKey: ["party-sensors", siteId] });
   };
   const toInput = (v: typeof EMPTY_PARTY) => ({
     name: v.name.trim(),
@@ -78,6 +162,9 @@ export function PartiesSection({ siteId }: { siteId: string }) {
     zip: v.zip.trim(),
     city: v.city.trim(),
     role: v.role,
+    feedIn: v.feedIn,
+    detailedRevenue: v.detailedRevenue,
+    detailedLiveView: v.detailedLiveView,
     iban: v.iban.trim(),
     startDate: v.startDate,
     endDate: v.endDate,
@@ -197,17 +284,7 @@ export function PartiesSection({ siteId }: { siteId: string }) {
         </label>
         <label className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
           {t("parties.role")}
-          <select
-            className="input w-40"
-            value={draft.role}
-            onChange={(e) => setDraft({ ...draft, role: e.target.value as PartyRole })}
-          >
-            {ROLE_OPTIONS.map((o) => (
-              <option key={o.role} value={o.role} title={t(o.hint)}>
-                {t(o.label)}
-              </option>
-            ))}
-          </select>
+          <RoleFields value={draft} onChange={setDraft} selectClass="input w-56" />
         </label>
         <label className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
           {t("parties.startDate")}
@@ -254,8 +331,10 @@ export function PartiesSection({ siteId }: { siteId: string }) {
           <tbody>
             {parties.map((p) => {
               const isEditing = editingId === p.id;
+              const open = openId === p.id && isVzevMember(p.role);
               return (
-                <tr key={p.id} className="border-t align-top">
+                <Fragment key={p.id}>
+                <tr className="border-t align-top">
                   <td className="py-2 pr-3">
                     {isEditing ? (
                       <input
@@ -339,17 +418,7 @@ export function PartiesSection({ siteId }: { siteId: string }) {
                   <td className="py-2 pr-3">
                     {isEditing ? (
                       <div className="flex flex-col gap-1">
-                        <select
-                          className="input w-40"
-                          value={edit.role}
-                          onChange={(e) => setEdit({ ...edit, role: e.target.value as PartyRole })}
-                        >
-                          {ROLE_OPTIONS.map((o) => (
-                            <option key={o.role} value={o.role} title={t(o.hint)}>
-                              {t(o.label)}
-                            </option>
-                          ))}
-                        </select>
+                        <RoleFields value={edit} onChange={setEdit} selectClass="input w-52" />
                         <input
                           className="input w-52"
                           placeholder="IBAN"
@@ -358,13 +427,23 @@ export function PartiesSection({ siteId }: { siteId: string }) {
                         />
                       </div>
                     ) : (
-                      <span className={p.role === "rcp_party" ? "text-slate-400" : "text-slate-900"}>
-                        {t(ROLE_LABEL[p.role])}
+                      <span className={p.role === "rcp_party" && !p.feedIn ? "text-slate-400" : "text-slate-900"}>
+                        {t(choiceOf(p).label)}
                         {p.role === "rcp_admin" || p.role === "rcp_admin_only" ? (
                           <span className="ml-2 font-mono text-xs text-slate-500">
                             {p.iban ?? t("parties.noIban")}
                           </span>
                         ) : null}
+                        {(p.detailedRevenue || p.detailedLiveView) && (
+                          <span className="block text-xs text-slate-500">
+                            {[
+                              p.detailedRevenue ? t("parties.detailedRevenue") : null,
+                              p.detailedLiveView ? t("parties.detailedLiveView") : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        )}
                       </span>
                     )}
                   </td>
@@ -408,6 +487,16 @@ export function PartiesSection({ siteId }: { siteId: string }) {
                       </>
                     ) : (
                       <>
+                        {/* Only a member of the vZEV has a meter to put a sensor on. */}
+                        {isVzevMember(p.role) && (
+                          <button
+                            onClick={() => setOpenId(openId === p.id ? null : p.id)}
+                            aria-expanded={openId === p.id}
+                            className={`mr-3 ${openId === p.id ? "font-medium text-slate-900" : "text-slate-500 hover:text-slate-900"}`}
+                          >
+                            {t("parties.sensors", { count: sensorsOf(p).length })}
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setError(null);
@@ -421,6 +510,9 @@ export function PartiesSection({ siteId }: { siteId: string }) {
                               zip: p.zip ?? "",
                               city: p.city ?? "",
                               role: p.role,
+                              feedIn: p.feedIn,
+                              detailedRevenue: p.detailedRevenue,
+                              detailedLiveView: p.detailedLiveView,
                               iban: p.iban ?? "",
                               startDate: p.startDate ?? "",
                               endDate: p.endDate ?? "",
@@ -440,11 +532,26 @@ export function PartiesSection({ siteId }: { siteId: string }) {
                     )}
                   </td>
                 </tr>
+                {open && (
+                  <tr>
+                    <td colSpan={7} className="pb-4">
+                      {/* The participant's own configuration, under their row:
+                          sensors for every member; with detailed revenue the
+                          plant's own figures; with feed-in what it cost. */}
+                      <div className="space-y-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                        <PartySensors siteId={siteId} party={p} sensors={sensorsOf(p)} canEdit={canEdit} />
+                        {p.feedIn && p.detailedRevenue && <PartyPlant siteId={siteId} party={p} canEdit={canEdit} />}
+                        {p.feedIn && <PartyInvestment siteId={siteId} party={p} canEdit={canEdit} />}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
             {parties.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-6 text-center text-slate-400">
+                <td colSpan={7} className="py-6 text-center text-slate-400">
                   {t("parties.empty")}
                 </td>
               </tr>

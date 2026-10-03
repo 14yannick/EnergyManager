@@ -1,3 +1,5 @@
+import type { PartySensorKind } from "./partySensors.js";
+
 export interface Site {
   id: string;
   name: string;
@@ -9,31 +11,25 @@ export interface Site {
   /** The scheduled Home Assistant pull leaves this site alone. */
   syncPaused: boolean;
   timezone: string;
-  /** "YYYY-MM-DD", or null when not stated. */
+  /**
+   * When the site started producing: the earliest date stated by one of its
+   * producers. "YYYY-MM-DD", or null when none states one. Read-only here —
+   * the date is a plant's, entered on the participant it belongs to (see
+   * Party.productionStartDate), and this is what the site-wide views use.
+   */
   productionStartDate: string | null;
-  /** Fraction (0-1) of battery charge lost to conversion. Defaults to 0.1. */
+  /**
+   * Fraction (0-1) of battery charge lost to conversion, as the site-wide
+   * savings apply it: the producers' own figures averaged, 0.1 where none
+   * states one. Read-only, like the start date (see Party.batteryConversionLoss).
+   */
   batteryConversionLoss: number;
   /**
-   * The Home Assistant entity the dynamic feed-in sync reads for this site,
-   * e.g. "sensor.dynamic_tariff". Null means this site syncs no dynamic
-   * rates at all.
+   * The price feed that prices this site's feed-in — one of the
+   * installation's (see PriceFeed), chosen by its key. Null means this
+   * site syncs no dynamic rates at all.
    */
-  dynamicTariffEntityId: string | null;
-  /**
-   * Live Home Assistant entities behind the participants' "right now" view.
-   * Read on demand, never stored. Null leaves that figure off the view.
-   */
-  liveExportPowerEntityId: string | null;
-  /** True when that sensor reads negative while feeding the grid (grid-sign convention). */
-  liveExportNegative: boolean;
-  livePvPowerEntityId: string | null;
-  liveBatteryPowerEntityId: string | null;
-  liveBatteryChargeNegative: boolean;
-  liveBatterySocEntityId: string | null;
-  liveLoadPowerEntityId: string | null;
-  forecastTodayEntityId: string | null;
-  forecastRemainingEntityId: string | null;
-  forecastTomorrowEntityId: string | null;
+  priceFeedId: string | null;
   /** The Drive folder generated invoice PDFs archive to. Null means none. */
   driveFolderId: string | null;
   /** The folder's own name as of when it was connected — cosmetic only. */
@@ -116,6 +112,8 @@ export interface TariffSurcharge {
 export interface CostItem {
   id: string;
   siteId: string;
+  /** The participant whose plant this was spent on — one with feed-in. */
+  partyId: string;
   category: CostCategory;
   label: string;
   amountChf: number; // negative = subsidy / tax reduction
@@ -180,6 +178,30 @@ export interface Party {
   /** When this party's membership starts/ends — null means no bound either way. */
   startDate: string | null;
   endDate: string | null;
+  /**
+   * Whether this member feeds energy in — has a plant behind their meter.
+   * Independent of the role, which says what they are to the vZEV; this
+   * says what their house does. It is what opens the export sensors and the
+   * investment figures (see partySensors.ts). Only ever true for a member.
+   */
+  feedIn: boolean;
+  /** The plant's own counters are mapped too, so revenue can be split by where the energy went. */
+  detailedRevenue: boolean;
+  /** The plant's other live readings and its forecast are mapped too. */
+  detailedLiveView: boolean;
+  /**
+   * When this participant's plant started producing, "YYYY-MM-DD". Bounds
+   * payback, so days before the panels existed do not count as days that
+   * earned nothing. Null means not stated. Part of the detailed revenue
+   * option: only read while that is on.
+   */
+  productionStartDate: string | null;
+  /**
+   * Fraction (0-1) of this plant's battery charge lost to conversion. Null
+   * means not stated, and the default of 0.1 applies. Part of the detailed
+   * revenue option, like the start date.
+   */
+  batteryConversionLoss: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -217,16 +239,42 @@ export interface IntervalMetric {
 }
 
 /**
- * Which Home Assistant statistic feeds which metric kind. Entity ids encode
- * the user's own device names, so the mapping is configuration rather than
+ * One Home Assistant sensor mapped to a participant: what it measures
+ * (`kind`, see partySensors.ts) and which entity reports it. Entity ids
+ * encode the user's own device names, so this is configuration rather than
  * something the code can assume.
  */
-export interface HaEntityMapping {
+export interface PartySensor {
   id: string;
-  siteId: string;
-  metricKind: IntervalMetricKind;
-  statisticId: string;
+  partyId: string;
+  kind: PartySensorKind;
+  /** A statistic id for a stored kind, an entity id for a live one — the same string in practice. */
+  entityId: string;
+  /** The sensor reads negative in the direction its kind names (exporting, charging). */
+  inverted: boolean;
   enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A published price series the installation reads, known by its key —
+ * "public_bkw_dynamic_feed_in", say. Defined once under Integrations; a
+ * site chooses which one prices its feed-in. The key is stamped on every
+ * rate synced from the feed, as its source.
+ */
+export interface PriceFeed {
+  id: string;
+  /** Lower-case letters, digits and underscores; unique across the installation. */
+  key: string;
+  /** What the feed is, for somebody choosing between several. */
+  label: string | null;
+  /** What it prices — feed-in is the only kind published dynamically today. */
+  kind: TariffKind;
+  /** The Home Assistant price-forecast entity that carries the series. */
+  entityId: string;
+  /** How many sites are priced by it — a feed in use is not deleted lightly. */
+  siteCount: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -43,6 +43,8 @@ export function IntegrationsPage() {
 
       <HomeAssistantSection />
 
+      <PriceFeedsSection canEdit={canEdit} />
+
       <CloudflareAccessSection canEdit={canEdit} />
 
       <GoogleDriveSection site={site} canEdit={canEdit} />
@@ -79,6 +81,206 @@ function HomeAssistantSection() {
             ? t("settings.haSyncing", { minutes: status.syncIntervalMinutes ?? 0 })
             : t("settings.haSyncOff")}
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The published price series the installation reads, each under a key.
+ *
+ * A price is not behind anybody's meter: it is published, and it prices
+ * every site that sells to the same provider. So it is defined here, once —
+ * the key the series goes by, and the Home Assistant entity that carries
+ * it — and a site only chooses which feed prices its feed-in (Site
+ * administration). The key is stamped on every rate synced from the feed.
+ */
+function PriceFeedsSection({ canEdit }: { canEdit: boolean }) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ key: "", label: "", entityId: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [edit, setEdit] = useState({ key: "", label: "", entityId: "" });
+
+  const feedsQuery = useQuery({ queryKey: ["price-feeds"], queryFn: api.priceFeeds.list });
+  // Not a statistic (no `sum`), so it has its own list — this is what makes
+  // it possible to select a live price-forecast sensor by name instead of
+  // typing it.
+  const entitiesQuery = useQuery({
+    queryKey: ["ha-dynamic-tariff-entities"],
+    queryFn: api.homeAssistant.dynamicTariffEntities,
+  });
+
+  const done = () => {
+    setError(null);
+    void queryClient.invalidateQueries({ queryKey: ["price-feeds"] });
+    // A deleted feed leaves its sites without one.
+    void queryClient.invalidateQueries({ queryKey: ["sites"] });
+  };
+  const fail = (e: Error) => setError(e.message);
+  const createMutation = useMutation({
+    mutationFn: () => api.priceFeeds.create({ key: draft.key.trim(), label: draft.label, entityId: draft.entityId }),
+    onSuccess: () => {
+      setDraft({ key: "", label: "", entityId: "" });
+      done();
+    },
+    onError: fail,
+  });
+  const updateMutation = useMutation({
+    mutationFn: () => api.priceFeeds.update(editingId!, { key: edit.key.trim(), label: edit.label, entityId: edit.entityId }),
+    onSuccess: () => {
+      setEditingId(null);
+      done();
+    },
+    onError: fail,
+  });
+  const deleteMutation = useMutation({ mutationFn: (id: string) => api.priceFeeds.remove(id), onSuccess: done, onError: fail });
+
+  const feeds = feedsQuery.data ?? [];
+  const candidates = entitiesQuery.data ?? [];
+  /** The entities Home Assistant offers, plus a saved one it no longer lists — a choice never vanishes from its own dropdown. */
+  const entityOptions = (current: string) =>
+    current && !candidates.some((o) => o.entityId === current)
+      ? [...candidates, { entityId: current, friendlyName: null, priceComponent: null, unit: null }]
+      : candidates;
+  const entitySelect = (value: string, onChange: (v: string) => void) => (
+    <select
+      className="input w-full max-w-md"
+      value={value}
+      disabled={entitiesQuery.isLoading}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">{t("integrations.priceFeedPickEntity")}</option>
+      {entityOptions(value).map((o) => (
+        <option key={o.entityId} value={o.entityId}>
+          {o.entityId}
+          {o.friendlyName ? ` · ${o.friendlyName}` : ""}
+          {o.priceComponent ? ` (${o.priceComponent})` : ""}
+        </option>
+      ))}
+    </select>
+  );
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-white p-4">
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">{t("integrations.priceFeeds")}</h2>
+        <p className="mt-1 max-w-3xl text-xs text-slate-500">{t("integrations.priceFeedsNote")}</p>
+      </div>
+
+      {entitiesQuery.isError && (
+        <p className="text-sm text-red-600 dark:text-red-400">
+          {t("settings.statListFailed", { message: (entitiesQuery.error as Error).message })}
+        </p>
+      )}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-slate-500">
+            <tr>
+              <th className="py-1 pr-4 font-medium">{t("integrations.priceFeedKey")}</th>
+              <th className="py-1 pr-4 font-medium">{t("integrations.priceFeedLabel")}</th>
+              <th className="py-1 pr-4 font-medium">{t("integrations.priceFeedEntity")}</th>
+              <th className="py-1 pr-4 font-medium">{t("integrations.priceFeedSites")}</th>
+              <th className="py-1" />
+            </tr>
+          </thead>
+          <tbody>
+            {feeds.map((f) =>
+              editingId === f.id ? (
+                <tr key={f.id} className="border-t align-top">
+                  <td className="py-2 pr-4">
+                    <input className="input w-64 font-mono" value={edit.key} onChange={(e) => setEdit({ ...edit, key: e.target.value })} />
+                  </td>
+                  <td className="py-2 pr-4">
+                    <input className="input w-56" value={edit.label} onChange={(e) => setEdit({ ...edit, label: e.target.value })} />
+                  </td>
+                  <td className="py-2 pr-4">{entitySelect(edit.entityId, (entityId) => setEdit({ ...edit, entityId }))}</td>
+                  <td className="py-2 pr-4 tabular-nums text-slate-600">{f.siteCount}</td>
+                  <td className="whitespace-nowrap py-2 text-right">
+                    <button
+                      onClick={() => updateMutation.mutate()}
+                      disabled={updateMutation.isPending || !edit.key.trim() || !edit.entityId}
+                      className="mr-3 font-medium text-slate-900 disabled:opacity-50"
+                    >
+                      {t("common.save")}
+                    </button>
+                    <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-slate-700">
+                      {t("common.cancel")}
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={f.id} className="border-t align-top">
+                  <td className="py-2 pr-4 font-mono text-slate-900">{f.key}</td>
+                  <td className="py-2 pr-4 text-slate-600">{f.label ?? "—"}</td>
+                  <td className="py-2 pr-4 text-slate-600">{f.entityId}</td>
+                  <td className="py-2 pr-4 tabular-nums text-slate-600">{f.siteCount}</td>
+                  <td className="whitespace-nowrap py-2 text-right">
+                    {canEdit && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setError(null);
+                            setEditingId(f.id);
+                            setEdit({ key: f.key, label: f.label ?? "", entityId: f.entityId });
+                          }}
+                          className="mr-3 text-slate-500 hover:text-slate-900"
+                        >
+                          {t("common.edit")}
+                        </button>
+                        <button onClick={() => deleteMutation.mutate(f.id)} className="text-slate-400 hover:text-red-600">
+                          {t("common.delete")}
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ),
+            )}
+            {feedsQuery.isSuccess && feeds.length === 0 && (
+              <tr className="border-t">
+                <td colSpan={5} className="py-3 text-slate-400">
+                  {t("integrations.priceFeedsEmpty")}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {canEdit && (
+        <form
+          className="flex flex-wrap items-end gap-3 border-t pt-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            createMutation.mutate();
+          }}
+        >
+          <Field label={t("integrations.priceFeedKey")} hint={t("integrations.priceFeedKeyHint")}>
+            <input
+              className="input w-64 font-mono"
+              placeholder="public_bkw_dynamic_feed_in"
+              value={draft.key}
+              onChange={(e) => setDraft({ ...draft, key: e.target.value })}
+            />
+          </Field>
+          <Field label={t("integrations.priceFeedLabel")} hint={t("integrations.priceFeedLabelHint")}>
+            <input className="input w-56" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+          </Field>
+          <Field label={t("integrations.priceFeedEntity")} hint={t("integrations.priceFeedEntityHint")}>
+            {entitySelect(draft.entityId, (entityId) => setDraft({ ...draft, entityId }))}
+          </Field>
+          <button
+            type="submit"
+            disabled={createMutation.isPending || !draft.key.trim() || !draft.entityId}
+            className="btn-primary self-center px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {t("common.add")}
+          </button>
+        </form>
       )}
     </div>
   );

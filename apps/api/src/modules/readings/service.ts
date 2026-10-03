@@ -29,10 +29,41 @@ async function resolvePartyIds(siteId: string, names: string[]): Promise<Map<str
   return new Map(rows.map((r) => [r.name, r.id]));
 }
 
+/** The file's plant readings name no participant, and the site has more than one producer to choose from. */
+export class AmbiguousProducerError extends Error {
+  constructor(readonly producers: string[]) {
+    super(
+      `This site has several participants with feed-in (${producers.join(", ")}), and the file's plant readings do not say whose they are.`,
+    );
+    this.name = "AmbiguousProducerError";
+  }
+}
+
+/**
+ * Whose the file's plant readings are — production, export, battery and the
+ * rest, which the CSV carries without a participant.
+ *
+ * The site's one producer, when it has exactly one: that is every
+ * installation so far, and it keeps the file format unchanged. With none,
+ * the rows are stored without a participant, as they always were. With
+ * several the file cannot say, and guessing would credit one household with
+ * another's production.
+ */
+async function producerOf(siteId: string): Promise<string | null> {
+  const producers = await db
+    .select({ id: parties.id, name: parties.name })
+    .from(parties)
+    .where(and(eq(parties.siteId, siteId), eq(parties.feedIn, true)));
+  if (producers.length > 1) throw new AmbiguousProducerError(producers.map((p) => p.name));
+  return producers[0]?.id ?? null;
+}
+
 export async function upsertReadings(
   siteId: string,
   rows: ParsedMetricRow[],
 ): Promise<{ inserted: number; updated: number }> {
+  const hasPlantRows = rows.some((r) => r.party === null);
+  const producerId = hasPlantRows ? await producerOf(siteId) : null;
   const partyIdByName = await resolvePartyIds(
     siteId,
     rows.filter((r): r is ParsedMetricRow & { party: string } => r.party !== null).map((r) => r.party),
@@ -42,8 +73,14 @@ export async function upsertReadings(
   let updated = 0;
 
   for (const batch of chunk(rows, 500)) {
-    const withoutParty = batch.filter((r) => r.party === null);
-    const withParty = batch.filter((r) => r.party !== null);
+    // A plant reading belongs to the producer where there is one; only a
+    // site without any keeps rows with no participant.
+    const owned = batch.map((r) => ({
+      ...r,
+      partyId: r.party !== null ? partyIdByName.get(r.party)! : producerId,
+    }));
+    const withoutParty = owned.filter((r) => r.partyId === null);
+    const withParty = owned.filter((r) => r.partyId !== null);
 
     if (withoutParty.length > 0) {
       const result = await db
@@ -61,7 +98,12 @@ export async function upsertReadings(
         .onConflictDoUpdate({
           target: [intervalMetrics.siteId, intervalMetrics.ts, intervalMetrics.metricKind],
           targetWhere: sql`${intervalMetrics.partyId} IS NULL`,
-          set: { valueKwh: sql`excluded.value_kwh` },
+          // The value that counts, and whose it now is: an imported reading
+          // takes precedence over a sensor's (see isSensorSource), so the row
+          // must stop saying a sensor's is the one in force — that is what
+          // keeps the next sync from putting its own figure back. What the
+          // sensor said stays where it is, in `sensor_value_kwh`.
+          set: { valueKwh: sql`excluded.value_kwh`, source: sql`excluded.source` },
         })
         .returning({ wasInsert: sql<boolean>`(xmax = 0)` });
       for (const r of result) {
@@ -78,7 +120,7 @@ export async function upsertReadings(
             siteId,
             ts: new Date(r.ts),
             metricKind: r.metricKind,
-            partyId: partyIdByName.get(r.party!)!,
+            partyId: r.partyId,
             valueKwh: r.valueKwh.toString(),
             source: "csv_import",
           })),
@@ -91,7 +133,12 @@ export async function upsertReadings(
             intervalMetrics.partyId,
           ],
           targetWhere: sql`${intervalMetrics.partyId} IS NOT NULL`,
-          set: { valueKwh: sql`excluded.value_kwh` },
+          // The value that counts, and whose it now is: an imported reading
+          // takes precedence over a sensor's (see isSensorSource), so the row
+          // must stop saying a sensor's is the one in force — that is what
+          // keeps the next sync from putting its own figure back. What the
+          // sensor said stays where it is, in `sensor_value_kwh`.
+          set: { valueKwh: sql`excluded.value_kwh`, source: sql`excluded.source` },
         })
         .returning({ wasInsert: sql<boolean>`(xmax = 0)` });
       for (const r of result) {

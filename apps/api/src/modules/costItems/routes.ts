@@ -6,6 +6,7 @@ import {
   getCostItemsSummary,
   listCostItems,
   updateCostItem,
+  NotAProducerError,
 } from "./service.js";
 
 export async function costItemRoutes(app: FastifyInstance) {
@@ -25,8 +26,15 @@ export async function costItemRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: "invalid_input", issues: parsed.error.issues });
     }
-    const created = await createCostItem(req.params.siteId, parsed.data);
-    return reply.status(201).send(created);
+    try {
+      const created = await createCostItem(req.params.siteId, parsed.data);
+      return reply.status(201).send(created);
+    } catch (err) {
+      if (err instanceof NotAProducerError) {
+        return reply.status(409).send({ error: "not_a_producer", message: err.message });
+      }
+      throw err;
+    }
   });
 
   app.patch<{ Params: { id: string } }>("/api/cost-items/:id", async (req, reply) => {

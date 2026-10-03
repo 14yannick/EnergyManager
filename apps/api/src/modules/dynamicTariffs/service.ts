@@ -1,7 +1,7 @@
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import type { DynamicTariffRate, TariffKind } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
-import { dynamicTariffRates, sites } from "../../db/schema/index.js";
+import { dynamicTariffRates, priceFeeds, sites } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { fetchHaEntityDynamicTariff } from "../homeAssistant/haClient.js";
 import { EXPECTED_UNIT, isChfPerKwh } from "./unit.js";
@@ -30,8 +30,6 @@ function toDomain(row: Row): DynamicTariffRate {
   };
 }
 
-const HA_SOURCE = "home_assistant";
-
 export interface SyncResult {
   inserted: number;
   updated: number;
@@ -43,20 +41,21 @@ export interface SyncResult {
 }
 
 /**
- * One site's worth of the sync: read the entity this site is configured with
- * (Settings → Home Assistant), fetch it, and upsert. Never throws — a
- * problem with one site's entity is reported in the caller's `warnings`
- * rather than aborting every other site's sync.
+ * One site's worth of the sync: read the price feed this site is priced by
+ * (chosen under Site administration, defined under Integrations), fetch
+ * its entity, and upsert. Never throws — a problem with one site's feed is
+ * reported in the caller's `warnings` rather than aborting every other
+ * site's sync.
  */
 async function syncSite(
-  site: { id: string; name: string; dynamicTariffEntityId: string | null },
+  site: { id: string; name: string; feedKey: string | null; feedEntityId: string | null },
 ): Promise<{ inserted: number; updated: number; source: string | null; publicationTimestamp: string | null; warning: string | null }> {
-  const entityId = site.dynamicTariffEntityId;
+  const entityId = site.feedEntityId;
   const empty = { inserted: 0, updated: 0, source: null, publicationTimestamp: null };
-  if (!entityId) {
+  if (!entityId || !site.feedKey) {
     return {
       ...empty,
-      warning: `${site.name}: no dynamic feed-in sensor chosen — pick one under Settings, Home Assistant.`,
+      warning: `${site.name}: no price feed chosen — pick one under Site administration.`,
     };
   }
 
@@ -90,7 +89,9 @@ async function syncSite(
       ? `${site.name}: ${entityId} states no unit; its prices were taken as ${EXPECTED_UNIT} unchecked.`
       : null;
 
-  const source = `${HA_SOURCE}:${entityId}`;
+  // The feed's key, not the sensor that relayed it: a stored rate says which
+  // published series it is, and keeps saying so if the entity is replaced.
+  const source = site.feedKey;
   const rows = forecast.slots;
   if (rows.length === 0) {
     return { inserted: 0, updated: 0, source, publicationTimestamp: forecast.publicationTimestamp, warning: unitWarning };
@@ -137,8 +138,8 @@ async function syncSite(
 
 /**
  * Fetches the current feed-in window from Home Assistant and upserts it, one
- * site at a time (which sites: see below), each from its own configured entity
- * (`Site.dynamicTariffEntityId`). Re-running this naturally picks up revised
+ * site at a time (which sites: see below), each from the price feed it is
+ * priced by (`Site.priceFeedId`). Re-running this naturally picks up revised
  * prices via onConflictDoUpdate, same pattern as upsertReadings in
  * modules/readings/service.ts.
  *
@@ -156,10 +157,12 @@ export async function syncDynamicTariffs(options: { siteId?: string } = {}): Pro
     .select({
       id: sites.id,
       name: sites.name,
-      dynamicTariffEntityId: sites.dynamicTariffEntityId,
+      feedKey: priceFeeds.key,
+      feedEntityId: priceFeeds.entityId,
       syncPaused: sites.syncPaused,
     })
-    .from(sites);
+    .from(sites)
+    .leftJoin(priceFeeds, eq(priceFeeds.id, sites.priceFeedId));
   const selected = sitesToSync(allSites, options.siteId);
 
   const result: SyncResult = { inserted: 0, updated: 0, source: "", publicationTimestamp: null, warnings: [] };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { siteCreateInputSchema, tariffSurchargeInputSchema } from "./validation.js";
+import { priceFeedKeySchema, siteCreateInputSchema, tariffSurchargeInputSchema } from "./validation.js";
 
 describe("tariffSurchargeInputSchema", () => {
   const surcharge = {
@@ -28,5 +28,19 @@ describe("siteCreateInputSchema", () => {
   it("refuses a site with no name to tell it apart by", () => {
     expect(siteCreateInputSchema.safeParse({ name: "   " }).success).toBe(false);
     expect(siteCreateInputSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("priceFeedKeySchema", () => {
+  it("takes a key that reads the same in a URL, a log and a column", () => {
+    for (const key of ["public_bkw_dynamic_feed_in", "dynamic_tariff", "feed2"]) {
+      expect(priceFeedKeySchema.safeParse(key).success, key).toBe(true);
+    }
+  });
+
+  it("refuses spaces, capitals, punctuation and stray underscores", () => {
+    for (const key of ["Public BKW", "public-bkw", "bkw.feed", "_bkw", "bkw_", "bkw__feed", "x", ""]) {
+      expect(priceFeedKeySchema.safeParse(key).success, key).toBe(false);
+    }
   });
 });

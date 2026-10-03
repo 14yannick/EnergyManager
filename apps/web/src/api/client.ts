@@ -13,8 +13,6 @@ import type {
   InvoiceRun,
   HaDynamicTariffCandidate,
   HaSensorCandidate,
-  HaEntityMapping,
-  HaEntityMappingInput,
   HaStatisticOption,
   HaSyncRequest,
   HaSyncResult,
@@ -27,6 +25,10 @@ import type {
   NeighbourSales,
   PartyConsumption,
   PartyInput,
+  PartySensor,
+  PartySensorInput,
+  PriceFeed,
+  PriceFeedInput,
   ReadingsImportResult,
   FeedInRatePoint,
   SavingsDayDetail,
@@ -135,6 +137,19 @@ export const api = {
       }),
     remove: (id: string) => request<void>(`/tariff-surcharges/${id}`, { method: "DELETE" }),
   },
+  priceFeeds: {
+    list: () => request<PriceFeed[]>("/price-feeds"),
+    create: (input: PriceFeedInput) => request<PriceFeed>("/price-feeds", { method: "POST", body: JSON.stringify(input) }),
+    update: (id: string, input: PriceFeedInput) =>
+      request<PriceFeed>(`/price-feeds/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+    remove: (id: string) => request<void>(`/price-feeds/${id}`, { method: "DELETE" }),
+  },
+  partySensors: {
+    list: (siteId: string) => request<PartySensor[]>(`/sites/${siteId}/party-sensors`),
+    set: (partyId: string, input: PartySensorInput) =>
+      request<PartySensor>(`/parties/${partyId}/sensors`, { method: "PUT", body: JSON.stringify(input) }),
+    remove: (id: string) => request<void>(`/party-sensors/${id}`, { method: "DELETE" }),
+  },
   costItems: {
     list: (siteId: string) => request<CostItem[]>(`/sites/${siteId}/cost-items`),
     summary: (siteId: string) => request<CostItemsSummary>(`/sites/${siteId}/cost-items/summary`),
@@ -214,14 +229,6 @@ export const api = {
     sensors: (deviceClass: "power" | "energy" | "battery") =>
       request<HaSensorCandidate[]>(`/home-assistant/sensors?deviceClass=${deviceClass}`),
     live: (siteId: string) => request<LiveEnergyView>(`/sites/${siteId}/home-assistant/live`),
-    mappings: (siteId: string) => request<HaEntityMapping[]>(`/sites/${siteId}/home-assistant/entities`),
-    setMapping: (siteId: string, input: HaEntityMappingInput) =>
-      request<HaEntityMapping>(`/sites/${siteId}/home-assistant/entities`, {
-        method: "PUT",
-        body: JSON.stringify(input),
-      }),
-    removeMapping: (id: string) =>
-      request<void>(`/home-assistant/entities/${id}`, { method: "DELETE" }),
     sync: (siteId: string, body: HaSyncRequest) =>
       request<HaSyncResult>(`/sites/${siteId}/home-assistant/sync`, {
         method: "POST",

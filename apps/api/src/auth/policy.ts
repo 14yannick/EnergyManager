@@ -52,6 +52,16 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
 
   "/api/sites/:siteId/parties": { GET: READ, POST: ADMIN },
   "/api/parties/:id": { PATCH: ADMIN, DELETE: ADMIN },
+  // A participant's Home Assistant sensors: configuration, like the parties
+  // themselves — read by the administration page, written by an admin.
+  "/api/sites/:siteId/party-sensors": { GET: READ },
+  "/api/parties/:partyId/sensors": { PUT: ADMIN },
+  "/api/party-sensors/:id": { DELETE: ADMIN },
+
+  // The installation's price feeds: named series a site's feed-in can be
+  // priced by. Configuration, set by an admin under Integrations.
+  "/api/price-feeds": { GET: READ, POST: ADMIN },
+  "/api/price-feeds/:id": { PATCH: ADMIN, DELETE: ADMIN },
 
   "/api/home-assistant/status": { GET: READ },
   "/api/home-assistant/statistics": { GET: READ },
@@ -60,8 +70,6 @@ const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>>
   // The participants' live view — this is the one Home Assistant route they
   // reach, and it carries site-level power only, never anyone's own figures.
   "/api/sites/:siteId/home-assistant/live": { GET: PARTICIPANT_READ },
-  "/api/sites/:siteId/home-assistant/entities": { GET: READ, PUT: ADMIN },
-  "/api/home-assistant/entities/:id": { DELETE: ADMIN },
   "/api/sites/:siteId/home-assistant/sync": { POST: ADMIN },
 
   // Setup-only — where a generated PDF is archived, not billing data itself.
