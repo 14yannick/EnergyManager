@@ -157,6 +157,12 @@ export const en = {
   "settings.title": "Site administration",
   "settings.intro":
     "Who is part of the site, the investment totals used for payback, and the Home Assistant connection that supplies the energy data.",
+  "sites.title": "Sites",
+  "sites.note": "Every site this installation holds. A new one starts empty: switch to it, then add its participants, tariffs and sensors here.",
+  "sites.name": "Name of the new site",
+  "sites.viewing": "Viewing",
+  "sites.view": "Switch to it",
+  "sites.created": "created {date}",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":

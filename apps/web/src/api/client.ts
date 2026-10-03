@@ -33,6 +33,7 @@ import type {
   SavingsSummary,
   SavingsQuery,
   Site,
+  SiteCreateInput,
   SiteUpdateInput,
   TariffKind,
   TariffPeriod,
@@ -102,6 +103,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   sites: {
     list: () => request<Site[]>("/sites"),
+    create: (input: SiteCreateInput) => request<Site>("/sites", { method: "POST", body: JSON.stringify(input) }),
     update: (id: string, input: SiteUpdateInput) =>
       request<Site>(`/sites/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   },

@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CfAccessSyncResult, HaSyncResult, IntervalMetricKind, Site, SiteUpdateInput } from "@energy-manager/shared";
+import { swissDate, type CfAccessSyncResult, type HaSyncResult, type IntervalMetricKind, type Site, type SiteUpdateInput } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { formatChf } from "../lib/format";
-import { useCurrentSite } from "../lib/useCurrentSite";
+import { chooseSite, useCurrentSite } from "../lib/useCurrentSite";
 import { PartiesSection } from "../components/PartiesSection";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useCanEdit } from "../lib/useIdentity";
@@ -99,7 +99,7 @@ function daysAgo(n: number) {
 }
 
 export function SettingsPage() {
-  const { site } = useCurrentSite();
+  const { site, sites } = useCurrentSite();
   const t = useT();
   // Everything on this page is an admin-only write in the API's policy table,
   // so the whole page reads rather than edits for anyone else. The controls
@@ -125,6 +125,8 @@ export function SettingsPage() {
           {t("common.readOnly")}
         </p>
       )}
+
+      <SitesSection sites={sites} current={site} canEdit={canEdit} />
 
       {/* Who is in the site comes first: it is what an administrator is
           here for most often, and the rest of the page is set once. */}
@@ -162,6 +164,89 @@ export function SettingsPage() {
       <CloudflareAccessSection canEdit={canEdit} />
 
       <GoogleDriveSection siteId={site.id} canEdit={canEdit} />
+    </div>
+  );
+}
+
+/**
+ * The sites this installation holds, and the way to add one. Everything
+ * below it on the page is about the one being viewed, so this is also
+ * where to change which that is — the same choice as on the Profile page.
+ */
+function SitesSection({ sites, current, canEdit }: { sites: Site[]; current: Site; canEdit: boolean }) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const createMutation = useMutation({
+    mutationFn: () => api.sites.create({ name: name.trim() }),
+    onSuccess: () => {
+      setError(null);
+      setName("");
+      // Listed, not switched to: a brand-new site is empty, and landing on
+      // an empty page in answer to "Add" would read as something lost.
+      void queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-white p-4">
+      <div>
+        <h2 className="text-sm font-medium text-slate-700">{t("sites.title")}</h2>
+        <p className="max-w-3xl text-sm text-slate-500">{t("sites.note")}</p>
+      </div>
+      <ul className="divide-y text-sm">
+        {sites.map((s) => (
+          <li key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+            <span className="font-medium text-slate-900">{s.name}</span>
+            <span className="text-xs text-slate-500">{t("sites.created", { date: swissDate(s.createdAt.slice(0, 10)) })}</span>
+            <span className="ml-auto">
+              {s.id === current.id ? (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  {t("sites.viewing")}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => chooseSite(s.id)}
+                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  {t("sites.view")}
+                </button>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {canEdit && (
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) createMutation.mutate();
+          }}
+        >
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
+            {t("sites.name")}
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={80}
+              className="w-64 max-w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!name.trim() || createMutation.isPending}
+            className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {t("common.add")}
+          </button>
+        </form>
+      )}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }

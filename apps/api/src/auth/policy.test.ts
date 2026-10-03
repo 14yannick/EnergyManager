@@ -23,6 +23,7 @@ describe("route policy", () => {
 
   it("lets a viewer read but never write", () => {
     const writes: Array<[string, string]> = [
+      ["/api/sites", "POST"],
       ["/api/sites/:id", "PATCH"],
       ["/api/sites/:siteId/tariff-periods", "POST"],
       ["/api/tariff-periods/:id", "DELETE"],

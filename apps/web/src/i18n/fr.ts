@@ -160,6 +160,12 @@ export const fr: Record<keyof typeof en, string> = {
   "settings.title": "Administration du site",
   "settings.intro":
     "Qui fait partie du site, les montants d'investissement utilisés pour l'amortissement, et la connexion Home Assistant qui fournit les données d'énergie.",
+  "sites.title": "Sites",
+  "sites.note": "Tous les sites de cette installation. Un nouveau site démarre vide : passez-y, puis ajoutez ici ses participants, ses tarifs et ses capteurs.",
+  "sites.name": "Nom du nouveau site",
+  "sites.viewing": "Affiché",
+  "sites.view": "Y passer",
+  "sites.created": "créé le {date}",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":

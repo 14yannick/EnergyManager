@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tariffSurchargeInputSchema } from "./validation.js";
+import { siteCreateInputSchema, tariffSurchargeInputSchema } from "./validation.js";
 
 describe("tariffSurchargeInputSchema", () => {
   const surcharge = {
@@ -17,5 +17,16 @@ describe("tariffSurchargeInputSchema", () => {
     const result = tariffSurchargeInputSchema.safeParse({ ...surcharge, kind: "neighbor_sell" });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.path).toEqual(["kind"]);
+  });
+});
+
+describe("siteCreateInputSchema", () => {
+  it("takes a name and trims it", () => {
+    expect(siteCreateInputSchema.parse({ name: "  Second site " })).toEqual({ name: "Second site" });
+  });
+
+  it("refuses a site with no name to tell it apart by", () => {
+    expect(siteCreateInputSchema.safeParse({ name: "   " }).success).toBe(false);
+    expect(siteCreateInputSchema.safeParse({}).success).toBe(false);
   });
 });

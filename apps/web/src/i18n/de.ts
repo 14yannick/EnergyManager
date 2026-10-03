@@ -166,6 +166,12 @@ export const de: Record<keyof typeof en, string> = {
   "settings.title": "Standortverwaltung",
   "settings.intro":
     "Wer zum Standort gehört, die Investitionssummen für die Amortisation, und die Home-Assistant-Verbindung, welche die Energiedaten liefert.",
+  "sites.title": "Standorte",
+  "sites.note": "Alle Standorte dieser Installation. Ein neuer beginnt leer: wechseln Sie dorthin und erfassen Sie hier seine Teilnehmer, Tarife und Sensoren.",
+  "sites.name": "Name des neuen Standorts",
+  "sites.viewing": "Angezeigt",
+  "sites.view": "Dorthin wechseln",
+  "sites.created": "erstellt am {date}",
 
   "settings.ha": "Home Assistant",
   "settings.haIntro":

@@ -75,6 +75,15 @@ const ibanish = z
   .transform((v) => v.replace(/\s+/g, "").toUpperCase())
   .refine((v) => /^[A-Z]{2}[0-9A-Z]{13,32}$/.test(v), "Not a valid IBAN");
 
+/**
+ * A new site starts as a name and nothing else: its time zone, its sensors
+ * and its parties are all set afterwards, under Site administration.
+ */
+export const siteCreateInputSchema = z.object({
+  name: z.string().trim().min(1, "A site needs a name").max(80),
+});
+export type SiteCreateInput = z.infer<typeof siteCreateInputSchema>;
+
 export const siteUpdateInputSchema = z.object({
   productionStartDate: optionalWhenBlank(isoDate).nullable(),
   // A fraction, not a percentage — the form divides before sending.

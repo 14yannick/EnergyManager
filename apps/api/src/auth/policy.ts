@@ -22,7 +22,7 @@ const PARTICIPANT_READ = ["admin", "viewer", "participant"] as const;
 const POLICY: Readonly<Record<string, Partial<Record<Method, readonly Role[]>>>> = {
   "/api/me": { GET: PARTICIPANT_READ },
 
-  "/api/sites": { GET: READ },
+  "/api/sites": { GET: READ, POST: ADMIN },
   "/api/sites/:id": { PATCH: ADMIN },
 
   "/api/sites/:siteId/tariff-periods": { GET: READ, POST: ADMIN },
