@@ -102,8 +102,12 @@ describe("the catalogue", () => {
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("flags exactly the two signed power sensors", () => {
-    expect(PARTY_SENSOR_KINDS.filter((k) => PARTY_SENSOR_SPECS[k].signed)).toEqual(["live_export_power", "live_battery_power"]);
+  it("flags exactly the signed power sensors: the grid's two directions and the battery", () => {
+    expect(PARTY_SENSOR_KINDS.filter((k) => PARTY_SENSOR_SPECS[k].signed)).toEqual([
+      "live_import_power",
+      "live_export_power",
+      "live_battery_power",
+    ]);
   });
 });
 

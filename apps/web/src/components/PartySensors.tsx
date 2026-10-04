@@ -65,8 +65,9 @@ const GROUP_LABEL: Record<PartySensorGroup, MessageKey> = {
   detailedRevenue: "sensor.group.detailedRevenue",
   detailedLiveView: "sensor.group.detailedLiveView",
 };
-/** The two signed power sensors: which way is positive is the sensor's own. */
+/** The signed power sensors: which way is positive is the sensor's own. */
 const SIGN_FLAG: Partial<Record<PartySensorKind, { label: MessageKey; hint: MessageKey }>> = {
+  live_import_power: { label: "sensor.invertedImport", hint: "sensor.invertedImportHint" },
   live_export_power: { label: "sensor.invertedExport", hint: "sensor.invertedExportHint" },
   live_battery_power: { label: "sensor.invertedBattery", hint: "sensor.invertedBatteryHint" },
 };

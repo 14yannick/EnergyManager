@@ -65,7 +65,9 @@ export interface PartySensorSpec {
 
 export const PARTY_SENSOR_SPECS: Record<PartySensorKind, PartySensorSpec> = {
   import: { group: "member", source: "statistic", metricKinds: ["import_grid"], signed: false },
-  live_import_power: { group: "member", source: "power", metricKinds: [], signed: false },
+  // Signed like the export: many meters report the grid as one sensor that
+  // changes sign with the direction, and which way is "drawing" differs.
+  live_import_power: { group: "member", source: "power", metricKinds: [], signed: true },
   export: { group: "feedIn", source: "statistic", metricKinds: ["export_local", "export_grid"], signed: false },
   live_export_power: { group: "feedIn", source: "power", metricKinds: [], signed: true },
   inverter_ac: { group: "detailedRevenue", source: "statistic", metricKinds: ["inverter_ac"], signed: false },

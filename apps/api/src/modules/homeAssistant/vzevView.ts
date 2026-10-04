@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { effectiveSensorProfile, isVzevMember, type VzevLiveView } from "@energy-manager/shared";
+import { effectiveSensorProfile, isVzevMember, settleVzevInterval, type VzevLiveView } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, parties } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
@@ -20,7 +20,12 @@ import { SITE_TZ, localDayHour } from "./forecastCurve.js";
  *
  * Returns null when the viewer is not on this site.
  */
-export async function getVzevLiveView(siteId: string, viewerPartyId: string | null): Promise<VzevLiveView | null> {
+export async function getVzevLiveView(
+  siteId: string,
+  viewerPartyId: string | null,
+  /** The instant "today" is read against — the present, unless a caller is checking another day. */
+  now: Date = new Date(),
+): Promise<VzevLiveView | null> {
   const siteParties = await db.select().from(parties).where(eq(parties.siteId, siteId));
   const viewerRow = viewerPartyId ? siteParties.find((p) => p.id === viewerPartyId) : undefined;
   if (viewerPartyId && !viewerRow) return null;
@@ -35,7 +40,6 @@ export async function getVzevLiveView(siteId: string, viewerPartyId: string | nu
   const viewerConsumes = viewerRow != null && consumers.some((p) => p.id === viewerRow.id);
   const otherIds = new Set(consumers.filter((p) => p.id !== viewerRow?.id).map((p) => p.id));
 
-  const now = new Date();
   const [power, today] = await Promise.all([
     readPower(siteId, producers, viewerConsumes ? viewerRow!.id : null, otherIds),
     readToday(siteId, now, viewerConsumes ? viewerRow!.id : null, otherIds),
@@ -98,7 +102,15 @@ async function readPower(
   };
 }
 
-/** The day's kWh so far, from the readings. */
+/**
+ * The day's kWh so far, from the readings — and how the participants'
+ * consumption was covered, settled one interval at a time.
+ *
+ * The settlement cannot be done on the day's totals: what the plants feed in
+ * at noon covers nobody's evening. So each stored interval is settled on
+ * its own (see settleVzevInterval) — the feed-in of that quarter-hour
+ * against what each member drew in it — and the results are summed.
+ */
 async function readToday(
   siteId: string,
   now: Date,
@@ -110,6 +122,7 @@ async function readToday(
   const zone = sql.raw(`'${SITE_TZ}'`);
   const rows = await db
     .select({
+      ts: intervalMetrics.ts,
       partyId: intervalMetrics.partyId,
       metricKind: intervalMetrics.metricKind,
       kwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}), 0)`,
@@ -129,28 +142,59 @@ async function readToday(
         ]),
       ),
     )
-    .groupBy(intervalMetrics.partyId, intervalMetrics.metricKind);
+    .groupBy(intervalMetrics.ts, intervalMetrics.partyId, intervalMetrics.metricKind);
 
-  const total = (kind: string) => rows.filter((r) => r.metricKind === kind).reduce((s, r) => s + toNumber(r.kwh), 0);
+  const total = (kind: string) => rows.filter((r) => r.metricKind === kind).reduce((sum, r) => sum + toNumber(r.kwh), 0);
   // What the plants made is their AC production plus what went into their
   // batteries, which production alone never counted — the same "made" the
   // day's curve shows.
   const producedKwh = total("production") + total("battery_charge");
   const feedInKwh = total("export_local");
 
-  /**
-   * One participant's consumption today. The provider's split of it (local
-   * and grid) where that has arrived; else what their own import sensor
-   * metered, which is all of it at their meter. Null with neither.
-   */
-  const consumptionOf = (partyId: string): number | null => {
-    const mine = rows.filter((r) => r.partyId === partyId);
-    const official = mine.filter((r) => r.metricKind === "consumption" || r.metricKind === "consumption_grid");
-    if (official.length > 0) return official.reduce((s, r) => s + toNumber(r.kwh), 0);
-    const metered = mine.find((r) => r.metricKind === "import_grid");
-    return metered ? toNumber(metered.kwh) : null;
-  };
-  const known = [...otherIds].map(consumptionOf).filter((v): v is number => v != null);
+  // Interval by interval: the feed-in, and each member's draw. A member
+  // arrives with the grid provider's own split of their consumption
+  // (local and grid) where that is in; else with what their import sensor
+  // metered, which is all of it at their meter and still to be shared.
+  const members = new Set([...otherIds, ...(viewerId ? [viewerId] : [])]);
+  const intervals = new Map<number, { feedIn: number; parties: Map<string, { local?: number; grid?: number; metered?: number }> }>();
+  for (const row of rows) {
+    const key = row.ts.getTime();
+    const interval = intervals.get(key) ?? { feedIn: 0, parties: new Map() };
+    intervals.set(key, interval);
+    const kwh = toNumber(row.kwh);
+    if (row.metricKind === "export_local") interval.feedIn += kwh;
+    if (!row.partyId || !members.has(row.partyId)) continue;
+    const party = interval.parties.get(row.partyId) ?? {};
+    interval.parties.set(row.partyId, party);
+    if (row.metricKind === "consumption") party.local = (party.local ?? 0) + kwh;
+    else if (row.metricKind === "consumption_grid") party.grid = (party.grid ?? 0) + kwh;
+    else if (row.metricKind === "import_grid") party.metered = (party.metered ?? 0) + kwh;
+  }
+
+  const covered = new Map<string, { local: number; grid: number }>();
+  let surplusKwh = 0;
+  for (const interval of intervals.values()) {
+    const { shares, surplus } = settleVzevInterval(
+      interval.feedIn,
+      [...interval.parties].map(([id, p]) =>
+        p.local != null || p.grid != null
+          ? { id, official: { local: p.local ?? 0, grid: p.grid ?? 0 } }
+          : { id, demand: p.metered },
+      ),
+    );
+    surplusKwh += surplus;
+    for (const share of shares) {
+      const sum = covered.get(share.id) ?? { local: 0, grid: 0 };
+      sum.local += share.local;
+      sum.grid += share.grid;
+      covered.set(share.id, sum);
+    }
+  }
+
+  const own = viewerId ? covered.get(viewerId) : undefined;
+  const others = [...otherIds].map((id) => covered.get(id)).filter((c): c is { local: number; grid: number } => c != null);
+  const othersLocalKwh = others.length > 0 ? others.reduce((sum, c) => sum + c.local, 0) : null;
+  const othersGridKwh = others.length > 0 ? others.reduce((sum, c) => sum + c.grid, 0) : null;
 
   return {
     producedKwh,
@@ -158,7 +202,12 @@ async function readToday(
     // A battery discharging to the grid can push the feed-in past what was
     // made; that is not negative own use.
     keptKwh: Math.max(producedKwh - feedInKwh, 0),
-    ownKwh: viewerId ? consumptionOf(viewerId) : null,
-    othersKwh: known.length > 0 ? known.reduce((a, b) => a + b, 0) : null,
+    ownKwh: own ? own.local + own.grid : null,
+    othersKwh: othersLocalKwh != null && othersGridKwh != null ? othersLocalKwh + othersGridKwh : null,
+    ownLocalKwh: own?.local ?? null,
+    ownGridKwh: own?.grid ?? null,
+    othersLocalKwh,
+    othersGridKwh,
+    surplusKwh,
   };
 }

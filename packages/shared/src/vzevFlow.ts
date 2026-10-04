@@ -11,13 +11,92 @@
  * (the difference to what they fed in), summed over however many there are.
  *
  * The meters say how much was fed in and how much each side drew, not who
- * got which kWh. That is decided the way a vZEV is settled: the feed-in
- * covers the participants' draw first, shared in proportion to what each is
- * drawing, and only the surplus goes to the grid. Whatever the feed-in does
- * not cover, each draws from the grid. Every figure is clamped at zero, so
+ * got which kWh. That is decided the way a vZEV is settled (see
+ * `splitAvailable`): the feed-in covers the participants' draw first, and
+ * only the surplus goes to the grid; when they draw more than is fed in,
+ * each receives their share of it and takes the rest from the grid. Every figure is clamped at zero, so
  * a moment where sensors disagree by a few watts draws a small flow rather
  * than a negative one.
  */
+/** One party's draw, and how much of it the vZEV's own energy covered. */
+export interface VzevShare {
+  id: string;
+  /** What the party drew: watts at an instant, kWh over an interval. */
+  demand: number;
+  /** The part of it covered by what the producers fed in. */
+  local: number;
+  /** The rest, drawn from the grid. */
+  grid: number;
+}
+
+/**
+ * The vZEV's rule for sharing what is available, in one place — the same
+ * for power at an instant and for energy over an interval, since it is a
+ * proportion and has no unit of its own.
+ *
+ * While the producers feed in at least as much as the parties draw, every
+ * party is covered in full and the rest is surplus, for the grid. Once the
+ * draw is higher than what is available, the available is split by each
+ * party's share of the total draw: a party drawing a third of everything
+ * drawn receives a third of everything available, and takes the remainder
+ * of its draw from the grid.
+ *
+ * Negative inputs are read as zero. The shares come back in the order the
+ * demands were given.
+ */
+export function splitAvailable(
+  available: number,
+  demands: ReadonlyArray<{ id: string; demand: number }>,
+): { shares: VzevShare[]; surplus: number } {
+  const pool = Math.max(available, 0);
+  const total = demands.reduce((sum, d) => sum + Math.max(d.demand, 0), 0);
+  // The fraction of every party's draw that the pool covers: all of it
+  // while the pool is large enough, the same quota for each once it is not.
+  const quota = total > 0 ? Math.min(pool / total, 1) : 0;
+  const shares = demands.map((d) => {
+    const demand = Math.max(d.demand, 0);
+    const local = demand * quota;
+    return { id: d.id, demand, local, grid: demand - local };
+  });
+  return { shares, surplus: Math.max(pool - total, 0) };
+}
+
+/**
+ * One interval of the vZEV, settled: what was fed in, against what each
+ * party drew.
+ *
+ * A party arrives in one of two ways. With the grid provider's own split
+ * (`official`) — that is the settlement, and it is taken as given rather
+ * than recomputed. Or with only a metered draw (`demand`), from their own
+ * sensor — then their share is worked out by `splitAvailable`, from what
+ * the official shares have left of the feed-in.
+ */
+export interface VzevIntervalParty {
+  id: string;
+  /** The provider's split for this interval, where it has arrived. */
+  official?: { local: number; grid: number };
+  /** Otherwise, what the party's own meter drew. */
+  demand?: number;
+}
+
+export function settleVzevInterval(
+  feedIn: number,
+  parties: ReadonlyArray<VzevIntervalParty>,
+): { shares: VzevShare[]; surplus: number } {
+  const settled: VzevShare[] = [];
+  let taken = 0;
+  for (const p of parties) {
+    if (!p.official) continue;
+    const local = Math.max(p.official.local, 0);
+    const grid = Math.max(p.official.grid, 0);
+    settled.push({ id: p.id, demand: local + grid, local, grid });
+    taken += local;
+  }
+  const metered = parties.filter((p) => !p.official && p.demand != null).map((p) => ({ id: p.id, demand: p.demand! }));
+  const { shares, surplus } = splitAvailable(Math.max(feedIn, 0) - taken, metered);
+  return { shares: [...settled, ...shares], surplus };
+}
+
 export interface VzevPowerReading {
   /** What all the plants are making, in watts; null when no producer reports it. */
   productionW: number | null;
@@ -50,23 +129,25 @@ export function allocateVzevPower(r: VzevPowerReading): VzevPowerFlows {
   const feedIn = Math.max(r.feedInW ?? 0, 0);
   const own = Math.max(r.ownW ?? 0, 0);
   const others = Math.max(r.othersW ?? 0, 0);
-  const demand = own + others;
 
-  // Shared in proportion to the draw: the same rule for a watt as for the
-  // quarter-hour it is settled in.
-  const local = Math.min(feedIn, demand);
-  const vzevToYou = demand > 0 ? (local * own) / demand : 0;
-  const vzevToOthers = local - vzevToYou;
+  // The viewer and everybody else, as two parties of the same split: the
+  // rule is a proportion, so sharing with the others as one sum gives the
+  // viewer exactly what sharing with each of them would.
+  const { shares, surplus } = splitAvailable(feedIn, [
+    { id: "you", demand: own },
+    { id: "others", demand: others },
+  ]);
+  const [you, rest] = shares as [VzevShare, VzevShare];
 
   return {
     // Unknown production says nothing about what was kept — not that it was nil.
     sunToOwners: r.productionW == null ? 0 : Math.max(r.productionW - feedIn, 0),
     sunToVzev: feedIn,
-    vzevToYou,
-    vzevToOthers,
-    vzevToGrid: feedIn - local,
-    gridToYou: own - vzevToYou,
-    gridToOthers: others - vzevToOthers,
+    vzevToYou: you.local,
+    vzevToOthers: rest.local,
+    vzevToGrid: surplus,
+    gridToYou: you.grid,
+    gridToOthers: rest.grid,
   };
 }
 
@@ -100,5 +181,18 @@ export interface VzevLiveView {
     /** The viewer's own consumption; null when there is no reading of it yet. */
     ownKwh: number | null;
     othersKwh: number | null;
+    /**
+     * How that consumption was covered, settled interval by interval (see
+     * settleVzevInterval) and summed: the part from the vZEV's own feed-in
+     * and the part from the grid. A day's totals could not say this — a
+     * sunny noon does not cover a dark evening — so it is worked out per
+     * quarter-hour. Null with the consumption it splits.
+     */
+    ownLocalKwh: number | null;
+    ownGridKwh: number | null;
+    othersLocalKwh: number | null;
+    othersGridKwh: number | null;
+    /** Feed-in nobody in the vZEV took, interval by interval: what went on to the grid. */
+    surplusKwh: number;
   };
 }

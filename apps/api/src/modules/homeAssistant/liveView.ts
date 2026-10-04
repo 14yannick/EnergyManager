@@ -191,6 +191,11 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
   // One sensor, two figures: the grid meter reads one direction at a time,
   // so the sign says which and the other is zero.
   const gridOut = total("live_export_power");
+  // The draw, from the import sensors. Each is floored on its own: a signed
+  // one reads below zero while its house exports, and that is no draw — nor
+  // something to take off another producer's.
+  const drawn = readings("live_import_power");
+  const importIn = drawn.length === 0 ? null : drawn.reduce((sum, v) => sum + Math.max(v, 0), 0);
   // Likewise for the battery: positive means charging once the sign is
   // normalised, and whichever way it is flowing, the other figure is zero.
   const charging = total("live_battery_power");
@@ -203,7 +208,7 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
     exportW: gridOut == null ? null : Math.max(gridOut, 0),
     // Its own sensor where a producer maps one; else the export sensor's
     // other sign, which is the same meter read the other way.
-    importW: total("live_import_power") ?? (gridOut == null ? null : Math.max(-gridOut, 0)),
+    importW: importIn ?? (gridOut == null ? null : Math.max(-gridOut, 0)),
     pvW: total("live_pv_power"),
     batteryChargeW: charging == null ? null : Math.max(charging, 0),
     batteryDischargeW: charging == null ? null : Math.max(-charging, 0),

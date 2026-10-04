@@ -396,6 +396,8 @@ export const de: Record<keyof typeof en, string> = {
   "sensor.forecastTomorrowHint": "Erwartete Produktion morgen",
   "sensor.invertedExport": "Negativ bei Einspeisung",
   "sensor.invertedExportHint": "Ankreuzen, wenn der Sensor der Netzkonvention folgt — positiv beim Bezug, negativ bei Einspeisung — sodass die Karte 0 zeigt, während das Haus einspeist.",
+  "sensor.invertedImport": "Negativ beim Bezug",
+  "sensor.invertedImportHint": "Ankreuzen, wenn der Sensor unter null anzeigt, während das Haus aus dem Netz bezieht — positiv bei Einspeisung, negativ beim Bezug. Nicht ankreuzen bei einem Sensor, der beim Bezug positiv ist.",
   "sensor.invertedBattery": "Negativ beim Laden",
   "sensor.invertedBatteryHint": "Ankreuzen, wenn der Sensor beim Laden unter null liegt. Huaweis Lade-/Entladeleistung ist beim Laden positiv und beim Entladen negativ — dafür nicht ankreuzen.",
   "sensor.title": "Sensoren von {name}",
@@ -633,7 +635,8 @@ export const de: Record<keyof typeof en, string> = {
   "vzevFlow.others": "Andere Teilnehmer",
   "vzevFlow.idle": "Im vZEV fliesst gerade nichts.",
   "vzevFlow.sharedNote": "Ein Anteil der Einspeisung, im Verhältnis zum Bezug jedes Teilnehmers — so, wie das vZEV abgerechnet wird.",
-  "vzevFlow.note": "Das vZEV in diesem Moment. Verbindungen: die Leistung, die jetzt fliesst, live aus Home Assistant — die Punkte laufen in Richtung der Energie. Ringe: die Energie seit heute Morgen, aus den Messwerten. Die Produktion ist alles, was die Anlagen erzeugen, über alle Produzenten summiert; der Ring des Anlagenbesitzers ist, was er davon behält, der Rest wird ins vZEV eingespeist. Die Einspeisung geht zuerst an die Teilnehmer, im Verhältnis zu ihrem Bezug, und nur der Überschuss ins Netz; was sie nicht deckt, wird aus dem Netz bezogen. Ihre eigenen Werte und die Summe der anderen Teilnehmer erscheinen dort, wo ein Sensor oder die Daten des Netzbetreibers sie liefern.",
+  "vzevFlow.othersUnknown": "Die anderen Teilnehmer melden keinen Live-Verbrauch; die Einspeisung wird deshalb so gezeichnet, als ginge sie ganz ins Netz. Ein Teil davon kann ihnen zukommen.",
+  "vzevFlow.note": "Das vZEV in diesem Moment. Verbindungen: die Leistung, die jetzt fliesst, live aus Home Assistant — die Punkte laufen in Richtung der Energie. Ringe: die Energie seit heute Morgen, aus den Messwerten. Die Produktion ist alles, was die Anlagen erzeugen, über alle Produzenten summiert; der Ring des Anlagenbesitzers ist, was er davon behält, der Rest wird ins vZEV eingespeist. Die Einspeisung geht zuerst an die Teilnehmer, im Verhältnis zu ihrem Bezug, und nur der Überschuss ins Netz; was sie nicht deckt, wird aus dem Netz bezogen. Ihre eigenen Werte und die Summe der anderen Teilnehmer erscheinen dort, wo ein Sensor oder die Daten des Netzbetreibers sie liefern. Unter dem Total eines Verbrauchers steht der grüne Punkt für das, was aus dem vZEV kam, und der blaue für das, was aus dem Netz kam, abgerechnet Viertelstunde für Viertelstunde: Beziehen die Teilnehmer mehr, als eingespeist wird, erhält jeder einen Anteil davon im Verhältnis zu seinem Bezug. Im Ring des Netzes ist ↓, was ins Netz ging, und ↑, was daraus bezogen wurde.",
   "dash.avgSuffix": "CHF {value}/{unit} im Schnitt",
 
   "dash.payback": "Amortisation nach Kategorie",

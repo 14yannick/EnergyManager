@@ -390,6 +390,8 @@ export const fr: Record<keyof typeof en, string> = {
   "sensor.forecastTomorrowHint": "Production attendue demain",
   "sensor.invertedExport": "Négatif en injection",
   "sensor.invertedExportHint": "À cocher si le capteur suit la convention réseau — positif en soutirage, négatif en injection — de sorte que la carte affiche 0 alors que la maison injecte.",
+  "sensor.invertedImport": "Négatif pendant le soutirage",
+  "sensor.invertedImportHint": "Cochez si le capteur indique une valeur négative lorsque la maison soutire du réseau — positif à l'injection, négatif au soutirage. Laissez décoché pour un capteur positif pendant le soutirage.",
   "sensor.invertedBattery": "Négatif pendant la charge",
   "sensor.invertedBatteryHint": "À cocher si le capteur passe sous zéro pendant que la batterie se charge. La puissance charge/décharge Huawei est positive en charge et négative en décharge — laisser décoché dans ce cas.",
   "sensor.title": "Capteurs de {name}",
@@ -623,7 +625,8 @@ export const fr: Record<keyof typeof en, string> = {
   "vzevFlow.others": "Autres participants",
   "vzevFlow.idle": "Rien ne circule dans le RCPv en ce moment.",
   "vzevFlow.sharedNote": "Une part de l'injection, proportionnelle à ce que chaque participant soutire — comme le RCPv est décompté.",
-  "vzevFlow.note": "Le RCPv à cet instant. Liaisons : la puissance qui circule maintenant, en direct depuis Home Assistant — les points se déplacent dans le sens de l'énergie. Anneaux : l'énergie depuis ce matin, d'après les mesures. La production est tout ce que produisent les installations, additionné sur tous les producteurs ; l'anneau du propriétaire est ce qu'il en garde, le reste est injecté dans le RCPv. L'injection va d'abord aux participants, proportionnellement à ce que chacun soutire, et seul le surplus va au réseau ; ce qu'elle ne couvre pas est tiré du réseau. Vos propres valeurs et le total des autres participants apparaissent là où un capteur ou les données du gestionnaire de réseau les fournissent.",
+  "vzevFlow.othersUnknown": "Les autres participants ne fournissent pas de consommation en direct ; l'injection est donc dessinée comme allant entièrement au réseau. Une partie leur revient peut-être.",
+  "vzevFlow.note": "Le RCPv à cet instant. Liaisons : la puissance qui circule maintenant, en direct depuis Home Assistant — les points se déplacent dans le sens de l'énergie. Anneaux : l'énergie depuis ce matin, d'après les mesures. La production est tout ce que produisent les installations, additionné sur tous les producteurs ; l'anneau du propriétaire est ce qu'il en garde, le reste est injecté dans le RCPv. L'injection va d'abord aux participants, proportionnellement à ce que chacun soutire, et seul le surplus va au réseau ; ce qu'elle ne couvre pas est tiré du réseau. Vos propres valeurs et le total des autres participants apparaissent là où un capteur ou les données du gestionnaire de réseau les fournissent. Sous le total d'un consommateur, le point vert est ce qui est venu du RCPv et le bleu ce qui est venu du réseau, décompté quart d'heure par quart d'heure : quand les participants soutirent plus que ce qui est injecté, chacun en reçoit une part proportionnelle à son soutirage. Dans l'anneau du réseau, ↓ est ce qui est parti au réseau et ↑ ce qui en a été tiré.",
   "dash.avgSuffix": "CHF {value}/{unit} en moyenne",
 
   "dash.payback": "Amortissement par catégorie",

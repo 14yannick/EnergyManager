@@ -69,8 +69,10 @@ function frameFor(width: number) {
   const W = wide ? 560 : Math.max(width, 320);
   const H = wide ? 460 : 420;
   const R = wide ? 44 : 40;
-  const edge = wide ? 96 : 58;
-  return { W, H, R, BEND: wide ? 40 : 28, left: edge, right: W - edge, top: wide ? 72 : 66, bottom: H - (wide ? 72 : 66), cx: W / 2, cy: H / 2 };
+  // On a phone the outer rings sit as far out as they can: the two figures
+  // beside the grid ring need the gap between rings, and it is narrow.
+  const edge = wide ? 96 : 46;
+  return { W, H, R, wide, BEND: wide ? 40 : 28, left: edge, right: W - edge, top: wide ? 72 : 66, bottom: H - (wide ? 72 : 66), cx: W / 2, cy: H / 2 };
 }
 type Frame = ReturnType<typeof frameFor>;
 
@@ -248,11 +250,31 @@ export function VzevFlow({
     owners: kwh(view.today.keptKwh),
     vzev: kwh(view.today.feedInKwh),
     you: kwh(view.today.ownKwh),
-    // Where today's surplus went is settled per quarter-hour by the grid
-    // operator, not something a day's totals can say: the ring stays bare.
     grid: null,
     others: kwh(view.today.othersKwh),
   };
+  /**
+   * How a consumer's day was covered — from the vZEV's own feed-in, and
+   * from the grid — settled quarter-hour by quarter-hour on the server.
+   * Drawn under the total as two figures, each beside a dot in the colour
+   * its energy has on the connectors.
+   */
+  const split: Partial<Record<RingId, { local: number; grid: number }>> = {
+    ...(view.today.ownLocalKwh != null && view.today.ownGridKwh != null
+      ? { you: { local: view.today.ownLocalKwh, grid: view.today.ownGridKwh } }
+      : {}),
+    ...(view.today.othersLocalKwh != null && view.today.othersGridKwh != null
+      ? { others: { local: view.today.othersLocalKwh, grid: view.today.othersGridKwh } }
+      : {}),
+  };
+  // The grid's two directions today: what the vZEV sent on to it, and what
+  // its members drew from it. The second is only known as far as their
+  // consumption is.
+  const drawnFromGrid =
+    view.today.ownGridKwh == null && view.today.othersGridKwh == null
+      ? null
+      : (view.today.ownGridKwh ?? 0) + (view.today.othersGridKwh ?? 0);
+  const gridLines = [`↓ ${formatKwhAuto(view.today.surplusKwh)}`, `↑ ${drawnFromGrid == null ? "—" : formatKwhAuto(drawnFromGrid)}`];
 
   const flows = allocateVzevPower(view.power);
   // Where the feed-in goes can only be drawn once somebody's draw is known.
@@ -371,16 +393,54 @@ export function VzevFlow({
               return (
                 <g key={ring} className="pointer-events-none">
                   <circle cx={x} cy={y} r={f.R} fill={PALETTE.surface} stroke={RING_COLOR[ring]} strokeWidth={RING} />
-                  <RingIcon ring={ring} x={x} y={value == null ? y : y - 13} />
-                  {value != null && (
-                    <text x={x} y={y + 18} textAnchor="middle" fontSize={12} fontWeight={600} fill={PALETTE.ink} className="tabular-nums">
-                      {value}
-                    </text>
+                  {ring === "grid" ? (
+                    <>
+                      <RingIcon ring={ring} x={x} y={y - 18} />
+                      <text x={x} textAnchor="middle" fontSize={11} fill={PALETTE.ink} className="tabular-nums">
+                        <tspan y={y + 9}>{gridLines[0]}</tspan>
+                        <tspan x={x} y={y + 23}>
+                          {gridLines[1]}
+                        </tspan>
+                      </text>
+                    </>
+                  ) : split[ring] ? (
+                    <>
+                      <RingIcon ring={ring} x={x} y={y - 24} />
+                      <text x={x} y={y + 1} textAnchor="middle" fontSize={12} fontWeight={600} fill={PALETTE.ink} className="tabular-nums">
+                        {value}
+                      </text>
+                      {/* The dot carries which energy it is; the figure stays in ink. */}
+                      {(
+                        [
+                          [PALETTE.local, split[ring]!.local, y + 15],
+                          [PALETTE.grid, split[ring]!.grid, y + 28],
+                        ] as const
+                      ).map(([color, kwhValue, lineY]) => (
+                        <g key={color}>
+                          <circle cx={x - 14} cy={lineY - 3.5} r={3} fill={color} />
+                          <text x={x - 7} y={lineY} textAnchor="start" fontSize={10.5} fill={PALETTE.ink} className="tabular-nums">
+                            {formatKwhAuto(kwhValue)}
+                          </text>
+                        </g>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <RingIcon ring={ring} x={x} y={value == null ? y : y - 13} />
+                      {value != null && (
+                        <text x={x} y={y + 18} textAnchor="middle" fontSize={12} fontWeight={600} fill={PALETTE.ink} className="tabular-nums">
+                          {value}
+                        </text>
+                      )}
+                    </>
                   )}
                   <text
-                    x={x}
+                    // Centred on its ring where there is room. On a phone the
+                    // outer rings touch the frame's edge, so their names start
+                    // or end at the ring's own edge instead of running off it.
+                    x={f.wide || x === f.cx ? x : x < f.cx ? x - f.R : x + f.R}
                     y={nameAbove ? y - f.R - 10 : y + f.R + 17}
-                    textAnchor="middle"
+                    textAnchor={f.wide || x === f.cx ? "middle" : x < f.cx ? "start" : "end"}
                     fontSize={12}
                     fontWeight={500}
                     fill={PALETTE.axis}
@@ -392,6 +452,12 @@ export function VzevFlow({
               );
             })}
           </svg>
+        )}
+        {/* Said out loud rather than left to be assumed: with nobody else's
+            draw reported, the surplus is drawn as all of it reaching the
+            grid — an upper bound, not a measurement. */}
+        {drawKnown && view.power.othersW == null && flows.vzevToGrid >= MIN_W && (
+          <p className="mt-1 text-xs text-slate-500">{t("vzevFlow.othersUnknown")}</p>
         )}
         {hovered && hover && (
           <div

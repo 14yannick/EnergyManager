@@ -41,7 +41,8 @@ export const partySensors = pgTable(
      * while exporting) and its battery power is positive while charging;
      * others are the other way round. A property of the sensor, so a setting
      * rather than a guess — the guess showed 0.00 kW at the moment the house
-     * was exporting 4.8 kW. Only read for the two signed power sensors.
+     * was exporting 4.8 kW. Only read for the signed power sensors: the grid's
+     * import and export, and the battery.
      */
     inverted: boolean("inverted").notNull().default(false),
     enabled: boolean("enabled").notNull().default(true),

@@ -385,6 +385,8 @@ export const en = {
   "sensor.forecastTomorrowHint": "Expected production tomorrow",
   "sensor.invertedExport": "Negative while exporting",
   "sensor.invertedExportHint": "Tick this if the sensor follows the grid convention — positive when drawing, negative when feeding in — so the card reads 0 while the house is exporting.",
+  "sensor.invertedImport": "Negative while importing",
+  "sensor.invertedImportHint": "Tick this if the sensor reads below zero while the house draws from the grid — positive when feeding in, negative when drawing. Leave it unticked for a sensor that is positive while drawing.",
   "sensor.invertedBattery": "Negative while charging",
   "sensor.invertedBatteryHint": "Tick this if the sensor reads below zero while the battery charges. Huawei's charge/discharge power is positive charging and negative discharging — leave it unticked for that.",
   "sensor.title": "Sensors of {name}",
@@ -615,7 +617,8 @@ export const en = {
   "vzevFlow.others": "Other participants",
   "vzevFlow.idle": "Nothing is flowing in the vZEV right now.",
   "vzevFlow.sharedNote": "A share of the feed-in, in proportion to what each participant is drawing — the way the vZEV is settled.",
-  "vzevFlow.note": "The vZEV at this instant. Connectors: the power flowing now, live from Home Assistant — the dots move the way the energy goes. Rings: the energy so far today, from the readings. Production is everything the plants make, added up over all producers; the plant owner's ring is what they keep of it, the rest is fed into the vZEV. The feed-in goes to the participants first, in proportion to what each is drawing, and only the surplus to the grid; what it does not cover is drawn from the grid. Your own figures and the other participants' total appear where a sensor or the grid provider's data reports them.",
+  "vzevFlow.othersUnknown": "The other participants report no live consumption, so the feed-in is drawn as all going to the grid. Some of it may be theirs.",
+  "vzevFlow.note": "The vZEV at this instant. Connectors: the power flowing now, live from Home Assistant — the dots move the way the energy goes. Rings: the energy so far today, from the readings. Production is everything the plants make, added up over all producers; the plant owner's ring is what they keep of it, the rest is fed into the vZEV. The feed-in goes to the participants first, in proportion to what each is drawing, and only the surplus to the grid; what it does not cover is drawn from the grid. Your own figures and the other participants' total appear where a sensor or the grid provider's data reports them. Under a consumer's total, the green dot is what came from the vZEV and the blue one what came from the grid, settled quarter-hour by quarter-hour: when the participants draw more than is fed in, each receives a share of it in proportion to their draw. In the grid's ring, ↓ is what went on to the grid and ↑ what was drawn from it.",
   "dash.avgSuffix": "CHF {value}/{unit} avg",
 
   "dash.payback": "Payback by category",
