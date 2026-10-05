@@ -94,7 +94,7 @@ describe("the catalogue", () => {
   });
 
   it("writes one export counter as both what left the house and what reached the grid", () => {
-    expect(PARTY_SENSOR_SPECS.export.metricKinds).toEqual(["export_local", "export_grid"]);
+    expect(PARTY_SENSOR_SPECS.export.metricKinds).toEqual(["export"]);
   });
 
   it("writes no metric from two different sensors", () => {

@@ -1,9 +1,10 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { effectiveSensorProfile, isVzevMember, settleVzevInterval, type VzevLiveView } from "@energy-manager/shared";
+import { effectiveSensorProfile, isVzevMember, type VzevLiveView } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, parties } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { activeSensors } from "../partySensors/service.js";
+import { loadVzevSettlement } from "../vzev/settlement.js";
 import { fetchHaNumericStates } from "./haClient.js";
 import { SITE_TZ, localDayHour } from "./forecastCurve.js";
 
@@ -108,7 +109,7 @@ async function readPower(
  *
  * The settlement cannot be done on the day's totals: what the plants feed in
  * at noon covers nobody's evening. So each stored interval is settled on
- * its own (see settleVzevInterval) — the feed-in of that quarter-hour
+ * its own (see vzev/settlement.ts) — the feed-in of that quarter-hour
  * against what each member drew in it — and the results are summed.
  */
 async function readToday(
@@ -120,74 +121,47 @@ async function readToday(
   const { day } = localDayHour(now);
   // The zone as a literal — a constant of ours — as in liveView.ts.
   const zone = sql.raw(`'${SITE_TZ}'`);
-  const rows = await db
-    .select({
-      ts: intervalMetrics.ts,
-      partyId: intervalMetrics.partyId,
-      metricKind: intervalMetrics.metricKind,
-      kwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}), 0)`,
-    })
-    .from(intervalMetrics)
-    .where(
-      and(
-        eq(intervalMetrics.siteId, siteId),
-        sql`(${intervalMetrics.ts} at time zone ${zone})::date = ${day}::date`,
-        inArray(intervalMetrics.metricKind, [
-          "production",
-          "battery_charge",
-          "export_local",
-          "consumption",
-          "consumption_grid",
-          "import_grid",
-        ]),
+  const fromBound = sql`(${day}::date at time zone ${zone})`;
+  const toBoundExclusive = sql`((${day}::date + interval '1 day') at time zone ${zone})`;
+  const [made, settlement] = await Promise.all([
+    db
+      .select({
+        productionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'production'), 0)`,
+        batteryChargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_charge'), 0)`,
+      })
+      .from(intervalMetrics)
+      .where(
+        and(
+          eq(intervalMetrics.siteId, siteId),
+          sql`${intervalMetrics.ts} >= ${fromBound}`,
+          sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
+          inArray(intervalMetrics.metricKind, ["production", "battery_charge"]),
+        ),
       ),
-    )
-    .groupBy(intervalMetrics.ts, intervalMetrics.partyId, intervalMetrics.metricKind);
+    // The same settlement the revenue is priced from: the grid provider's
+    // split of a member's consumption where that is in, else what their
+    // import sensor metered, shared by the vZEV's rule.
+    loadVzevSettlement(siteId, fromBound, toBoundExclusive),
+  ]);
 
-  const total = (kind: string) => rows.filter((r) => r.metricKind === kind).reduce((sum, r) => sum + toNumber(r.kwh), 0);
   // What the plants made is their AC production plus what went into their
   // batteries, which production alone never counted — the same "made" the
   // day's curve shows.
-  const producedKwh = total("production") + total("battery_charge");
-  const feedInKwh = total("export_local");
+  const producedKwh = toNumber(made[0]?.productionKwh ?? "0") + toNumber(made[0]?.batteryChargeKwh ?? "0");
 
-  // Interval by interval: the feed-in, and each member's draw. A member
-  // arrives with the grid provider's own split of their consumption
-  // (local and grid) where that is in; else with what their import sensor
-  // metered, which is all of it at their meter and still to be shared.
   const members = new Set([...otherIds, ...(viewerId ? [viewerId] : [])]);
-  const intervals = new Map<number, { feedIn: number; parties: Map<string, { local?: number; grid?: number; metered?: number }> }>();
-  for (const row of rows) {
-    const key = row.ts.getTime();
-    const interval = intervals.get(key) ?? { feedIn: 0, parties: new Map() };
-    intervals.set(key, interval);
-    const kwh = toNumber(row.kwh);
-    if (row.metricKind === "export_local") interval.feedIn += kwh;
-    if (!row.partyId || !members.has(row.partyId)) continue;
-    const party = interval.parties.get(row.partyId) ?? {};
-    interval.parties.set(row.partyId, party);
-    if (row.metricKind === "consumption") party.local = (party.local ?? 0) + kwh;
-    else if (row.metricKind === "consumption_grid") party.grid = (party.grid ?? 0) + kwh;
-    else if (row.metricKind === "import_grid") party.metered = (party.metered ?? 0) + kwh;
-  }
-
   const covered = new Map<string, { local: number; grid: number }>();
+  let feedInKwh = 0;
   let surplusKwh = 0;
-  for (const interval of intervals.values()) {
-    const { shares, surplus } = settleVzevInterval(
-      interval.feedIn,
-      [...interval.parties].map(([id, p]) =>
-        p.local != null || p.grid != null
-          ? { id, official: { local: p.local ?? 0, grid: p.grid ?? 0 } }
-          : { id, demand: p.metered },
-      ),
-    );
-    surplusKwh += surplus;
-    for (const share of shares) {
-      const sum = covered.get(share.id) ?? { local: 0, grid: 0 };
+  for (const interval of settlement) {
+    feedInKwh += interval.exportKwh;
+    surplusKwh += interval.gridKwh;
+    for (const share of interval.shares) {
+      if (!members.has(share.partyId)) continue;
+      const sum = covered.get(share.partyId) ?? { local: 0, grid: 0 };
       sum.local += share.local;
       sum.grid += share.grid;
-      covered.set(share.id, sum);
+      covered.set(share.partyId, sum);
     }
   }
 

@@ -291,7 +291,8 @@ export const en = {
   // ---- Import readings ---------------------------------------------------
   "readings.title": "Import readings",
   "readings.csvNote":
-    "CSV columns: timestamp, metric_kind, party, value_kwh — one row per timestamp+metric. metric_kind is one of production, export_local, export_grid, import_grid, battery_charge, battery_discharge, consumption. party is required (a participant's name) when metric_kind is consumption, and must be blank otherwise. Re-importing overlapping rows overwrites them.",
+    "CSV columns: timestamp, metric_kind, party, value_kwh — one row per timestamp+metric. metric_kind is one of {kinds}. party is required (a participant's name) when metric_kind is consumption or consumption_grid, and must be blank otherwise. Re-importing overlapping rows overwrites them.",
+  "readings.template": "Download CSV template",
   "readings.modeDelta": "Delta — values are already per-interval kWh",
   "readings.modeCumulative": "Cumulative — values are running meter totals, per metric+party",
   "readings.import": "Import",
@@ -313,8 +314,8 @@ export const en = {
   "readings.metric.inverterAc": "Inverter AC output (PV + battery)",
   "readings.metric.pvDc": "PV yield (DC)",
   "readings.metric.batteryDischargeAc": "Battery discharge (AC share)",
-  "readings.metric.exportLocal": "Export — local",
-  "readings.metric.exportGrid": "Export — grid",
+  "readings.metric.export": "Export — what left the meter",
+  "readings.metric.exportGrid": "Export — to the grid (provider)",
   "readings.metric.importGrid": "Import — grid",
   "readings.metric.batteryCharge": "Battery charge",
   "readings.metric.batteryDischarge": "Battery discharge",

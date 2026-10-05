@@ -260,6 +260,13 @@
       "when": 1791065655844,
       "tag": "0036_drop_site_price_sensor",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791235986317,
+      "tag": "0037_rename_export_local_to_export",
+      "breakpoints": true
     }
   ]
 }

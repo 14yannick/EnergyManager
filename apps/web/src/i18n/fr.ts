@@ -294,7 +294,8 @@ export const fr: Record<keyof typeof en, string> = {
   // ---- Import readings ---------------------------------------------------
   "readings.title": "Import des relevés",
   "readings.csvNote":
-    "Colonnes CSV : timestamp, metric_kind, party, value_kwh — une ligne par horodatage et métrique. metric_kind vaut production, export_local, export_grid, import_grid, battery_charge, battery_discharge ou consumption. party est obligatoire (le nom d'un participant) lorsque metric_kind vaut consumption, et doit rester vide sinon. Réimporter des lignes qui se recoupent les remplace.",
+    "Colonnes CSV : timestamp, metric_kind, party, value_kwh — une ligne par horodatage et métrique. metric_kind vaut l'une de : {kinds}. party est obligatoire (le nom d'un participant) lorsque metric_kind vaut consumption ou consumption_grid, et doit rester vide sinon. Réimporter des lignes qui se recoupent les remplace.",
+  "readings.template": "Télécharger le modèle CSV",
   "readings.modeDelta": "Delta — les valeurs sont déjà des kWh par intervalle",
   "readings.modeCumulative":
     "Cumulatif — les valeurs sont des index de compteur, par métrique et participant",
@@ -317,8 +318,8 @@ export const fr: Record<keyof typeof en, string> = {
   "readings.metric.inverterAc": "Production AC de l'onduleur (PV + batterie)",
   "readings.metric.pvDc": "Production photovoltaïque (DC)",
   "readings.metric.batteryDischargeAc": "Décharge batterie (part AC)",
-  "readings.metric.exportLocal": "Injection — locale",
-  "readings.metric.exportGrid": "Injection — réseau",
+  "readings.metric.export": "Injection — sortie du compteur",
+  "readings.metric.exportGrid": "Injection — vers le réseau (fournisseur)",
   "readings.metric.importGrid": "Soutirage — réseau",
   "readings.metric.batteryCharge": "Charge batterie",
   "readings.metric.batteryDischarge": "Décharge batterie",

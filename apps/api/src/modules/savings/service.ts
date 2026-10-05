@@ -40,7 +40,6 @@ import {
   aggregateIntervalsToHourly,
   chargeAcEquivalentKwh,
   computeDirectUseKwh,
-  energyLeftHouseKwh,
   computeSavingsFromInputs,
   summarizeHourlySavings,
   summarizeMonthlySavings,
@@ -50,6 +49,7 @@ import {
   summarizeYearlySavings,
 } from "./engine.js";
 import { plantSettingsOf } from "../sites/plant.js";
+import { loadVzevSettlement } from "../vzev/settlement.js";
 
 /**
  * Every rate that can apply inside the bounds: tariff periods, the day-ahead
@@ -120,10 +120,12 @@ async function loadPricedSlots(
   // interval_metrics stores one row per (site, ts, metric) instead of fixed
   // columns; pivot it back into the wide per-interval shape the engine
   // expects via conditional aggregation, so engine.ts needs no changes.
-  // exportedKwh deliberately comes only from export_grid, not export_local —
-  // locally-shared-to-neighbours energy doesn't feed savings math yet (needs
-  // a real per-neighbour allocation model first).
-  const [plant, readingRows, resolveRate] = await Promise.all([
+  //
+  // The plant's own figures come from the pivot. Where the export went —
+  // to the participants or on to the grid — comes from the settlement, which
+  // takes the grid provider's figures where they are in and works the split
+  // out where they are not (see vzev/settlement.ts).
+  const [plant, readingRows, settlement, resolveRate] = await Promise.all([
     plantSettingsOf(siteId),
     db
       .select({
@@ -137,13 +139,6 @@ async function loadPricedSlots(
         // that actually reached the house or the grid. The DC figure is kept
         // as its own metric for battery diagnostics.
         batteryDischargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_discharge_ac'), 0)`,
-        exportedKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_grid'), 0)`,
-        // Null, not 0, when the interval has no export_local reading at all —
-        // see energyLeftHouseKwh on why the two must not be confused.
-        exportLocalKwh: sql<string | null>`sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_local')`,
-        // Summed across every party — the per-party split matters for billing,
-        // not for the site's revenue total.
-        neighborConsumptionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption'), 0)`,
         // Unpriced: the savings maths never touches it. It is here so the
         // energy-flow view can show where the house's power came from without
         // a second query over the same intervals.
@@ -160,13 +155,15 @@ async function loadPricedSlots(
           eq(intervalMetrics.siteId, siteId),
           sql`${intervalMetrics.ts} >= ${fromBound}`,
           sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
+          // The export and the participants' draw are not summed here, but
+          // an interval that has only those still needs its row.
           inArray(intervalMetrics.metricKind, [
             "production",
             "battery_charge",
             "battery_discharge",
             "battery_discharge_ac",
             "export_grid",
-            "export_local",
+            "export",
             "consumption",
             "import_grid",
           ]),
@@ -174,8 +171,10 @@ async function loadPricedSlots(
       )
       .groupBy(intervalMetrics.ts)
       .orderBy(intervalMetrics.ts),
+    loadVzevSettlement(siteId, fromBound, toBoundExclusive),
     loadRateResolver(siteId, fromBound, toBoundExclusive),
   ]);
+  const settledAt = new Map(settlement.map((s) => [s.ts.getTime(), s]));
 
   // The producers' own figure, combined for the site (see sites/plant.ts).
   const batteryConversionLoss = plant.batteryConversionLoss;
@@ -185,12 +184,12 @@ async function loadPricedSlots(
     const producedKwh = toNumber(row.producedKwh);
     const batteryChargeKwh = toNumber(row.batteryChargeKwh);
     const batteryDischargeKwh = toNumber(row.batteryDischargeKwh);
-    const exportedKwh = toNumber(row.exportedKwh);
-    const exportLocalKwh = energyLeftHouseKwh(
-      exportedKwh,
-      row.exportLocalKwh == null ? null : toNumber(row.exportLocalKwh),
-    );
-    const neighborConsumptionKwh = toNumber(row.neighborConsumptionKwh);
+    const settled = settledAt.get(row.ts.getTime());
+    // What reached the grid and is paid at the feed-in rate, everything that
+    // left the house, and what the participants took of it.
+    const exportedKwh = settled?.unsoldKwh ?? 0;
+    const exportLocalKwh = settled?.exportKwh ?? 0;
+    const neighborConsumptionKwh = settled?.salesKwh ?? 0;
 
     const priced = computeSavingsFromInputs({
       date: row.date,
@@ -295,6 +294,31 @@ export async function getFeedInRateCurve(siteId: string, date: string): Promise<
 }
 
 /**
+ * What each participant took from the export, interval by interval: the grid
+ * provider's split where it is in, the vZEV's own rule where it is not (see
+ * vzev/settlement.ts). The same settlement the site's revenue is priced
+ * from, so the participants' sales here add up to the neighbour-sale
+ * revenue the dashboard charts.
+ */
+async function loadPartySales(
+  siteId: string,
+  fromBound: SQL,
+  toBoundExclusive: SQL,
+): Promise<Array<{ partyId: string; name: string; ts: Date; kwh: number }>> {
+  const [settlement, siteParties] = await Promise.all([
+    loadVzevSettlement(siteId, fromBound, toBoundExclusive),
+    db.select({ id: parties.id, name: parties.name }).from(parties).where(eq(parties.siteId, siteId)),
+  ]);
+  const nameOf = new Map(siteParties.map((p) => [p.id, p.name]));
+  return settlement.flatMap((interval) =>
+    interval.sales.flatMap((sale) => {
+      const name = nameOf.get(sale.partyId);
+      return name == null ? [] : [{ partyId: sale.partyId, name, ts: interval.ts, kwh: sale.kwh }];
+    }),
+  );
+}
+
+/**
  * Who drew what from the local pool, priced per interval.
  *
  * Kept as its own query rather than widening the pivot above: that one groups
@@ -310,29 +334,11 @@ async function loadDayParties(
   const fromBound = sql`(${date}::date AT TIME ZONE 'Europe/Zurich')`;
   const toBoundExclusive = sql`((${date}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
 
-  const rows = await db
-    .select({
-      ts: intervalMetrics.ts,
-      partyId: intervalMetrics.partyId,
-      name: parties.name,
-      kwh: sql<string>`sum(${intervalMetrics.valueKwh})`,
-    })
-    .from(intervalMetrics)
-    .innerJoin(parties, eq(parties.id, intervalMetrics.partyId))
-    .where(
-      and(
-        eq(intervalMetrics.siteId, siteId),
-        eq(intervalMetrics.metricKind, "consumption"),
-        sql`${intervalMetrics.ts} >= ${fromBound}`,
-        sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
-      ),
-    )
-    .groupBy(intervalMetrics.ts, intervalMetrics.partyId, parties.name);
+  const rows = await loadPartySales(siteId, fromBound, toBoundExclusive);
 
   const byParty = new Map<string, SavingsDayParty>();
   for (const row of rows) {
-    if (!row.partyId) continue;
-    const kwh = toNumber(row.kwh);
+    const kwh = row.kwh;
     const rate = resolveRate("neighbor_sell", row.ts.toISOString());
     const entry = byParty.get(row.partyId) ?? {
       partyId: row.partyId,
@@ -390,30 +396,11 @@ export async function getNeighbourSales(siteId: string, from: string, to: string
   const toBoundExclusive = sql`((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
 
   const [rows, resolveRate] = await Promise.all([
-    db
-      .select({
-        ts: intervalMetrics.ts,
-        partyId: intervalMetrics.partyId,
-        name: parties.name,
-        kwh: sql<string>`sum(${intervalMetrics.valueKwh})`,
-      })
-      .from(intervalMetrics)
-      .innerJoin(parties, eq(parties.id, intervalMetrics.partyId))
-      .where(
-        and(
-          eq(intervalMetrics.siteId, siteId),
-          eq(intervalMetrics.metricKind, "consumption"),
-          sql`${intervalMetrics.ts} >= ${fromBound}`,
-          sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
-        ),
-      )
-      .groupBy(intervalMetrics.ts, intervalMetrics.partyId, parties.name),
+    loadPartySales(siteId, fromBound, toBoundExclusive),
     loadRateResolver(siteId, fromBound, toBoundExclusive),
   ]);
 
-  const draws = rows.flatMap((r) =>
-    r.partyId ? [{ partyId: r.partyId, name: r.name, ts: r.ts.toISOString(), kwh: toNumber(r.kwh) }] : [],
-  );
+  const draws = rows.map((r) => ({ partyId: r.partyId, name: r.name, ts: r.ts.toISOString(), kwh: r.kwh }));
   // Read off the savings rows themselves, so this can never disagree with the
   // revenue chart or the savings totals about which days it covers.
   const [overall, ownerCosts, saved] = await Promise.all([

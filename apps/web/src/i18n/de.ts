@@ -300,7 +300,8 @@ export const de: Record<keyof typeof en, string> = {
   // ---- Import readings ---------------------------------------------------
   "readings.title": "Messwerte importieren",
   "readings.csvNote":
-    "CSV-Spalten: timestamp, metric_kind, party, value_kwh — eine Zeile pro Zeitstempel und Messgrösse. metric_kind ist eines von production, export_local, export_grid, import_grid, battery_charge, battery_discharge, consumption. party ist erforderlich (der Name eines Teilnehmers), wenn metric_kind consumption ist, und muss sonst leer bleiben. Ein erneuter Import überschreibt sich überschneidende Zeilen.",
+    "CSV-Spalten: timestamp, metric_kind, party, value_kwh — eine Zeile pro Zeitstempel und Messgrösse. metric_kind ist eines von {kinds}. party ist erforderlich (der Name eines Teilnehmers), wenn metric_kind consumption oder consumption_grid ist, und muss sonst leer bleiben. Ein erneuter Import überschreibt sich überschneidende Zeilen.",
+  "readings.template": "CSV-Vorlage herunterladen",
   "readings.modeDelta": "Delta — die Werte sind bereits kWh pro Intervall",
   "readings.modeCumulative":
     "Kumuliert — die Werte sind fortlaufende Zählerstände, je Messgrösse und Teilnehmer",
@@ -323,8 +324,8 @@ export const de: Record<keyof typeof en, string> = {
   "readings.metric.inverterAc": "AC-Abgabe des Wechselrichters (PV + Batterie)",
   "readings.metric.pvDc": "Photovoltaik-Ertrag (DC)",
   "readings.metric.batteryDischargeAc": "Batterieentladung (AC-Anteil)",
-  "readings.metric.exportLocal": "Einspeisung — lokal",
-  "readings.metric.exportGrid": "Einspeisung — Netz",
+  "readings.metric.export": "Einspeisung — ab Zähler",
+  "readings.metric.exportGrid": "Einspeisung — ins Netz (Netzbetreiber)",
   "readings.metric.importGrid": "Bezug — Netz",
   "readings.metric.batteryCharge": "Batterieladung",
   "readings.metric.batteryDischarge": "Batterieentladung",

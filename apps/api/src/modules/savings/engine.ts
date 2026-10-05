@@ -96,25 +96,6 @@ export function computeDirectUseKwh(
   return day.producedKwh - (day.exportedKwh - fromBattery);
 }
 
-/**
- * Everything that left the house in an interval: the `export_local` reading,
- * or the grid export where an interval has none.
- *
- * Direct use has to subtract *this*, not grid export alone. Grid export is
- * what is left once the participants have taken their share, so subtracting
- * only that would count every kWh sold to a participant as consumed at home
- * too — priced at the purchase rate on top of the neighbour rate it was sold
- * at. Readings without participants carry the same value in both, so the
- * choice only matters once somebody draws from the pool.
- *
- * The fallback is per interval: a missing `export_local` must not read as
- * "nothing left the house", which would count every exported kWh as used.
- */
-export function energyLeftHouseKwh(exportGridKwh: number, exportLocalKwh: number | null): number {
-  return exportLocalKwh ?? exportGridKwh;
-}
-
-
 export interface SavingsInputs {
   date: string;
   /** Fraction (0-1) of battery charge lost to conversion; site-level setting. */
@@ -246,7 +227,7 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
   const selfConsumptionValueChf =
     purchaseRate != null ? (revenue.dischargeConsumedKwh + directUseKwh) * purchaseRate : 0;
   const exportRevenueChf = sellRate != null ? exportedKwh * sellRate : 0;
-  // Priced off what neighbours actually consumed, not off export_local: the
+  // Priced off what neighbours actually consumed, not off the export: the
   // latter is everything leaving the household, of which the grid share is
   // already priced as export revenue.
   const neighborSellRevenueChf = neighborSellRate != null ? neighborConsumptionKwh * neighborSellRate : 0;

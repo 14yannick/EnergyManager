@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocateVzevPower, settleVzevInterval, splitAvailable } from "./vzevFlow.js";
+import { allocateVzevPower, settleVzevExport, settleVzevInterval, splitAvailable } from "./vzevFlow.js";
 
 const reading = (over: Partial<Parameters<typeof allocateVzevPower>[0]> = {}) => ({
   productionW: 6000,
@@ -163,5 +163,76 @@ describe("settleVzevInterval", () => {
 
   it("leaves a party with no reading out, rather than counting it as drawing nothing", () => {
     expect(settleVzevInterval(1, [{ id: "silent" }]).shares).toEqual([]);
+  });
+});
+
+describe("settleVzevExport", () => {
+  const localOf = (s: ReturnType<typeof settleVzevExport>) => s.shares.reduce((sum, x) => sum + x.local, 0);
+
+  it("sends the grid what the parties left of the export, while the provider has said nothing", () => {
+    const s = settleVzevExport({
+      exportKwh: 1,
+      officialGridKwh: null,
+      parties: [
+        { id: "a", demand: 0.3 },
+        { id: "b", demand: 0.2 },
+      ],
+    });
+    expect(s.gridOfficial).toBe(false);
+    expect(s.gridKwh).toBeCloseTo(0.5, 12);
+    // Nothing is made or lost: every exported kWh went to a party or to the grid.
+    expect(s.gridKwh + localOf(s)).toBeCloseTo(s.exportKwh, 12);
+    expect(s.shares.every((x) => !x.official)).toBe(true);
+  });
+
+  it("is the whole export for the grid when nobody drew", () => {
+    const s = settleVzevExport({ exportKwh: 0.7, officialGridKwh: null, parties: [] });
+    expect(s.gridKwh).toBe(0.7);
+    expect(s.shares).toEqual([]);
+  });
+
+  it("never sends the grid less than nothing when the parties draw more than was exported", () => {
+    const s = settleVzevExport({ exportKwh: 0.2, officialGridKwh: null, parties: [{ id: "a", demand: 1 }] });
+    expect(s.gridKwh).toBe(0);
+    expect(localOf(s)).toBeCloseTo(0.2, 12);
+  });
+
+  it("takes the provider's grid figure as given, whatever the sensors would have worked out", () => {
+    const computed = settleVzevExport({ exportKwh: 1, officialGridKwh: null, parties: [{ id: "a", demand: 0.3 }] });
+    const official = settleVzevExport({ exportKwh: 1, officialGridKwh: 0.9, parties: [{ id: "a", demand: 0.3 }] });
+    expect(official.gridOfficial).toBe(true);
+    expect(official.gridKwh).toBe(0.9);
+    expect(official.gridKwh).not.toBeCloseTo(computed.gridKwh, 6);
+    // A party with only a sensor shares what the provider says stayed in the vZEV.
+    expect(localOf(official)).toBeCloseTo(0.1, 12);
+  });
+
+  it("takes the provider's split of a party as given", () => {
+    const s = settleVzevExport({
+      exportKwh: 1,
+      officialGridKwh: 0.6,
+      parties: [{ id: "a", official: { local: 0.4, grid: 0.25 } }],
+    });
+    expect(s.shares).toEqual([{ id: "a", demand: 0.65, local: 0.4, grid: 0.25, official: true }]);
+  });
+
+  it("reads what left the meters off the provider's two figures where there is no export reading", () => {
+    const s = settleVzevExport({
+      exportKwh: null,
+      officialGridKwh: 0.6,
+      parties: [
+        { id: "a", official: { local: 0.3, grid: 0 } },
+        { id: "b", official: { local: 0.1, grid: 0.5 } },
+      ],
+    });
+    expect(s.exportKwh).toBeCloseTo(1, 12);
+    expect(s.gridKwh).toBe(0.6);
+  });
+
+  it("exports nothing where there is no reading of any kind", () => {
+    const s = settleVzevExport({ exportKwh: null, officialGridKwh: null, parties: [{ id: "a", demand: 0.4 }] });
+    expect(s.exportKwh).toBe(0);
+    expect(s.gridKwh).toBe(0);
+    expect(s.shares[0]).toMatchObject({ local: 0, grid: 0.4 });
   });
 });

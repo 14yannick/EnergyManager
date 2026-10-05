@@ -25,7 +25,16 @@ export const intervalMetricKindEnum = pgEnum("interval_metric_kind", [
   "pv_dc",
   /** The battery's share of inverter AC output — the counterpart of production. */
   "battery_discharge_ac",
-  "export_local", // shared directly with a neighbour, not through the grid meter
+  /**
+   * Everything that left a producer's meter, whoever took it — from their
+   * export sensor, or from the grid provider.
+   */
+  "export",
+  /**
+   * The part of it that reached the grid. The grid provider's figure only:
+   * no sensor writes it, and until it arrives the split is worked out (see
+   * modules/vzev/settlement.ts).
+   */
   "export_grid",
   "import_grid",
   "battery_charge",

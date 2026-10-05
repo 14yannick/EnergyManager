@@ -97,6 +97,62 @@ export function settleVzevInterval(
   return { shares: [...settled, ...shares], surplus };
 }
 
+/** What one interval's readings say about the export, before it is settled. */
+export interface VzevIntervalReadings {
+  /**
+   * What left the producers' meters — the `export` reading, from their
+   * sensor or from the grid provider. Null where the interval has none.
+   */
+  exportKwh: number | null;
+  /** The grid provider's figure for what reached the grid; null until its data is in. */
+  officialGridKwh: number | null;
+  parties: ReadonlyArray<VzevIntervalParty>;
+}
+
+export interface VzevExportSettlement {
+  /** What left the producers' meters. */
+  exportKwh: number;
+  /** What of it reached the grid. */
+  gridKwh: number;
+  /** Whether `gridKwh` is the grid provider's own figure, not one worked out here. */
+  gridOfficial: boolean;
+  /** Every party's draw and how it was covered; `official` where the split is the provider's. */
+  shares: Array<VzevShare & { official: boolean }>;
+}
+
+/**
+ * Where one interval's export went: to the participants, and on to the grid.
+ *
+ * The grid provider settles this, and its figures take precedence wherever
+ * they are in — the grid export it states, and each party's split. They are
+ * never recomputed. What it has not said yet is worked out by the vZEV's own
+ * rule (`splitAvailable`), so the figures are there from the first sensor
+ * reading and move to the provider's as its data arrives:
+ *
+ * - no grid figure: the grid received what the parties left of the export;
+ * - a grid figure, but a party with only a metered draw: that party shares
+ *   what the provider says did not reach the grid, after the official
+ *   splits have had theirs;
+ * - no export reading at all: what left the meters is what the provider
+ *   says reached the grid plus what it says the parties took.
+ */
+export function settleVzevExport(readings: VzevIntervalReadings): VzevExportSettlement {
+  const officialGrid = readings.officialGridKwh == null ? null : Math.max(readings.officialGridKwh, 0);
+  const officialLocal = readings.parties.reduce((sum, p) => sum + Math.max(p.official?.local ?? 0, 0), 0);
+  const exportKwh =
+    readings.exportKwh != null ? Math.max(readings.exportKwh, 0) : (officialGrid ?? 0) + officialLocal;
+  // What the parties can have had between them.
+  const pool = officialGrid == null ? exportKwh : Math.max(exportKwh - officialGrid, 0);
+  const { shares, surplus } = settleVzevInterval(pool, readings.parties);
+  const official = new Set(readings.parties.filter((p) => p.official).map((p) => p.id));
+  return {
+    exportKwh,
+    gridKwh: officialGrid ?? surplus,
+    gridOfficial: officialGrid != null,
+    shares: shares.map((s) => ({ ...s, official: official.has(s.id) })),
+  };
+}
+
 export interface VzevPowerReading {
   /** What all the plants are making, in watts; null when no producer reports it. */
   productionW: number | null;

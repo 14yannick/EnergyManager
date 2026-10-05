@@ -220,7 +220,16 @@ export type IntervalMetricKind =
   | "pv_dc"
   /** The battery's share of inverter AC output. Derived. */
   | "battery_discharge_ac"
-  | "export_local" // shared directly with a neighbour, not through the grid meter
+  /**
+   * Everything that left a producer's meter, whoever took it. From their
+   * export sensor, or from the grid provider.
+   */
+  | "export"
+  /**
+   * The part of `export` that reached the grid, once the participants had
+   * taken theirs. The grid provider's figure only: no sensor can know it.
+   * Until it arrives it is worked out — see `settleVzevExport`.
+   */
   | "export_grid"
   | "import_grid"
   | "battery_charge"

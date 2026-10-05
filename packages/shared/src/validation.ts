@@ -137,7 +137,7 @@ export const intervalMetricKindSchema = z.enum([
   "inverter_ac",
   "pv_dc",
   "battery_discharge_ac",
-  "export_local",
+  "export",
   "export_grid",
   "import_grid",
   "battery_charge",

@@ -12,7 +12,6 @@ import {
   computeDirectUseKwh,
   dischargeExportedKwh,
   addOwnerFixedAdvantage,
-  energyLeftHouseKwh,
   computeSavingsFromInputs,
   summarizeMonthlySavings,
   summarizeOverallSavings,
@@ -497,8 +496,8 @@ describe("computeSavingsFromInputs — revenue breakdown", () => {
     );
   });
 
-  it("prices neighbour sales off neighbour consumption, never off export_local", () => {
-    // export_local is everything leaving the household — its grid share is
+  it("prices neighbour sales off neighbour consumption, never off the export", () => {
+    // The export is everything leaving the household — its grid share is
     // already priced as export revenue, so pricing it again at the neighbour
     // rate would double-count. With no neighbour consumption there is no
     // neighbour revenue, however much left the household.
@@ -1032,7 +1031,7 @@ describe("energy sold to participants is counted once", () => {
   // everything that left the house, of which participants took a share.
   const interval = (gridKwh: number, participantsKwh: number) => {
     const producedKwh = 100;
-    const leftHouse = energyLeftHouseKwh(gridKwh, gridKwh + participantsKwh);
+    const leftHouse = gridKwh + participantsKwh;
     return computeSavingsFromInputs({
       date: "2027-02-01",
       producedKwh,
@@ -1064,12 +1063,6 @@ describe("energy sold to participants is counted once", () => {
     const row = interval(25, 15);
     expect(row.savingsWithBatteryChf - row.savingsWithoutBatteryChf).toBeCloseTo(row.batteryOnlySavingsChf, 10);
     expect(row.batteryOnlySavingsChf).toBeCloseTo(interval(40, 0).batteryOnlySavingsChf, 10);
-  });
-
-  it("takes grid export as what left the house only where there is no export_local reading", () => {
-    expect(energyLeftHouseKwh(25, 40)).toBe(40);
-    expect(energyLeftHouseKwh(25, 0)).toBe(0);
-    expect(energyLeftHouseKwh(25, null)).toBe(25);
   });
 });
 

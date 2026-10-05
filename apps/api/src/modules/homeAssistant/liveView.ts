@@ -62,10 +62,10 @@ async function todaysCurve(siteId: string, now: Date): Promise<LiveDayCurve | nu
         hour: localHour,
         productionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'production'), 0)`,
         batteryChargeKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'battery_charge'), 0)`,
-        exportLocalKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export_local'), 0)`,
+        exportLocalKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'export'), 0)`,
       })
       .from(intervalMetrics)
-      .where(and(dayFilter, inArray(intervalMetrics.metricKind, ["production", "battery_charge", "export_local"])))
+      .where(and(dayFilter, inArray(intervalMetrics.metricKind, ["production", "battery_charge", "export"])))
       .groupBy(localHour)
       .orderBy(localHour),
     cachedForecastSources(),

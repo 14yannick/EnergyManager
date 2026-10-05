@@ -188,8 +188,8 @@ export async function syncHomeAssistant(
     if (negatives > 0) {
       skipped.push(`${label}: dropped ${negatives} negative bucket(s)`);
     }
-    // One counter can feed more than one metric — the export, as what left
-    // the house and as what reached the grid (see PARTY_SENSOR_SPECS).
+    // A kind names the metrics it feeds (see PARTY_SENSOR_SPECS) — one each,
+    // as it stands.
     for (const metricKind of metricKinds) {
       party.kinds.add(metricKind);
       for (const row of rows) party.rows.push({ ts: row.ts, metricKind, valueKwh: row.valueKwh });

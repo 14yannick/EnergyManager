@@ -54,9 +54,10 @@ export interface PartySensorSpec {
   source: PartySensorSource;
   /**
    * The interval metrics the sync writes from it; empty for a live sensor,
-   * which is read on demand and never stored. One export counter feeds two:
-   * what left the house, and what reached the grid — the same figure until
-   * the participants' share is known and taken off the second.
+   * which is read on demand and never stored. The export counter says what
+   * left the meter and nothing more: how much of it reached the grid and
+   * how much the participants took is the grid provider's to say, and is
+   * worked out until it does (see `settleVzevExport`).
    */
   metricKinds: readonly IntervalMetricKind[];
   /** A signed reading: which way is positive is the sensor's own, so it carries a flag. */
@@ -68,7 +69,7 @@ export const PARTY_SENSOR_SPECS: Record<PartySensorKind, PartySensorSpec> = {
   // Signed like the export: many meters report the grid as one sensor that
   // changes sign with the direction, and which way is "drawing" differs.
   live_import_power: { group: "member", source: "power", metricKinds: [], signed: true },
-  export: { group: "feedIn", source: "statistic", metricKinds: ["export_local", "export_grid"], signed: false },
+  export: { group: "feedIn", source: "statistic", metricKinds: ["export"], signed: false },
   live_export_power: { group: "feedIn", source: "power", metricKinds: [], signed: true },
   inverter_ac: { group: "detailedRevenue", source: "statistic", metricKinds: ["inverter_ac"], signed: false },
   pv_dc: { group: "detailedRevenue", source: "statistic", metricKinds: ["pv_dc"], signed: false },

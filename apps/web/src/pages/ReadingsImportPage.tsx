@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   intervalMetricKindSchema,
+  READINGS_CSV_TEMPLATE,
+  READINGS_CSV_TEMPLATE_FILENAME,
   type IntervalMetricKind,
   type ReadingImportMode,
   type ReadingsImportResult,
@@ -35,7 +37,18 @@ export function ReadingsImportPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-slate-900">{t("readings.title")}</h1>
-        <p className="max-w-4xl text-sm text-slate-500">{t("readings.csvNote")}</p>
+        <p className="max-w-4xl text-sm text-slate-500">
+          {t("readings.csvNote", { kinds: intervalMetricKindSchema.options.join(", ") })}
+        </p>
+        {/* The format as a file to start from: the header and one made-up
+            row. A data URL, so it needs no request and works offline. */}
+        <a
+          href={`data:text/csv;charset=utf-8,${encodeURIComponent(READINGS_CSV_TEMPLATE)}`}
+          download={READINGS_CSV_TEMPLATE_FILENAME}
+          className="mt-2 inline-block rounded border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50"
+        >
+          {t("readings.template")}
+        </a>
       </div>
 
       <div className="space-y-4 rounded-lg border bg-white p-4">
@@ -124,7 +137,7 @@ const METRIC_LABELS: Record<IntervalMetricKind, MessageKey> = {
   inverter_ac: "readings.metric.inverterAc",
   pv_dc: "readings.metric.pvDc",
   battery_discharge_ac: "readings.metric.batteryDischargeAc",
-  export_local: "readings.metric.exportLocal",
+  export: "readings.metric.export",
   export_grid: "readings.metric.exportGrid",
   import_grid: "readings.metric.importGrid",
   battery_charge: "readings.metric.batteryCharge",

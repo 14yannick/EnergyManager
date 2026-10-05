@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { READINGS_CSV_COLUMNS, READINGS_CSV_TEMPLATE } from "@energy-manager/shared";
 import { parseMetricsCsv } from "./csvImport.js";
 
 const HEADER = "timestamp,metric_kind,party,value_kwh";
@@ -146,5 +147,24 @@ describe("per-party metric kinds", () => {
     const { rows, errors } = parseMetricsCsv(csv, "delta");
     expect(rows).toHaveLength(0);
     expect(errors[0]!.message).toMatch(/party is required/);
+  });
+});
+
+describe("parseMetricsCsv — the export metric and the template", () => {
+  it("accepts the template the page offers for download, in either mode's format", () => {
+    const { rows, errors } = parseMetricsCsv(READINGS_CSV_TEMPLATE, "delta");
+    expect(errors).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ metricKind: "export", party: null });
+    expect(rows[0]!.valueKwh).toBeGreaterThan(0);
+    expect(READINGS_CSV_TEMPLATE.split("\n")[0]).toBe(HEADER);
+    expect(READINGS_CSV_COLUMNS.join(",")).toBe(HEADER);
+  });
+
+  it("no longer knows the metric by its old name", () => {
+    const csv = [HEADER, "2026-01-01T00:00:00Z,export_local,,1.5", "2026-01-01T00:00:00Z,export,,1.5"].join("\n");
+    const { rows, errors } = parseMetricsCsv(csv, "delta");
+    expect(errors).toEqual([{ row: 2, message: 'Invalid metric_kind: "export_local"' }]);
+    expect(rows.map((r) => r.metricKind)).toEqual(["export"]);
   });
 });

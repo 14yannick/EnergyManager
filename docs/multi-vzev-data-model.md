@@ -129,7 +129,7 @@ Catalogue of kinds an admin can pick:
 | Kind | Read as | Stored |
 |---|---|---|
 | `pv_dc`, `inverter_ac`, `battery_charge`, `battery_discharge` | energy counter | `interval_metrics` |
-| `export_local` | energy leaving the party's connection | `interval_metrics` |
+| `export` | energy leaving the party's connection | `interval_metrics` |
 | `import_grid` | energy drawn at the party's connection | `interval_metrics` |
 | `consumption_own` | the party's own load | `interval_metrics` |
 | `live_pv_power`, `live_grid_power`, `live_battery_power`, `live_load_power`, `live_battery_soc` | read on demand | never |
