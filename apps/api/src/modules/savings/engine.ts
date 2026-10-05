@@ -544,6 +544,20 @@ function summarizePeriodSavings(
   const soldKwh = sold.gridKwh + sold.neighbourKwh;
   const soldPricePerKwhChf = soldKwh > 0 ? (sold.gridChf + sold.neighbourChf) / soldKwh : null;
 
+  // The same range in energy. Production counts what charged the battery as
+  // well: `producedKwh` on a row is the AC side alone, and the charge never
+  // passed through it.
+  const energy = rows.reduce(
+    (acc, r) => {
+      acc.producedKwh += r.producedKwh + r.batteryChargeKwh;
+      acc.batteryChargeKwh += r.batteryChargeKwh;
+      acc.exportedGridKwh += r.exportedKwh;
+      acc.exportedNeighbourKwh += r.neighborConsumptionKwh;
+      return acc;
+    },
+    { producedKwh: 0, batteryChargeKwh: 0, exportedGridKwh: 0, exportedNeighbourKwh: 0 },
+  );
+
   const daysWithData = rows.length; // "periods with data" — days or months, depending on periodsPerYear
   const avgDaily = {
     withBatteryChf: daysWithData > 0 ? totals.withBatteryChf / daysWithData : 0,
@@ -575,7 +589,7 @@ function summarizePeriodSavings(
   };
 
   return {
-    summary: { from, to, totals, sold, soldPricePerKwhChf, daysWithData, avgDaily, costs, payback, breakeven },
+    summary: { from, to, totals, sold, soldPricePerKwhChf, energy, daysWithData, avgDaily, costs, payback, breakeven },
     cumulative,
   };
 }

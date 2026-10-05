@@ -23,7 +23,6 @@ export function StatCard({
   format = (v) => `CHF ${formatChf(v)}`,
   emphasis,
   tone,
-  size,
 }: {
   label: string;
   value?: number | null;
@@ -44,25 +43,22 @@ export function StatCard({
    * (a price, a balance) belong to no flow.
    */
   tone?: Tone;
-  /** A hero card: the page's answer, twice the size of the figures around it. */
-  size?: "hero";
 }) {
   const toned = tone ? TONE_CLASS[tone] : null;
-  const hero = size === "hero";
   const valueClass = toned
-    ? `${toned.ink} ${hero || emphasis ? "font-bold" : "font-semibold"}`
+    ? `${toned.ink} ${emphasis ? "font-bold" : "font-semibold"}`
     : emphasis === "positive"
       ? "font-bold text-emerald-700 dark:text-emerald-400"
       : emphasis === "strong"
         ? "font-bold text-slate-900"
         : "font-semibold text-slate-900";
   return (
-    <div className={`rounded-lg border ${toned?.card ?? "bg-white"} ${hero ? "p-4 sm:p-5" : "p-3 sm:p-4"}`}>
+    <div className={`rounded-lg border ${toned?.card ?? "bg-white"} p-3 sm:p-4`}>
       <p className={`text-xs font-medium ${toned ? toned.ink : "text-slate-500"}`}>
         {label}
         {hint && <InfoTip text={hint} />}
       </p>
-      <p className={`mt-1 tabular-nums ${hero ? "text-3xl sm:text-4xl" : "text-xl sm:text-2xl"} ${valueClass}`}>
+      <p className={`mt-1 text-xl tabular-nums sm:text-2xl ${valueClass}`}>
         {value != null ? format(value) : "—"}
       </p>
       {sub && <p className={`mt-1 text-xs ${toned ? `${toned.ink} opacity-80` : "text-slate-500"}`}>{sub}</p>}

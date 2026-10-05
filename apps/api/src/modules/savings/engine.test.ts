@@ -991,6 +991,42 @@ describe("price per kWh sold", () => {
   });
 });
 
+describe("the range in energy", () => {
+  const costs = { battery: 4000, solar: 12000, total: 16000 };
+  const row = (o: { charge: number; gridKwh: number; localKwh: number; feedIn: number | null }) =>
+    computeSavingsFromInputs({
+      date: "2026-06-01",
+      producedKwh: o.gridKwh + o.localKwh + 5,
+      directUseKwh: 5,
+      batteryChargeKwh: o.charge,
+      batteryDischargeKwh: 0,
+      exportedKwh: o.gridKwh,
+      exportLocalKwh: o.gridKwh + o.localKwh,
+      neighborConsumptionKwh: o.localKwh,
+      purchaseRateChfPerKwh: 0.3,
+      sellRateChfPerKwh: o.feedIn,
+      neighborSellRateChfPerKwh: o.feedIn == null ? null : 0.2,
+    });
+  const summarize = (rows: DailySavings[]) => summarizeSavings(rows, costs, "2026-06-01", "2026-06-30").summary;
+
+  it("counts what charged the battery as produced", () => {
+    const rows = [row({ charge: 4, gridKwh: 30, localKwh: 10, feedIn: 0.08 }), row({ charge: 0, gridKwh: 20, localKwh: 0, feedIn: 0.08 })];
+    const { energy } = summarize(rows);
+    const ac = rows.reduce((sum, r) => sum + r.producedKwh, 0);
+    expect(energy.batteryChargeKwh).toBeCloseTo(4, 10);
+    expect(energy.producedKwh - energy.batteryChargeKwh).toBeCloseTo(ac, 10);
+  });
+
+  it("exports every kWh the price figures account for, priced or not", () => {
+    const s = summarize([row({ charge: 0, gridKwh: 30, localKwh: 10, feedIn: 0.08 }), row({ charge: 2, gridKwh: 20, localKwh: 5, feedIn: null })]);
+    expect(s.energy.exportedGridKwh + s.energy.exportedNeighbourKwh).toBeCloseTo(
+      s.sold.gridKwh + s.sold.neighbourKwh + s.sold.unpricedKwh,
+      10,
+    );
+    expect(s.energy.exportedNeighbourKwh).toBeCloseTo(15, 10);
+  });
+});
+
 describe("energy sold to participants is counted once", () => {
   // One interval as the service builds it: direct use measured against
   // everything that left the house, of which participants took a share.

@@ -15,7 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api/client";
-import { formatChf, formatKwh, formatNumber } from "../lib/format";
+import { formatChf, formatKwh, formatKwhAuto, formatNumber } from "../lib/format";
 import { PALETTE, type Tone } from "../lib/palette";
 import { useT, type Translate } from "../i18n/context";
 import { useCurrentSite } from "../lib/useCurrentSite";
@@ -83,6 +83,7 @@ export function DashboardPage() {
   /** "CHF 1.23/day avg", or the overall view's "over N days". */
   /** CHF per kWh written in cents, as the provider's own bill does. */
   const ct = (chfPerKwh: number) => `${formatNumber(chfPerKwh * 100, 1)} ${t("billing.centsPerKwh")}`;
+  const kwh = (value: number) => `${formatKwhAuto(value)} kWh`;
   const avgOf = (value: number | undefined) =>
     value == null ? undefined : (avgSuffix ?? t("dash.avgSuffix", { value: formatChf(value), unit }));
 
@@ -198,28 +199,52 @@ export function DashboardPage() {
             />
           )}
         </h2>
-        {/* The page's answer, twice the size of everything else: what the
-            system saved, and what the vZEV itself earned. The saving is the
-            sun's doing and wears its colour; the earning is a result, and is
-            coloured only by its sign. The four below are the working
-            figures. */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* The page's answer first: what the system saved, what the vZEV
+            itself earned, and the energy behind both — what the panels
+            generated and what left the house. The saving and the production
+            are the sun's doing and wear its colour, the export the grid's;
+            the earning is a result, and is coloured only by its sign. The
+            four after them are the working figures. */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard
-            size="hero"
             tone="sun"
             label={t("dash.withBatteryTotal")}
             value={summary?.totals.withBatteryChf}
             sub={avgOf(summary?.avgDaily.withBatteryChf)}
           />
           <StatCard
-            size="hero"
             tone={gainTone(netEarningChf)}
             label={t("dash.netEarning")}
             hint={t("dash.netEarningHint")}
             value={netEarningChf}
           />
-        </div>
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatCard
+            tone="sun"
+            label={t("dash.produced")}
+            hint={t("dash.producedHint")}
+            value={summary?.energy.producedKwh}
+            format={kwh}
+            sub={
+              summary && summary.energy.batteryChargeKwh >= 0.05
+                ? t("dash.producedSub", { kwh: formatKwhAuto(summary.energy.batteryChargeKwh) })
+                : undefined
+            }
+          />
+          <StatCard
+            tone="grid"
+            label={t("dash.exported")}
+            hint={t("dash.exportedHint")}
+            value={summary ? summary.energy.exportedGridKwh + summary.energy.exportedNeighbourKwh : undefined}
+            format={kwh}
+            sub={
+              summary && summary.energy.exportedNeighbourKwh >= 0.05
+                ? t("dash.exportedSub", {
+                    grid: formatKwhAuto(summary.energy.exportedGridKwh),
+                    local: formatKwhAuto(summary.energy.exportedNeighbourKwh),
+                  })
+                : undefined
+            }
+          />
           <StatCard
             label={t("dash.noBatteryTotal")}
             value={summary?.totals.withoutBatteryChf}

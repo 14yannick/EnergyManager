@@ -669,6 +669,20 @@ export interface SavingsSummary {
   };
   /** (gridChf + neighbourChf) / (gridKwh + neighbourKwh); null when nothing priced was sold. */
   soldPricePerKwhChf: number | null;
+  /**
+   * The range in energy rather than money: what the panels generated, and
+   * what left the house. Every kWh counts here, priced or not.
+   */
+  energy: {
+    /** Everything the panels generated: the AC production plus what went into the battery. */
+    producedKwh: number;
+    /** The part of `producedKwh` that charged the battery. */
+    batteryChargeKwh: number;
+    /** What left the house for the grid — what remains once participants took their share. */
+    exportedGridKwh: number;
+    /** What left the house for the participants. */
+    exportedNeighbourKwh: number;
+  };
   daysWithData: number;
   avgDaily: {
     withBatteryChf: number;
