@@ -13,6 +13,7 @@ export const ANONYMOUS_ADMIN: AuthIdentity = {
   partyName: null,
   siteId: null,
   homeSite: null,
+  homeParty: null,
   simulated: false,
 };
 
@@ -44,7 +45,7 @@ export class UnknownUserError extends Error {
  */
 export async function roleForEmail(
   email: string,
-): Promise<Pick<AuthIdentity, "role" | "partyId" | "partyName" | "siteId" | "homeSite">> {
+): Promise<Pick<AuthIdentity, "role" | "partyId" | "partyName" | "siteId" | "homeSite" | "homeParty">> {
   // `parties.emails` is a text[]; compare case-insensitively against each
   // element rather than the array as a whole.
   const rows = await db
@@ -72,6 +73,7 @@ export async function roleForEmail(
       partyName: null,
       siteId: null,
       homeSite: only ? { id: only.siteId, name: only.siteName } : null,
+      homeParty: only ? { id: only.id, name: only.name } : null,
     };
   }
 
@@ -80,18 +82,19 @@ export async function roleForEmail(
     // Where this address is assigned — shown on the profile and used as the
     // site an admin or a viewer starts on. Never a scope (see AuthIdentity).
     const homeSite = { id: row.siteId, name: row.siteName };
+    const homeParty = { id: row.id, name: row.name };
     // Both admin roles grant full access; they differ only in whether the
     // party is billed, which is a billing question and not an access one.
     if (row.role === "rcp_admin" || row.role === "rcp_admin_only") {
-      return { role: "admin", partyId: null, partyName: null, siteId: null, homeSite };
+      return { role: "admin", partyId: null, partyName: null, siteId: null, homeSite, homeParty };
     }
     // A viewer and an admin are deliberately left unscoped: both see the
     // whole site, so carrying a partyId would invite a handler to narrow
     // their view to their own row.
     if (row.role === "viewer") {
-      return { role: "viewer", partyId: null, partyName: null, siteId: null, homeSite };
+      return { role: "viewer", partyId: null, partyName: null, siteId: null, homeSite, homeParty };
     }
-    return { role: "participant", partyId: row.id, partyName: row.name, siteId: row.siteId, homeSite };
+    return { role: "participant", partyId: row.id, partyName: row.name, siteId: row.siteId, homeSite, homeParty };
   }
   // Zero matches: authenticated by Cloudflare but unknown to this app.
   // More than one: the address is on several parties, so "their own data" is

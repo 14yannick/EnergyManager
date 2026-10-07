@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
@@ -77,6 +77,7 @@ export function LiveSection({
   owner,
   flow,
   partyId,
+  switchable = false,
 }: {
   siteId: string | null | undefined;
   /**
@@ -97,10 +98,19 @@ export function LiveSection({
    * their own.
    */
   partyId?: string | null;
+  /**
+   * Whether the viewer may switch between the two pictures — a producer
+   * with the plant's live sensors mapped, who is in both. `flow` is then
+   * only where it starts.
+   */
+  switchable?: boolean;
 }) {
   const showFeedInRate = owner;
   const t = useT();
   const [dayView, setDayView] = useState<"today" | "tomorrow">("today");
+  const [flowView, setFlowView] = useState(flow);
+  // Back to the given picture when the page moves on to another party.
+  useEffect(() => setFlowView(flow), [flow, siteId, partyId]);
   const query = useLiveView(siteId);
   const live = query.data;
   // Both the forecast and the day-ahead rate usually publish only from the
@@ -138,7 +148,21 @@ export function LiveSection({
   // own energy setup. Show whichever the site has, and nothing when it has
   // neither: an unset-up view is not a failure worth shouting about.
   if (!hasLiveCards(live) && !live.today) return null;
-  const hasFlow = flow === "vzev" || hasLiveFlow(live);
+  // The plant's picture needs its live sensors; without them there is only
+  // the vZEV's, and nothing to switch between.
+  const canSwitch = switchable && hasLiveFlow(live);
+  const shown = canSwitch ? flowView : flow;
+  const hasFlow = shown === "vzev" || hasLiveFlow(live);
+  const flowToggle = canSwitch ? (
+    <SegmentedToggle
+      value={shown}
+      onChange={setFlowView}
+      options={[
+        { value: "plant", label: t("party.live.viewPlant") },
+        { value: "vzev", label: t("party.live.viewVzev") },
+      ]}
+    />
+  ) : null;
 
   return (
     <section className="space-y-3">
@@ -156,8 +180,8 @@ export function LiveSection({
         {/* Two pictures of the same instant. The plant's — panels, battery,
             house — is the producer's, on the Dashboard. The vZEV's — what
             was fed in and who took it — is every participant's. */}
-        {flow === "plant" && hasLiveFlow(live) && <LiveFlow siteId={siteId} live={live} />}
-        {flow === "vzev" && <VzevFlow siteId={siteId} partyId={partyId} />}
+        {shown === "plant" && hasLiveFlow(live) && <LiveFlow siteId={siteId} live={live} tools={flowToggle} />}
+        {shown === "vzev" && <VzevFlow siteId={siteId} partyId={partyId} tools={flowToggle} />}
         {live.today && (
           <DayCurveChart
             today={live.today}
@@ -254,7 +278,38 @@ function DayStat({ label, value, hint }: { label: string; value: string; hint?: 
   );
 }
 
-/** The Today/Tomorrow segmented toggle, shown only once tomorrow has anything. */
+/** A row of exclusive choices, the chosen one filled in. */
+function SegmentedToggle<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
+      {options.map((o, i) => (
+        <span key={o.value} className="inline-flex">
+          {i > 0 && <span className="w-px bg-slate-300" />}
+          <button
+            type="button"
+            onClick={() => onChange(o.value)}
+            aria-pressed={value === o.value}
+            className={`px-2 py-1 text-xs font-medium ${
+              value === o.value ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {o.label}
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The Today/Tomorrow toggle, shown only once tomorrow has anything. */
 function DayViewToggle({
   view,
   onChange,
@@ -263,24 +318,15 @@ function DayViewToggle({
   onChange: (view: "today" | "tomorrow") => void;
 }) {
   const t = useT();
-  const option = (value: "today" | "tomorrow", label: string) => (
-    <button
-      type="button"
-      onClick={() => onChange(value)}
-      aria-pressed={view === value}
-      className={`px-2 py-1 text-xs font-medium ${
-        view === value ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-      }`}
-    >
-      {label}
-    </button>
-  );
   return (
-    <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
-      {option("today", t("party.live.viewToday"))}
-      <div className="w-px bg-slate-300" />
-      {option("tomorrow", t("party.live.viewTomorrow"))}
-    </div>
+    <SegmentedToggle
+      value={view}
+      onChange={onChange}
+      options={[
+        { value: "today", label: t("party.live.viewToday") },
+        { value: "tomorrow", label: t("party.live.viewTomorrow") },
+      ]}
+    />
   );
 }
 

@@ -20,7 +20,6 @@ export const de: Record<keyof typeof en, string> = {
   "nav.settings": "Standortverwaltung",
   "nav.integrations": "Integrationen",
   "nav.billing": "Fakturierung",
-  "nav.consumption": "Verbrauch",
   "nav.account": "Konto",
   "nav.profile": "Profil",
   "sky.night": "Nacht",
@@ -553,6 +552,7 @@ export const de: Record<keyof typeof en, string> = {
 
   // ---- Dashboard ---------------------------------------------------------
   "dash.title": "Dashboard",
+  "dash.viewAs": "Dashboard von",
   "dash.intro": "Was die Anlage gerade tut, dann was sie in einem Zeitraum eingebracht hat und wie lange sie braucht, um ihre Kosten zu decken.",
   "dash.periodTitle": "Ersparnis und Amortisation",
   "dash.periodIntro": "Was die Anlage im gewählten Zeitraum eingebracht oder vermieden hat, und wie lange sie braucht, um ihre Kosten zu decken.",
@@ -707,11 +707,10 @@ export const de: Record<keyof typeof en, string> = {
   "billing.cents": "Rp.",
   "billing.centsPerKwh": "Rp./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
-  "party.title": "Verbrauch",
   "party.intro": "Was die Anlage gerade tut, dann der Verbrauch von {name} in einem Zeitraum und was das vZEV eingespart hat.",
+  "party.section": "{name} als Verbraucher",
   "party.periodTitle": "Verbrauch und Ersparnis",
   "party.periodIntro": "Der Verbrauch von {name}, aufgeteilt in vZEV-Solarstrom und Netz, und die Ersparnis gegenüber der Direktversorgung.",
-  "party.pick": "Teilnehmer",
   "party.none": "Noch keine Teilnehmer — erfassen Sie sie in der Standortverwaltung.",
   "party.noData": "In diesem Zeitraum wurde kein Verbrauch erfasst.",
   "party.live": "Gerade jetzt",
@@ -727,6 +726,8 @@ export const de: Record<keyof typeof en, string> = {
   "party.live.chartNote": "Was die Panels bisher in jeder Stunde erzeugt haben, gegenüber der Tagesprognose. Die laufende Stunde ist bis zu ihrem Ende unvollständig. Der Einspeisetarif ist nach seiner Güte gefärbt: dunkelrot unter null, rot unter 8 Rp., grau unter 14 Rp., grün darüber und dunkelgrün, sobald er den Bezugspreis übertrifft. Was die Batterie abgibt, zählt ebenfalls als verfügbar; eine Stunde kann daher mehr zeigen, als die Panels in ihr erzeugt haben.",
   "party.live.viewToday": "Heute",
   "party.live.viewTomorrow": "Morgen",
+  "party.live.viewPlant": "Anlage",
+  "party.live.viewVzev": "vZEV",
   "party.live.tomorrowChart": "Morgen, Stunde für Stunde",
   "party.live.tomorrowChartNote": "Was Home Assistant für morgen erwartet, und der dafür bereits bekannte Rücklieferungstarif — beides trifft meist erst am Abend ein, vorher gibt es hier nichts zu zeigen.",
   "party.live.madeToday": "Heute erzeugt",

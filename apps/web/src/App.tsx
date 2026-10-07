@@ -14,7 +14,6 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountPage } from "./pages/AccountPage";
 import { BillingPage } from "./pages/BillingPage";
-import { PartyDashboardPage } from "./pages/PartyDashboardPage";
 import { ProfilePage } from "./pages/ProfilePage";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -34,7 +33,7 @@ interface NavItem {
 /**
  * Where a role may go.
  *
- * A participant sees their own consumption and their own invoices, nothing
+ * A participant sees their own dashboard and their own invoices, nothing
  * else: every other page reads site-wide data the API refuses them. Profile
  * follows billing for everyone — it is where the session and the language
  * live, and on a phone it is the last of the tabs that matter day to day.
@@ -44,7 +43,7 @@ function navItems(participant: boolean): NavItem[] {
     ? [
         // Billing itself doesn't apply to a participant any more — the
         // Account tab already carries their own dated invoices and status.
-        { to: "/", label: "nav.consumption", end: true },
+        { to: "/", label: "nav.dashboard", end: true },
         { to: "/account", label: "nav.account" },
         { to: "/profile", label: "nav.profile" },
       ]
@@ -55,7 +54,6 @@ function navItems(participant: boolean): NavItem[] {
         // Integrations closes the row: the installation's own connections,
         // set once and looked at least.
         { to: "/", label: "nav.dashboard", end: true },
-        { to: "/consumption", label: "nav.consumption" },
         { to: "/account", label: "nav.account" },
         { to: "/billing", label: "nav.billing" },
         { to: "/profile", label: "nav.profile" },
@@ -212,7 +210,7 @@ export function App() {
           <NoAccess email={session.email} status={session.status} />
         ) : participant ? (
           <Routes>
-            <Route path="/" element={<PartyDashboardPage />} />
+            <Route path="/" element={<DashboardPage />} />
             <Route path="/account" element={<AccountPage />} />
             {/* Billing moved into Account; keep an old link working. */}
             <Route path="/billing" element={<Navigate to="/account" replace />} />
@@ -222,7 +220,8 @@ export function App() {
         ) : (
           <Routes>
             <Route path="/" element={<DashboardPage />} />
-            <Route path="/consumption" element={<PartyDashboardPage />} />
+            {/* Consumption moved into the dashboard; keep an old link working. */}
+            <Route path="/consumption" element={<Navigate to="/" replace />} />
             <Route path="/tariff-periods" element={<TariffPeriodsPage />} />
             <Route path="/calculation" element={<CalculationDetailPage />} />
             {/* Investment costs moved into Settings; keep old links working. */}

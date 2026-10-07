@@ -15,7 +15,6 @@ export const fr: Record<keyof typeof en, string> = {
   "nav.settings": "Administration du site",
   "nav.integrations": "Intégrations",
   "nav.billing": "Facturation",
-  "nav.consumption": "Consommation",
   "nav.account": "Compte",
   "nav.profile": "Profil",
   "sky.night": "Nuit",
@@ -547,6 +546,7 @@ export const fr: Record<keyof typeof en, string> = {
 
   // ---- Dashboard ---------------------------------------------------------
   "dash.title": "Tableau de bord",
+  "dash.viewAs": "Tableau de bord de",
   "dash.intro": "Ce que fait l'installation en ce moment, puis ce qu'elle a rapporté sur une période et le temps qu'elle met à rembourser son coût.",
   "dash.periodTitle": "Économies et amortissement",
   "dash.periodIntro": "Ce que l'installation a rapporté ou évité sur la plage sélectionnée, et le temps qu'elle met à rembourser son coût.",
@@ -696,11 +696,10 @@ export const fr: Record<keyof typeof en, string> = {
   "billing.cents": "ct.",
   "billing.centsPerKwh": "ct./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
-  "party.title": "Consommation",
   "party.intro": "Ce que fait l'installation en ce moment, puis la consommation de {name} sur une période et ce que le RCPv lui a fait économiser.",
+  "party.section": "{name} en tant que consommateur",
   "party.periodTitle": "Consommation et économies",
   "party.periodIntro": "La consommation de {name}, répartie entre le solaire du RCPv et le réseau, et l'économie réalisée par rapport à une fourniture directe.",
-  "party.pick": "Participant",
   "party.none": "Aucun participant pour l'instant — ajoutez-les dans l'administration du site.",
   "party.noData": "Aucune consommation enregistrée sur cette période.",
   "party.live": "En ce moment",
@@ -716,6 +715,8 @@ export const fr: Record<keyof typeof en, string> = {
   "party.live.chartNote": "Ce que les panneaux ont produit chaque heure jusqu'ici, face à la prévision du jour. L'heure en cours est partielle jusqu'à sa fin. Le tarif de reprise est coloré selon sa valeur : rouge foncé sous zéro, rouge sous 8 ct., gris sous 14 ct., vert au-dessus, et vert foncé dès qu'il dépasse le prix d'achat. Ce que la batterie renvoie compte aussi comme disponible, une heure peut donc afficher plus que ce que les panneaux y ont produit.",
   "party.live.viewToday": "Aujourd'hui",
   "party.live.viewTomorrow": "Demain",
+  "party.live.viewPlant": "Installation",
+  "party.live.viewVzev": "RCPv",
   "party.live.tomorrowChart": "Demain, heure par heure",
   "party.live.tomorrowChartNote": "Ce que Home Assistant prévoit pour demain, et le tarif de reprise déjà connu pour cette journée — les deux arrivent généralement le soir, donc rien ne s'affiche avant.",
   "party.live.madeToday": "Produit aujourd'hui",

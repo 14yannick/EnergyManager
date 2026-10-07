@@ -27,10 +27,12 @@ VZEV (Virtueller Zusammenschluss zum Eigenverbrauch).
   power flow at this instant (Home Assistant power sensors, battery state of charge) over
   today's energy; and simple payback + breakeven computed three ways — with battery,
   without battery (counterfactual), and battery-only
-- **A participant's live view of the vZEV** on their Consumption page: what the plants make
-  and keep, summed over all producers, what is fed into the vZEV, and where it goes — to
+- **One dashboard per member**: a party that feeds in gets the plant's figures — live,
+  revenue, payback — with their own consumption underneath; a party that only draws gets
+  their consumption and what the vZEV saved them, with the vZEV's live view: what the
+  plants make and keep, summed over all producers, what is fed in, and where it goes — to
   them, to the other participants (as one total) and to the grid, shared in proportion to
-  the draw. The producer's own picture of the house stays on the Dashboard
+  the draw. A participant sees their own; an admin or a viewer picks any member
 - **Calculation detail** page showing one day at a time: where production went (direct
   use, the parties, the grid) and what the battery cost and earned, each line carrying
   the energy-weighted average rate it was priced at. Any line expands into the metering

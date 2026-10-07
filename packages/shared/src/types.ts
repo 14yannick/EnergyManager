@@ -916,6 +916,13 @@ export interface AuthIdentity {
    */
   homeSite: { id: string; name: string } | null;
   /**
+   * The party this address is on, for every role — the household behind the
+   * person, where the dashboard starts. Like `homeSite`, never a scope: a
+   * participant's scope is `partyId`, and an admin or a viewer may look at
+   * any party. Null when the address has no party behind it.
+   */
+  homeParty: { id: string; name: string } | null;
+  /**
    * A local preview (AUTH_DEV_AS) rather than a real sign-in: there is no
    * Cloudflare session behind it to sign out of.
    */

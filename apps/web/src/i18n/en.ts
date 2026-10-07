@@ -15,7 +15,6 @@ export const en = {
   "nav.settings": "Site administration",
   "nav.integrations": "Integrations",
   "nav.billing": "Billing",
-  "nav.consumption": "Consumption",
   "nav.account": "Account",
   "nav.profile": "Profile",
   "sky.night": "Night",
@@ -539,6 +538,7 @@ export const en = {
 
   // ---- Dashboard ---------------------------------------------------------
   "dash.title": "Dashboard",
+  "dash.viewAs": "Dashboard of",
   "dash.intro": "What the installation is doing right now, then what it earned over a period and how long it takes to pay back its cost.",
   "dash.periodTitle": "Savings & payback",
   "dash.periodIntro": "What the system earned or avoided over the selected range, and how long it takes to pay back its cost.",
@@ -688,11 +688,10 @@ export const en = {
   "billing.cents": "ct.",
   "billing.centsPerKwh": "ct./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
-  "party.title": "Consumption",
   "party.intro": "What the installation is doing right now, then {name}'s consumption over a period and what the vZEV saved them.",
+  "party.section": "{name} as a consumer",
   "party.periodTitle": "Consumption & savings",
   "party.periodIntro": "{name}'s consumption, split between the vZEV's own solar and the grid, and what that saved against direct supply.",
-  "party.pick": "Participant",
   "party.none": "No participants yet — add them under Site administration.",
   "party.noData": "No consumption recorded in this range.",
   "party.live": "Right now",
@@ -708,6 +707,8 @@ export const en = {
   "party.live.chartNote": "What the panels made in each hour so far, against the forecast for the day. The hour in progress is partial until it ends. The feed-in rate is coloured by how good it is: dark red below zero, red under 8 ct., grey under 14 ct., green above, and dark green once it beats the purchase price. What the battery sends out counts as available too, so an hour can show more than the panels made in it.",
   "party.live.viewToday": "Today",
   "party.live.viewTomorrow": "Tomorrow",
+  "party.live.viewPlant": "Plant",
+  "party.live.viewVzev": "vZEV",
   "party.live.tomorrowChart": "Tomorrow, hour by hour",
   "party.live.tomorrowChartNote": "What Home Assistant expects for tomorrow, and the feed-in rate already known for it — both usually arrive in the evening, so there is nothing to show before then.",
   "party.live.madeToday": "Made today",

@@ -38,6 +38,7 @@ describe("resolveIdentity with authentication off", () => {
       partyName: "Neighbour A",
       siteId: "s1",
       homeSite: { id: "s1", name: "Home" },
+      homeParty: { id: "p1", name: "Neighbour A" },
       simulated: true,
     });
   });
@@ -47,6 +48,7 @@ describe("resolveIdentity with authentication off", () => {
       const { resolveIdentity } = await load({ AUTH_DEV_AS: "owner@example.com" }, [{ ...neighbour, role }]);
       const identity = await resolveIdentity({});
       expect(identity.homeSite).toEqual({ id: "s1", name: "Home" });
+      expect(identity.homeParty).toEqual({ id: "p1", name: "Neighbour A" });
       // The scope stays open: `siteId` is what the guard confines by.
       expect(identity.siteId).toBeNull();
       expect(identity.partyId).toBeNull();
@@ -64,12 +66,13 @@ describe("resolveIdentity with authentication off", () => {
       partyId: null,
       siteId: null,
       homeSite: { id: "s1", name: "Home" },
+      homeParty: { id: "p1", name: "Neighbour A" },
     });
   });
 
   it("has no home site for an address with no party behind it", async () => {
     const { resolveIdentity } = await load({ AUTH_DEV_AS: "boss@example.com", AUTH_ADMIN_EMAILS: "boss@example.com" });
-    expect(await resolveIdentity({})).toMatchObject({ role: "admin", siteId: null, homeSite: null });
+    expect(await resolveIdentity({})).toMatchObject({ role: "admin", siteId: null, homeSite: null, homeParty: null });
   });
 
   it("previews a viewer party as a viewer — no list of viewer addresses needed", async () => {

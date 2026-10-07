@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { allocateLivePower, type LiveEnergyView } from "@energy-manager/shared";
 import { api } from "../api/client";
@@ -39,7 +39,16 @@ export function hasLiveFlow(live: LiveEnergyView): boolean {
   return live.configured && (live.pvW != null || live.exportW != null || live.batteryChargeW != null || live.loadW != null);
 }
 
-export function LiveFlow({ siteId, live }: { siteId: string | null | undefined; live: LiveEnergyView }) {
+export function LiveFlow({
+  siteId,
+  live,
+  tools,
+}: {
+  siteId: string | null | undefined;
+  live: LiveEnergyView;
+  /** Controls drawn beside the heading — the switch to the vZEV's picture, where there is one. */
+  tools?: ReactNode;
+}) {
   const t = useT();
   const { ref: wrapRef, element: wrapEl, width } = useElementWidth();
   const [hover, setHover] = useState<Hover | null>(null);
@@ -111,10 +120,13 @@ export function LiveFlow({ siteId, live }: { siteId: string | null | undefined; 
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <h3 className="text-sm font-medium text-slate-900">
-        {t("flow.liveTitle")}
-        <InfoTip text={t("flow.liveNote")} />
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium text-slate-900">
+          {t("flow.liveTitle")}
+          <InfoTip text={t("flow.liveNote")} />
+        </h3>
+        {tools}
+      </div>
       <div ref={wrapRef} className="relative mt-2 w-full">
         {width > 0 && (
           <RadialFlow

@@ -1,4 +1,4 @@
-import { useId, useState, type MouseEvent } from "react";
+import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { allocateVzevPower, type VzevLiveView } from "@energy-manager/shared";
 import { api } from "../api/client";
@@ -67,7 +67,9 @@ const fmtW = (w: number) => (w >= 1000 ? `${formatNumber(w / 1000, 1)} kW` : `${
 function frameFor(width: number) {
   const wide = width >= 560;
   const W = wide ? 560 : Math.max(width, 320);
-  const H = wide ? 460 : 420;
+  // The same proportions as the plant's radial (RadialFlow.frameFor), so
+  // switching between the two pictures does not change the card's height.
+  const H = wide ? 460 : 380;
   const R = wide ? 44 : 40;
   // On a phone the outer rings sit as far out as they can: the two figures
   // beside the grid ring need the gap between rings, and it is narrow.
@@ -200,10 +202,13 @@ interface Hover {
 export function VzevFlow({
   siteId,
   partyId,
+  tools,
 }: {
   siteId: string | null | undefined;
   /** Whose view to show. A participant's own is implied — the API decides — so they pass none. */
   partyId?: string | null;
+  /** Controls drawn beside the heading — the switch to the plant's picture, where there is one. */
+  tools?: ReactNode;
 }) {
   const t = useT();
   const uid = useId().replace(/:/g, "");
@@ -300,10 +305,13 @@ export function VzevFlow({
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <h3 className="text-sm font-medium text-slate-900">
-        {t("flow.liveTitle")}
-        <InfoTip text={t("vzevFlow.note")} />
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium text-slate-900">
+          {t("flow.liveTitle")}
+          <InfoTip text={t("vzevFlow.note")} />
+        </h3>
+        {tools}
+      </div>
       <div ref={wrapRef} className="relative mt-2 w-full">
         {width > 0 && (
           <svg

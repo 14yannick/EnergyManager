@@ -16,8 +16,6 @@ import { formatChf, formatKwh, formatKwhAuto } from "../lib/format";
 import { PALETTE } from "../lib/palette";
 import { useSelectedPeriod } from "../lib/usePeriod";
 import { useT, type MessageKey } from "../i18n/context";
-import { useIdentity } from "../lib/useIdentity";
-import { useCurrentSite } from "../lib/useCurrentSite";
 import { PeriodControls } from "../components/PeriodControls";
 import { PeriodHeader } from "../components/PeriodHeader";
 import { InfoTip } from "../components/InfoTip";
@@ -36,13 +34,14 @@ import {
 } from "../lib/periods";
 
 /**
- * One party's consumption: how much came from the RCP's own production rather
- * than the grid, and what being in the RCP saved them.
+ * One party's consumption: how much came from the vZEV's own production
+ * rather than the grid, and what being in the vZEV saved them.
  *
- * The page a participant lands on. An admin or viewer sees the same page for
- * whichever member they pick, which is how the owner can look at their own
- * household as a consumer rather than as the producer the main dashboard is
- * about.
+ * The dashboard of a member who does not feed in, and the lower half of a
+ * producer's (see DashboardPage, which picks). `embedded` is the second
+ * case: the live picture and the period controls are already on the page
+ * above, so only the figures and the chart are drawn, under a heading that
+ * names whose consumption this is.
  */
 
 type ChartUnit = "kwh" | "chf";
@@ -69,33 +68,27 @@ const localShare = (p: Pick<PartyConsumptionPeriod, "localKwh" | "gridKwh">) => 
 // one broke their decimal-point alignment.
 const kwh = (v: number) => `${formatKwh(v)} kWh`;
 
-export function PartyDashboardPage() {
+export function ConsumptionDashboard({
+  siteId,
+  partyId,
+  partyName,
+  ownerView,
+  embedded = false,
+}: {
+  siteId: string;
+  partyId: string;
+  /** Shown until the figures, which carry the name too, have loaded. */
+  partyName: string;
+  /** An admin's or viewer's eyes: the feed-in rate may be drawn, and the vZEV's view is asked for this party by id. */
+  ownerView: boolean;
+  embedded?: boolean;
+}) {
   const t = useT();
-  const identity = useIdentity();
-  const isParticipant = identity.data?.role === "participant";
-  // A participant is told their site and party by /api/me; everyone else
-  // reads the site list and picks a party.
-  const { site } = useCurrentSite({ enabled: identity.isSuccess && !isParticipant });
-  const siteId = isParticipant ? identity.data?.siteId : site?.id;
-
-  const partiesQuery = useQuery({
-    queryKey: ["parties", siteId],
-    queryFn: () => api.parties.list(siteId!),
-    enabled: !!siteId && !isParticipant,
-  });
-  // Only parties that consume: an admin-only or viewer party has nothing to show.
-  const members = (partiesQuery.data ?? []).filter((p) => p.role === "rcp_party" || p.role === "rcp_admin");
-  const [pickedId, setPickedId] = useState<string | null>(null);
-  const partyId = isParticipant
-    ? identity.data?.partyId
-    : (pickedId ?? members.find((p) => p.role === "rcp_admin")?.id ?? members[0]?.id);
-
   const { from, to, granularity, mode, set: setPeriod } = useSelectedPeriod();
 
   const query = useQuery({
     queryKey: ["party-consumption", siteId, partyId, from, to, granularity],
-    queryFn: () => api.parties.consumption(siteId!, partyId!, from, to, granularity),
-    enabled: !!siteId && !!partyId,
+    queryFn: () => api.parties.consumption(siteId, partyId, from, to, granularity),
     // Keeps the page steady while a new range loads, instead of blanking it.
     placeholderData: (previous) => previous,
   });
@@ -116,65 +109,44 @@ export function PartyDashboardPage() {
     if (c.from !== from || c.to !== to) setPeriod(c, granularity);
   }, [data, bounds.max, from, to, granularity]);
 
-  if (identity.isLoading || (!isParticipant && !site)) {
-    return <p className="text-slate-500">{t("common.loading")}</p>;
-  }
-  if (!isParticipant && partiesQuery.isSuccess && members.length === 0) {
-    return <p className="text-sm text-slate-500">{t("party.none")}</p>;
-  }
-
   const totals = data?.totals;
   const totalKwh = totals ? totals.localKwh + totals.gridKwh : 0;
   const share = totals ? localShare(totals) : null;
-  const partyName = data?.partyName ?? identity.data?.partyName ?? "…";
+  const name = data?.partyName ?? partyName;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">{t("party.title")}</h1>
-        <p className="max-w-2xl text-sm text-slate-500">{t("party.intro", { name: partyName })}</p>
-      </div>
+      {embedded ? (
+        // Under a producer's plant figures: the same person as a consumer.
+        <h2 className="text-sm font-medium text-slate-700">{t("party.section", { name })}</h2>
+      ) : (
+        <>
+          {/* Straight under the title: the one thing on this page that is
+              true only right now, so it should not need scrolling past to
+              reach. The feed-in rate would reveal the owner's revenue, so it
+              is drawn only for admin/viewer — same boundary as the
+              dynamic-tariffs and neighbours routes (see policy.ts). The
+              vZEV's picture is asked for the party in view: a participant's
+              own (the API knows who they are), or the one an admin picked. */}
+          <LiveSection siteId={siteId} owner={ownerView} flow="vzev" partyId={ownerView ? partyId : null} />
 
-      {/* Straight under the title: the one thing on this page that is true
-          only right now, so it should not need scrolling past to reach. */}
-      {/* The feed-in rate would reveal the owner's revenue, so it is drawn
-          only for admin/viewer — same boundary as the dynamic-tariffs and
-          neighbours routes (see policy.ts). */}
-      {/* The vZEV's picture, for the participant in view: a participant's
-          own (the API knows who they are), or the one an admin picked. */}
-      <LiveSection siteId={siteId} owner={!isParticipant} flow="vzev" partyId={isParticipant ? null : partyId} />
+          {/* Nothing above this line answers to the period selector, so it
+              sits here. */}
+          <PeriodHeader title={t("party.periodTitle")} intro={t("party.periodIntro", { name })}>
+            <PeriodControls
+              range={{ from, to }}
+              granularity={granularity}
+              mode={mode}
+              onChange={setPeriod}
+              dataRange={dataRange}
+              bounds={bounds}
+            />
+          </PeriodHeader>
 
-      {/* Nothing above this line answers to the period selector, so it sits
-          here — with the participant picker, which scopes the same figures. */}
-      <PeriodHeader title={t("party.periodTitle")} intro={t("party.periodIntro", { name: partyName })}>
-        {!isParticipant && (
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            {t("party.pick")}
-            <select
-              className="input w-48 max-w-full"
-              value={partyId ?? ""}
-              onChange={(e) => setPickedId(e.target.value)}
-            >
-              {members.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <PeriodControls
-          range={{ from, to }}
-          granularity={granularity}
-          mode={mode}
-          onChange={setPeriod}
-          dataRange={dataRange}
-          bounds={bounds}
-        />
-      </PeriodHeader>
-
-      {granularity === "hourly" && (
-        <p className="text-xs text-slate-500">{t("dash.hourlyCap", { days: MAX_HOURLY_DAYS })}</p>
+          {granularity === "hourly" && (
+            <p className="text-xs text-slate-500">{t("dash.hourlyCap", { days: MAX_HOURLY_DAYS })}</p>
+          )}
+        </>
       )}
 
       {data?.warnings.map((w) => (
