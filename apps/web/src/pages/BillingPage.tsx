@@ -17,6 +17,7 @@ import { formatChf, formatKwh, formatNumber } from "../lib/format";
 import { useI18n, useT, type MessageKey } from "../i18n/context";
 import { useCurrentSite } from "../lib/useCurrentSite";
 import { useCanEdit, useIdentity } from "../lib/useIdentity";
+import { InvoiceList } from "../components/InvoiceList";
 
 const LINE_LABELS: Record<InvoiceLineKind, MessageKey> = {
   local: "invoice.line.local",
@@ -108,6 +109,7 @@ function todayLocal(): string {
 export function BillingPage() {
   const t = useT();
   const identity = useIdentity();
+  const { canEdit } = useCanEdit();
   const isParticipant = identity.data?.role === "participant";
   // A participant learns their site from /api/me: the site list is closed to
   // them, since a site row carries the owner's investment figures.
@@ -125,6 +127,9 @@ export function BillingPage() {
       </div>
       <PositionsSection siteId={siteId} />
       <InvoiceSection siteId={siteId} />
+      {/* What has been issued, and settling it: the admin's side of the
+          invoices. A participant's own are on their Account page. */}
+      {!isParticipant && <InvoiceList siteId={siteId} showParty canEdit={canEdit} />}
     </div>
   );
 }

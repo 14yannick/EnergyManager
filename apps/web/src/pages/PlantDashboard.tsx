@@ -351,25 +351,19 @@ const REVENUE_COLORS = {
 };
 
 /**
- * Charging, deliberately outside the categorical palette above.
- *
- * It shared the battery colour, which left two legend entries looking
- * identical. A darker shade of the same hue keeps it tied to the battery —
- * it is the same energy, going the other way — while being told apart at a
- * glance, and reads as the cost it represents.
+ * Charging in the battery's own colour: it is the same energy, going the
+ * other way. The bar is hollow where the discharge bar is filled, and hangs
+ * below the axis, which is what tells the two apart — in the chart and in
+ * the legend, where the hollow swatch marks it.
  */
-const BATTERY_CHARGING_COLOR = PALETTE.batteryCharging;
+const BATTERY_CHARGING_COLOR = PALETTE.battery;
 
 /**
  * Export forgone on participant sales — the same idea as charging cost, so it
- * is drawn the same way: a darker shade of the flow it belongs to, hanging
- * below zero.
- *
- * It sits directly under the charging bar, and dark green against dark brown
- * is the pairing deuteranopia handles worst, so the shade is not simply the
- * neighbour green dimmed. It was picked to clear the colour-blindness floor
- * against that brown while staying far enough from the neighbour green above
- * the axis to read as a different series.
+ * is drawn the same way, hollow below zero, in a darker shade of the flow it
+ * belongs to. It sits directly under the charging bar; this shade clears the
+ * colour-blindness floor against the battery orange while staying far enough
+ * from the neighbour green above the axis to read as a different series.
  */
 const NEIGHBOR_FORGONE_COLOR = PALETTE.localForgone;
 

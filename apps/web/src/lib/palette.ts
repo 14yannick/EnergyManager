@@ -64,7 +64,6 @@ export const NEUTRALS: Record<
     hoverBand: string;
     axis: string;
     ink: string;
-    batteryCharging: string;
     localForgone: string;
     /** The feed-in rate line by band (shared/feedInBands.ts): a loss, poor, fair, good, and better than buying. */
     rateLoss: string;
@@ -92,9 +91,7 @@ export const NEUTRALS: Record<
     hoverBand: "#f1f5f9",
     axis: "#64748b",
     ink: "#0f172a",
-    /** Charging as a cost: a darker battery, hung below the axis. */
-    batteryCharging: "#8c3f1d",
-    /** Export forgone on local sales: a darker local, same idea. Picked to clear the CVD floor against the brown above it. */
+    /** Export forgone on local sales: a darker local, hung below the axis. Picked to clear the CVD floor against the battery orange above it. */
     localForgone: "#007c64",
     rateLoss: "#991b1b",
     ratePoor: "#dc2626",
@@ -127,9 +124,8 @@ export const NEUTRALS: Record<
     axis: "#94a3b8",
     ink: "#f1f5f9",
     // On a dark surface the "cost" shade of a hue reads lighter, not
-    // darker — the direction that stands out from the surface — and each
-    // stays clearly apart from the hue it belongs to.
-    batteryCharging: "#ffb385",
+    // darker — the direction that stands out from the surface — and stays
+    // clearly apart from the hue it belongs to.
     localForgone: "#7ee8c9",
     // "Darker" reads as "stronger" on a dark surface: the loss red is the
     // saturated one, the best green the bright one.
@@ -224,7 +220,6 @@ export function cssVariables(mode: Mode): Record<string, string> {
     "--c-hover-band": rgbTriplet(n.hoverBand),
     "--c-axis": rgbTriplet(n.axis),
     "--c-ink": rgbTriplet(n.ink),
-    "--c-battery-charging": rgbTriplet(n.batteryCharging),
     "--c-local-forgone": rgbTriplet(n.localForgone),
     "--c-rate-loss": rgbTriplet(n.rateLoss),
     "--c-rate-poor": rgbTriplet(n.ratePoor),
@@ -254,7 +249,6 @@ export const PALETTE = {
   local: v("local"),
   battery: v("battery"),
   vzev: v("vzev"),
-  batteryCharging: v("battery-charging"),
   localForgone: v("local-forgone"),
   forecast: v("forecast"),
   forecastFill: v("forecast-fill"),

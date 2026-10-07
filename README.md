@@ -624,8 +624,9 @@ pnpm db:generate   # generate a new Drizzle migration after changing apps/api/sr
       allocation and per-participant invoices are in place; an admin can now
       generate and store a dated batch of invoices for a period — one PDF per
       participant, a QR-bill included, downloaded as a zip — and track paid/unpaid
-      per invoice on the Account tab. Optionally archived to Google Drive at
-      generation time, with a real download link from the Account tab (see
+      per invoice on the Billing tab, each participant seeing their own on their
+      Account tab. Optionally archived to Google Drive at generation time, with a
+      real download link beside each invoice (see
       [Google Drive](#google-drive-optional) above)
 - [ ] Phase 3: real-time monitoring. Live ingestion is partly here already — interval
       data and dynamic feed-in rates both sync from Home Assistant, on a timer

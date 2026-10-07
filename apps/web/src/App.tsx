@@ -14,7 +14,6 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountPage } from "./pages/AccountPage";
 import { BillingPage } from "./pages/BillingPage";
-import { ProfilePage } from "./pages/ProfilePage";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   // `shrink-0` and `whitespace-nowrap`: below `xl` the nav has its own row
@@ -33,19 +32,18 @@ interface NavItem {
 /**
  * Where a role may go.
  *
- * A participant sees their own dashboard and their own invoices, nothing
- * else: every other page reads site-wide data the API refuses them. Profile
- * follows billing for everyone — it is where the session and the language
- * live, and on a phone it is the last of the tabs that matter day to day.
+ * A participant sees their own dashboard and their own account — invoices,
+ * session, language — nothing else: every other page reads site-wide data
+ * the API refuses them. Account follows billing for everyone, as the last
+ * of the tabs that matter day to day.
  */
 function navItems(participant: boolean): NavItem[] {
   return participant
     ? [
-        // Billing itself doesn't apply to a participant any more — the
-        // Account tab already carries their own dated invoices and status.
+        // Billing itself doesn't apply to a participant — the Account tab
+        // carries their own dated invoices and status.
         { to: "/", label: "nav.dashboard", end: true },
         { to: "/account", label: "nav.account" },
-        { to: "/profile", label: "nav.profile" },
       ]
     : [
         // What the system did, then what it bills, then the inputs that
@@ -54,9 +52,8 @@ function navItems(participant: boolean): NavItem[] {
         // Integrations closes the row: the installation's own connections,
         // set once and looked at least.
         { to: "/", label: "nav.dashboard", end: true },
-        { to: "/account", label: "nav.account" },
         { to: "/billing", label: "nav.billing" },
-        { to: "/profile", label: "nav.profile" },
+        { to: "/account", label: "nav.account" },
         { to: "/tariff-periods", label: "nav.tariffs" },
         { to: "/readings", label: "nav.readings" },
         { to: "/calculation", label: "nav.calculation" },
@@ -214,14 +211,11 @@ export function App() {
             <Route path="/account" element={<AccountPage />} />
             {/* Billing moved into Account; keep an old link working. */}
             <Route path="/billing" element={<Navigate to="/account" replace />} />
-            <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         ) : (
           <Routes>
             <Route path="/" element={<DashboardPage />} />
-            {/* Consumption moved into the dashboard; keep an old link working. */}
-            <Route path="/consumption" element={<Navigate to="/" replace />} />
             <Route path="/tariff-periods" element={<TariffPeriodsPage />} />
             <Route path="/calculation" element={<CalculationDetailPage />} />
             {/* Investment costs moved into Settings; keep old links working. */}
@@ -231,7 +225,6 @@ export function App() {
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/billing" element={<BillingPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         )}
