@@ -1,11 +1,13 @@
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { PartyConsumption, SavingsQuery } from "@energy-manager/shared";
-import { findRateForInstant } from "@energy-manager/shared";
+import { effectiveSensorProfile, findRateForInstant } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, parties, tariffPeriods } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { participantCountOn, partyValidForPeriod, positionsValidOn } from "../billing/engine.js";
 import { listPositions } from "../billing/service.js";
+import { localDayHour } from "../homeAssistant/forecastCurve.js";
+import { loadVzevSettlement } from "../vzev/settlement.js";
 import {
   daysIn,
   periodKeyOf,
@@ -66,6 +68,51 @@ async function loadPricingContext(
   };
 }
 
+/** One party's draw in one local hour, split by where it came from. */
+interface HourDraw {
+  localKwh: number;
+  gridKwh: number;
+}
+
+/**
+ * Every party's draw over the range, by local hour ("YYYY-MM-DDTHH"), from
+ * the same settlement the revenue and the vZEV view read: the grid
+ * provider's split where it is in, else the party's own import sensor,
+ * shared by the vZEV's rule (see vzev/settlement.ts).
+ *
+ * A producer's share worked out from their sensor is all grid here: in the
+ * same quarter-hour they fed in, their draw bought nothing from the vZEV —
+ * the revenue side counts that energy as exported, and this side, to agree
+ * with it, counts the draw as imported. The provider's own split, when it
+ * comes, is taken as given for them like for anyone.
+ */
+async function loadPartyDraws(
+  siteId: string,
+  fromBound: SQL,
+  toBoundExclusive: SQL,
+): Promise<Map<string, Map<string, HourDraw>>> {
+  const [settlement, siteParties] = await Promise.all([
+    loadVzevSettlement(siteId, fromBound, toBoundExclusive),
+    db.select().from(parties).where(eq(parties.siteId, siteId)),
+  ]);
+  const producers = new Set(siteParties.filter((p) => effectiveSensorProfile(p).feedIn).map((p) => p.id));
+  const draws = new Map<string, Map<string, HourDraw>>();
+  for (const interval of settlement) {
+    const { day, hour } = localDayHour(interval.ts);
+    const key = `${day}T${String(hour).padStart(2, "0")}`;
+    for (const share of interval.shares) {
+      const ownFeedIn = !share.official && producers.has(share.partyId);
+      const hours = draws.get(share.partyId) ?? new Map<string, HourDraw>();
+      const sum = hours.get(key) ?? { localKwh: 0, gridKwh: 0 };
+      sum.localKwh += ownFeedIn ? 0 : share.local;
+      sum.gridKwh += ownFeedIn ? share.local + share.grid : share.grid;
+      hours.set(key, sum);
+      draws.set(share.partyId, hours);
+    }
+  }
+  return draws;
+}
+
 /**
  * What each party saved against being supplied directly, keyed by party id —
  * the figure their own Consumption page leads with. Priced through the same
@@ -73,35 +120,22 @@ async function loadPricingContext(
  */
 export async function savedByParty(siteId: string, from: string, to: string): Promise<Map<string, number>> {
   const { fromBound, toBoundExclusive } = rangeBounds(from, to);
-  const localDay = sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`;
-  const [rows, { ctx, memberOn }] = await Promise.all([
-    db
-      .select({
-        partyId: intervalMetrics.partyId,
-        day: localDay,
-        localKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption'), 0)`,
-        gridKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption_grid'), 0)`,
-      })
-      .from(intervalMetrics)
-      .where(
-        and(
-          eq(intervalMetrics.siteId, siteId),
-          isNotNull(intervalMetrics.partyId),
-          sql`${intervalMetrics.metricKind} in ('consumption', 'consumption_grid')`,
-          sql`${intervalMetrics.ts} >= ${fromBound}`,
-          sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
-        ),
-      )
-      .groupBy(intervalMetrics.partyId, localDay),
+  const [draws, { ctx, memberOn }] = await Promise.all([
+    loadPartyDraws(siteId, fromBound, toBoundExclusive),
     loadPricingContext(siteId),
   ]);
 
-  const byParty = new Map<string, Map<string, { localKwh: number; gridKwh: number }>>();
-  for (const r of rows) {
-    if (!r.partyId) continue;
-    const days = byParty.get(r.partyId) ?? new Map();
-    days.set(r.day, { localKwh: toNumber(r.localKwh), gridKwh: toNumber(r.gridKwh) });
-    byParty.set(r.partyId, days);
+  const byParty = new Map<string, Map<string, HourDraw>>();
+  for (const [partyId, hours] of draws) {
+    const days = new Map<string, HourDraw>();
+    for (const [hour, draw] of hours) {
+      const day = hour.slice(0, 10);
+      const sum = days.get(day) ?? { localKwh: 0, gridKwh: 0 };
+      sum.localKwh += draw.localKwh;
+      sum.gridKwh += draw.gridKwh;
+      days.set(day, sum);
+    }
+    byParty.set(partyId, days);
   }
 
   const saved = new Map<string, number>();
@@ -138,33 +172,17 @@ export async function getPartyConsumption(
   // Same local-midnight bounds as billing and savings, so the three can't
   // disagree about which intervals fall inside a range.
   const { fromBound, toBoundExclusive } = rangeBounds(from, to);
-  const localHour = sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD"T"HH24')`;
+  // What this party has ever had metered: the provider's split, or their own
+  // import sensor — the span the period picker may reach over.
   const ofParty = and(
     eq(intervalMetrics.siteId, siteId),
     eq(intervalMetrics.partyId, partyId),
-    sql`${intervalMetrics.metricKind} in ('consumption', 'consumption_grid')`,
+    sql`${intervalMetrics.metricKind} in ('consumption', 'consumption_grid', 'import_grid')`,
   );
 
-  const [siteParties, usageRows, spanRows, { ctx, memberOn }] = await Promise.all([
+  const [siteParties, draws, spanRows, { ctx, memberOn }] = await Promise.all([
     db.select().from(parties).where(eq(parties.siteId, siteId)),
-    db
-      .select({
-        hour: localHour,
-        // Per party, `consumption` is the part supplied from local production
-        // and `consumption_grid` the part drawn from the grid — the same
-        // reading the invoice run makes of them.
-        localKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption'), 0)`,
-        gridKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'consumption_grid'), 0)`,
-      })
-      .from(intervalMetrics)
-      .where(
-        and(
-          ofParty,
-          sql`${intervalMetrics.ts} >= ${fromBound}`,
-          sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
-        ),
-      )
-      .groupBy(localHour),
+    loadPartyDraws(siteId, fromBound, toBoundExclusive),
     db
       .select({
         first: sql<string | null>`to_char(min(${intervalMetrics.ts}) AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`,
@@ -178,9 +196,7 @@ export async function getPartyConsumption(
   const party = siteParties.find((p) => p.id === partyId);
   if (!party) return null;
 
-  const usage = new Map(
-    usageRows.map((r) => [r.hour, { localKwh: toNumber(r.localKwh), gridKwh: toNumber(r.gridKwh) }]),
-  );
+  const usage = draws.get(partyId) ?? new Map<string, HourDraw>();
 
   // Every day of the range is a unit, with or without readings: the standing
   // charges accrue on a day whether or not anything was metered on it.
