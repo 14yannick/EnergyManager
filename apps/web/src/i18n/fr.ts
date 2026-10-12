@@ -15,6 +15,9 @@ export const fr: Record<keyof typeof en, string> = {
   "nav.settings": "Administration du site",
   "nav.integrations": "Intégrations",
   "nav.billing": "Facturation",
+  "nav.viewingAs": "Vue en tant que {name}",
+  "nav.onSite": "sur {site}",
+  "nav.viewingAsHint": "Ce qui est affiché est la vue de ce membre, ou de ce site, pas la vôtre. À changer sous Administration du site.",
   "nav.account": "Compte",
   "sky.night": "Nuit",
   "sky.dawn": "Lever du soleil",
@@ -30,7 +33,6 @@ export const fr: Record<keyof typeof en, string> = {
   "role.admin": "administrateur",
   "role.viewer": "lecture seule",
   "role.participant": "participant",
-  "profile.intro": "Qui vous êtes, et la langue de l'application.",
   "profile.account": "Compte",
   "profile.party": "Facturé comme",
   "profile.email": "E-mail",
@@ -72,7 +74,6 @@ export const fr: Record<keyof typeof en, string> = {
   "common.nothingInRange": "Rien dans cette plage.",
 
   // ---- Calculation detail ------------------------------------------------
-  "calc.title": "Détail du calcul",
   "calc.intro":
     "Une journée, et tous les chiffres qui la composent. Chaque tarif est la moyenne de la journée, pondérée par l'énergie — dépliez une ligne pour voir les intervalles qui la constituent.",
   "calc.prevDay": "Jour précédent",
@@ -153,10 +154,8 @@ export const fr: Record<keyof typeof en, string> = {
   "calc.col.batteryOnly": "Gain de la batterie seule",
 
   // ---- Settings ----------------------------------------------------------
-  "settings.title": "Administration du site",
   "settings.intro":
     "Qui fait partie du site, les montants d'investissement utilisés pour l'amortissement, et les capteurs Home Assistant qui fournissent ses données d'énergie.",
-  "integrations.title": "Intégrations",
   "integrations.intro": "Les services externes avec lesquels cette installation communique, et leur état de connexion. Les capteurs lus par un site se règlent dans l'administration du site.",
   "integrations.driveSite": "Dossier du site affiché : {site}",
   "integrations.priceFeeds": "Flux de prix",
@@ -253,7 +252,6 @@ export const fr: Record<keyof typeof en, string> = {
     "La charge est mesurée en DC mais tout ce qui est valorisé est en AC ; l'injection remplacée est donc réduite d'autant avant d'être imputée à la batterie.",
 
   // ---- Tariff periods ----------------------------------------------------
-  "tariff.title": "Périodes tarifaires",
   "tariff.intro":
     "Tarifs d'achat, de reprise et de vente aux participants, chacun sur une plage de dates et d'heures — d'un quart d'heure à une année. Les périodes de même type ne doivent pas se chevaucher. Chaque période indique aussi son mode de valorisation : à son propre tarif fixe, ou d'après le flux day-ahead.",
   "tariff.kind": "Type",
@@ -289,7 +287,7 @@ export const fr: Record<keyof typeof en, string> = {
     "Composants additifs au kWh empilés sur le tarif d'une période — par exemple un Herkunftsnachweis ou une Mindestvergütungsprämie s'ajoutant au tarif de reprise, chacun appliqué uniquement entre son début et sa fin. Contrairement aux périodes ci-dessus, les suppléments peuvent se chevaucher : tous ceux qui correspondent s'ajoutent au tarif de base. Le tarif de vente aux participants n'en reçoit aucun : c'est le prix convenu avec eux.",
 
   // ---- Import readings ---------------------------------------------------
-  "readings.title": "Import des relevés",
+  "readings.intro": "Importer les relevés du gestionnaire de réseau depuis un fichier CSV, ou exporter les relevés enregistrés en tableur.",
   "readings.csvNote":
     "Colonnes CSV : timestamp, metric_kind, party, value_kwh — une ligne par horodatage et métrique. metric_kind vaut l'une de : {kinds}. party est obligatoire (le nom d'un participant) lorsque metric_kind vaut consumption ou consumption_grid, et doit rester vide sinon. Réimporter des lignes qui se recoupent les remplace.",
   "readings.template": "Télécharger le modèle CSV",
@@ -424,7 +422,6 @@ export const fr: Record<keyof typeof en, string> = {
   "parties.plantOf": "Revenu détaillé de {name}",
 
   // ---- Billing -----------------------------------------------------------
-  "billing.title": "Facturation",
   "billing.cat.energie": "Énergie",
   "billing.cat.netznutzung": "Utilisation du réseau",
   "billing.cat.messung": "Mesure",
@@ -516,7 +513,6 @@ export const fr: Record<keyof typeof en, string> = {
   "invoice.reconciliationMatch": "Concordance",
   "invoice.reconciliationDiff": "Écart de {sign}{amount} CHF",
 
-  "account.title": "Compte",
   "account.intro": "Qui vous êtes, vos factures et si elles ont été payées, et la langue de l'application.",
   "account.invoices": "Factures",
   "account.filter.unpaid": "Impayées",
@@ -533,8 +529,6 @@ export const fr: Record<keyof typeof en, string> = {
   "account.markUnpaid": "Repasser en impayée",
   "billing.intro":
     "Saisissez la facture du gestionnaire de réseau position par position, puis générez une facture pour chaque participant du RCPv. Les montants sont TVA incluse : la TVA du fournisseur est répercutée telle quelle, aucune TVA n'est ajoutée.",
-  "billing.introParticipant":
-    "Les tarifs du gestionnaire de réseau sur lesquels repose votre facture, et votre facture pour chaque période. Montants TVA incluse : la TVA du fournisseur est répercutée telle quelle, aucune TVA n'est ajoutée.",
 
   // ---- QR-bill -----------------------------------------------------------
   "qr.noBill":
@@ -544,8 +538,6 @@ export const fr: Record<keyof typeof en, string> = {
   "qr.error": "Le bulletin QR n'a pas pu être généré",
 
   // ---- Dashboard ---------------------------------------------------------
-  "dash.title": "Tableau de bord",
-  "dash.viewAs": "Tableau de bord de",
   "dash.intro": "Ce que fait l'installation en ce moment, puis ce qu'elle a rapporté sur une période et le temps qu'elle met à rembourser son coût.",
   "dash.periodTitle": "Économies et amortissement",
   "dash.periodIntro": "Ce que l'installation a rapporté ou évité sur la plage sélectionnée, et le temps qu'elle met à rembourser son coût.",
@@ -695,8 +687,6 @@ export const fr: Record<keyof typeof en, string> = {
   "billing.cents": "ct.",
   "billing.centsPerKwh": "ct./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
-  "party.intro": "Ce que fait l'installation en ce moment, puis la consommation de {name} sur une période et ce que le RCPv lui a fait économiser.",
-  "party.section": "{name} en tant que consommateur",
   "party.periodTitle": "Consommation et économies",
   "party.periodIntro": "La consommation de {name}, répartie entre le solaire du RCPv et le réseau, et l'économie réalisée par rapport à une fourniture directe.",
   "party.none": "Aucun participant pour l'instant — ajoutez-les dans l'administration du site.",
@@ -736,6 +726,8 @@ export const fr: Record<keyof typeof en, string> = {
   "party.chart.title": "Consommation par provenance",
   "party.chart.noteKwh": "Production locale et soutirage du réseau, par {unit}.",
   "party.chart.noteChf": "Ce qui a été payé via le RCPv, par {unit} : énergie locale, énergie du réseau et taxes par kWh, et les frais fixes — les tarifs annuels de la facture répartis sur les jours de chaque barre.",
+  "party.series.own": "Production propre",
+  "party.series.ownValue": "Production propre, au prix d'achat",
   "party.series.local": "Production locale",
   "party.series.grid": "Réseau",
   "party.series.localEnergy": "Énergie locale",
@@ -745,7 +737,10 @@ export const fr: Record<keyof typeof en, string> = {
   "party.series.directPerKwh": "Approvisionnement direct, au kWh",
   "party.series.directFixed": "Approvisionnement direct, frais fixes",
   "party.compareDirect": "Comparer avec l'approvisionnement direct",
+  "party.chart.noteOwn": "La production propre — consommée au moment où elle est produite, ou depuis la batterie — s'ajoute dans la couleur du soleil : jamais facturée, donc hachurée en CHF, où elle vaut le prix d'achat qu'elle a évité.",
   "party.chart.noteDirect": "La barre hachurée à côté est la même consommation en fourniture directe : chaque kWh du réseau, et les frais fixes portés seul.",
+  "party.savedWithOwn": "Économie, production propre comprise",
+  "party.totalKwh": "Consommation totale",
   "party.localShare": "Part locale",
   "party.paid": "Payé via le RCPv",
   "party.saved": "Économie",

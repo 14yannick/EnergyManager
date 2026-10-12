@@ -1,6 +1,8 @@
 import { Fragment, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isVzevMember, swissDate, type Party, type PartyRole } from "@energy-manager/shared";
+import { useIdentity } from "../lib/useIdentity";
+import { chooseParty, pickParty, useChosenParty } from "../lib/useViewedParty";
 import { api } from "../api/client";
 import { useT, type MessageKey } from "../i18n/context";
 import { PartyInvestment } from "./PartyInvestment";
@@ -194,6 +196,11 @@ export function PartiesSection({ siteId, canEdit = true }: { siteId: string; can
   });
 
   const parties = partiesQuery.data ?? [];
+  // Whose dashboard the site opens on: the member chosen here, or the
+  // default the dashboard would fall back to (see useViewedParty).
+  const me = useIdentity().data;
+  const chosenId = useChosenParty(siteId);
+  const viewed = pickParty(parties.filter((p) => isVzevMember(p.role)), chosenId, me?.homeParty?.id ?? null);
 
   return (
     <div className="space-y-4 rounded-lg border bg-white p-4">
@@ -487,6 +494,21 @@ export function PartiesSection({ siteId, canEdit = true }: { siteId: string; can
                       </>
                     ) : (
                       <>
+                        {/* Whose dashboard to show — a member's, as with the
+                            site in the list above. */}
+                        {isVzevMember(p.role) &&
+                          (viewed?.id === p.id ? (
+                            <span className="mr-3 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                              {t("sites.viewing")}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => chooseParty(siteId, p.id)}
+                              className="mr-3 text-slate-500 hover:text-slate-900"
+                            >
+                              {t("sites.view")}
+                            </button>
+                          ))}
                         {/* Only a member of the vZEV has a meter to put a sensor on. */}
                         {isVzevMember(p.role) && (
                           <button

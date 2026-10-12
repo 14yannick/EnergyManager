@@ -116,6 +116,23 @@ export function participantCountOf(
 }
 
 /**
+ * How many share the connection on one day: the billed parties whose
+ * membership covers it (see partyValidForPeriod), with the unlisted-owner
+ * rule of participantCountOf applied against the whole site. A neighbour
+ * who joins in January takes no share of December's standing charges, and
+ * the owner alone on the connection has nobody to share them with.
+ */
+export function participantCountOn(
+  siteParties: ReadonlyArray<{ role: PartyRole; startDate: string | null; endDate: string | null }>,
+  day: string,
+): number {
+  return participantCountOf(
+    siteParties.filter((p) => partyValidForPeriod(p, day, day)),
+    siteParties,
+  );
+}
+
+/**
  * Whether a party was a member for the *entire* period, not just part of
  * it — this engine doesn't prorate a shared cost across a mid-period join or
  * leave, so a party only counts (for being invoiced, and for the pool
@@ -504,6 +521,28 @@ export function ownerFixedCosts(positions: GridTariffPosition[], participantCoun
     usage: { partyId: null, partyReference: null, partyName: "", gridKwh: 0, localKwh: 0 },
   });
   return { aloneChf: costs.directFixedChf, rcpChf: costs.rcpFixedChf };
+}
+
+/**
+ * The owner's standing charges on one day, with the members of that day.
+ *
+ * Before the owner's own membership starts — the vZEV is not running yet —
+ * there is nothing shared and nothing gained: the charges inside the vZEV
+ * are the charges alone. An owner not entered as a party is taken as a
+ * member throughout, as participantCountOf assumes.
+ */
+export function ownerFixedCostsOn(
+  positions: GridTariffPosition[],
+  siteParties: ReadonlyArray<{ role: PartyRole; startDate: string | null; endDate: string | null }>,
+  day: string,
+  days: number,
+): OwnerFixedCosts {
+  const owner = siteParties.find((p) => p.role === "rcp_admin");
+  if (owner && !partyValidForPeriod(owner, day, day)) {
+    const { aloneChf } = ownerFixedCosts(positions, 1, days);
+    return { aloneChf, rcpChf: aloneChf };
+  }
+  return ownerFixedCosts(positions, participantCountOn(siteParties, day), days);
 }
 
 /** Inclusive day count between two YYYY-MM-DD dates, as the provider counts them. */

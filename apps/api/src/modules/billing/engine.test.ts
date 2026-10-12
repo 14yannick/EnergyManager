@@ -2,6 +2,8 @@ import type { PartyRole } from "@energy-manager/shared";
 import { describe, expect, it } from "vitest";
 import type { GridTariffPosition } from "@energy-manager/shared";
 import {
+  ownerFixedCostsOn,
+  participantCountOn,
   buildParticipantInvoice,
   consumptionCosts,
   inclusiveDays,
@@ -148,6 +150,47 @@ describe("per_kwh_total allocation", () => {
     const inv = buildParticipantInvoice(inputs({ positions: [...positions, communeLevy] }));
     const line = inv.comparison.lines.find((l) => l.label === "Redevance communale")!;
     expect(line.quantity).toBe(3000);
+  });
+});
+
+describe("participantCountOn", () => {
+  const p = (role: PartyRole, startDate: string | null = null, endDate: string | null = null) => ({ role, startDate, endDate });
+  const site = [p("rcp_admin"), p("rcp_party", "2027-01-01"), p("rcp_party", "2027-01-01"), p("rcp_party", "2027-01-01", "2027-06-30")];
+
+  it("counts only the members whose membership covers the day", () => {
+    // Before the neighbours join, the owner is alone on the connection and
+    // divides nothing — the standing charges are theirs in full.
+    expect(participantCountOn(site, "2026-12-31")).toBe(1);
+    expect(participantCountOn(site, "2027-01-01")).toBe(4);
+    // One of them leaves at mid-year.
+    expect(participantCountOn(site, "2027-07-01")).toBe(3);
+  });
+
+  it("keeps the unlisted-owner rule from the whole site, not from the day's members", () => {
+    // No admin party entered at all: the owner is assumed, on every day.
+    expect(participantCountOn([p("rcp_party", "2027-01-01")], "2026-06-01")).toBe(1);
+    expect(participantCountOn([p("rcp_party", "2027-01-01")], "2027-06-01")).toBe(2);
+  });
+});
+
+describe("ownerFixedCostsOn", () => {
+  const p = (role: PartyRole, startDate: string | null = null) => ({ role, startDate, endDate: null });
+  const shared: GridTariffPosition = {
+    id: "s", siteId: "x", category: "netznutzung", label: "Grundtarif", allocation: "pool_shared", rateChf: 365,
+    validFrom: "2026-01-01", validTo: "2028-01-01", countsInDirectBilling: true, sortOrder: 1, createdAt: "", updatedAt: "",
+  };
+  const site = [p("rcp_admin", "2027-01-01"), p("rcp_party", "2027-01-01"), p("rcp_party", "2027-01-01")];
+
+  it("gains nothing on a day before the owner's own membership began", () => {
+    const day = ownerFixedCostsOn([shared], site, "2026-12-31", 1);
+    expect(day.aloneChf).toBeCloseTo(1, 9);
+    expect(day.rcpChf).toBeCloseTo(day.aloneChf, 9);
+  });
+
+  it("divides by that day's members once the vZEV runs", () => {
+    const day = ownerFixedCostsOn([shared], site, "2027-01-01", 1);
+    expect(day.aloneChf).toBeCloseTo(1, 9);
+    expect(day.rcpChf).toBeCloseTo(1 / 3, 9);
   });
 });
 

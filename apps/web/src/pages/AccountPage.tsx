@@ -32,13 +32,6 @@ export function AccountPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">{t("account.title")}</h1>
-        <p className="max-w-2xl text-sm text-slate-500">
-          {own ? t("account.intro") : t("profile.intro")}
-        </p>
-      </div>
-
       {/* Short tiles, so they sit two or three abreast where there is room
           rather than each taking a full row for three lines of text. */}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

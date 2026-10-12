@@ -4,7 +4,7 @@ import { findRateForInstant } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, parties, tariffPeriods } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
-import { participantCountOf, positionsValidOn } from "../billing/engine.js";
+import { participantCountOn, partyValidForPeriod, positionsValidOn } from "../billing/engine.js";
 import { listPositions } from "../billing/service.js";
 import {
   daysIn,
@@ -29,9 +29,14 @@ const rangeBounds = (from: string, to: string) => ({
  * One loader for both views, so a participant's own page and the owner's
  * per-participant table can never price the same day differently.
  */
-async function loadPricingContext(siteId: string): Promise<PricingContext> {
+async function loadPricingContext(
+  siteId: string,
+): Promise<{ ctx: PricingContext; memberOn: (partyId: string, day: string) => boolean }> {
   const [siteParties, positions, flatRows] = await Promise.all([
-    db.select({ role: parties.role }).from(parties).where(eq(parties.siteId, siteId)),
+    db
+      .select({ id: parties.id, role: parties.role, startDate: parties.startDate, endDate: parties.endDate })
+      .from(parties)
+      .where(eq(parties.siteId, siteId)),
     listPositions(siteId),
     db.select().from(tariffPeriods).where(eq(tariffPeriods.siteId, siteId)),
   ]);
@@ -45,11 +50,19 @@ async function loadPricingContext(siteId: string): Promise<PricingContext> {
     endTs: r.endTs.toISOString(),
     rateChfPerKwh: r.rateChfPerKwh == null ? null : toNumber(r.rateChfPerKwh),
   }));
+  const byId = new Map(siteParties.map((p) => [p.id, p]));
   return {
-    participantCount: participantCountOf(siteParties),
-    positionsOn: (day) => positionsValidOn(positions, day),
-    localRateOn: (day) =>
-      findRateForInstant("neighbor_sell", noon(day), neighbourRates)?.rateChfPerKwh ?? null,
+    ctx: {
+      participantCountOn: (day) => participantCountOn(siteParties, day),
+      positionsOn: (day) => positionsValidOn(positions, day),
+      localRateOn: (day) =>
+        findRateForInstant("neighbor_sell", noon(day), neighbourRates)?.rateChfPerKwh ?? null,
+    },
+    // A party unknown to the site was never a member.
+    memberOn: (partyId, day) => {
+      const party = byId.get(partyId);
+      return party != null && partyValidForPeriod(party, day, day);
+    },
   };
 }
 
@@ -61,7 +74,7 @@ async function loadPricingContext(siteId: string): Promise<PricingContext> {
 export async function savedByParty(siteId: string, from: string, to: string): Promise<Map<string, number>> {
   const { fromBound, toBoundExclusive } = rangeBounds(from, to);
   const localDay = sql<string>`to_char(${intervalMetrics.ts} AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD')`;
-  const [rows, ctx] = await Promise.all([
+  const [rows, { ctx, memberOn }] = await Promise.all([
     db
       .select({
         partyId: intervalMetrics.partyId,
@@ -102,6 +115,7 @@ export async function savedByParty(siteId: string, from: string, to: string): Pr
       days: 1,
       localKwh: days.get(day)?.localKwh ?? 0,
       gridKwh: days.get(day)?.gridKwh ?? 0,
+      member: memberOn(partyId, day),
     }));
     saved.set(partyId, priceConsumption(units, ctx).totals.savedChf);
   }
@@ -131,7 +145,7 @@ export async function getPartyConsumption(
     sql`${intervalMetrics.metricKind} in ('consumption', 'consumption_grid')`,
   );
 
-  const [siteParties, usageRows, spanRows, ctx] = await Promise.all([
+  const [siteParties, usageRows, spanRows, { ctx, memberOn }] = await Promise.all([
     db.select().from(parties).where(eq(parties.siteId, siteId)),
     db
       .select({
@@ -176,7 +190,7 @@ export async function getPartyConsumption(
       for (let h = 0; h < 24; h++) {
         const key = periodKeyOf(day, granularity, h);
         const u = usage.get(key);
-        units.push({ day, key, days: 1 / 24, localKwh: u?.localKwh ?? 0, gridKwh: u?.gridKwh ?? 0 });
+        units.push({ day, key, days: 1 / 24, localKwh: u?.localKwh ?? 0, gridKwh: u?.gridKwh ?? 0, member: memberOn(partyId, day) });
       }
       continue;
     }
@@ -187,7 +201,7 @@ export async function getPartyConsumption(
       localKwh += u?.localKwh ?? 0;
       gridKwh += u?.gridKwh ?? 0;
     }
-    units.push({ day, key: periodKeyOf(day, granularity), days: 1, localKwh, gridKwh });
+    units.push({ day, key: periodKeyOf(day, granularity), days: 1, localKwh, gridKwh, member: memberOn(partyId, day) });
   }
 
   const priced = priceConsumption(units, ctx);

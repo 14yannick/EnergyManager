@@ -20,6 +20,9 @@ export const de: Record<keyof typeof en, string> = {
   "nav.settings": "Standortverwaltung",
   "nav.integrations": "Integrationen",
   "nav.billing": "Fakturierung",
+  "nav.viewingAs": "Ansicht als {name}",
+  "nav.onSite": "auf {site}",
+  "nav.viewingAsHint": "Angezeigt wird die Sicht dieses Mitglieds oder dieses Standorts, nicht Ihre eigene. Zu ändern unter Standortverwaltung.",
   "nav.account": "Konto",
   "sky.night": "Nacht",
   "sky.dawn": "Sonnenaufgang",
@@ -35,7 +38,6 @@ export const de: Record<keyof typeof en, string> = {
   "role.admin": "Administrator",
   "role.viewer": "Nur Lesen",
   "role.participant": "Teilnehmer",
-  "profile.intro": "Wer Sie sind, und in welcher Sprache die App spricht.",
   "profile.account": "Konto",
   "profile.party": "Fakturiert als",
   "profile.email": "E-Mail",
@@ -78,7 +80,6 @@ export const de: Record<keyof typeof en, string> = {
   "common.nothingInRange": "Nichts in diesem Zeitraum.",
 
   // ---- Calculation detail ------------------------------------------------
-  "calc.title": "Berechnungsdetails",
   "calc.intro":
     "Ein Tag, und jede Zahl, die dahintersteht. Jeder Tarif ist der über den Tag nach Energie gewichtete Durchschnitt — klappen Sie eine Zeile auf, um die Intervalle zu sehen, aus denen er entstanden ist.",
   "calc.prevDay": "Vorheriger Tag",
@@ -159,10 +160,8 @@ export const de: Record<keyof typeof en, string> = {
   "calc.col.batteryOnly": "Ersparnis nur durch Batterie",
 
   // ---- Settings ----------------------------------------------------------
-  "settings.title": "Standortverwaltung",
   "settings.intro":
     "Wer zum Standort gehört, die Investitionssummen für die Amortisation, und die Home-Assistant-Sensoren, welche seine Energiedaten liefern.",
-  "integrations.title": "Integrationen",
   "integrations.intro": "Die externen Dienste, mit denen diese Installation spricht, und ob sie erreichbar sind. Welche Sensoren ein Standort liest, wird in der Standortverwaltung festgelegt.",
   "integrations.driveSite": "Ordner des angezeigten Standorts: {site}",
   "integrations.priceFeeds": "Preis-Feeds",
@@ -259,7 +258,6 @@ export const de: Record<keyof typeof en, string> = {
     "Die Ladung wird DC gemessen, bewertet wird aber alles in AC; die verdrängte Einspeisung wird deshalb um diesen Anteil gekürzt, bevor sie der Batterie angelastet wird.",
 
   // ---- Tariff periods ----------------------------------------------------
-  "tariff.title": "Tarifperioden",
   "tariff.intro":
     "Bezugs-, Rücklieferungs- und Teilnehmertarife, jeder für einen Zeitraum — von einer Viertelstunde bis zu einem Jahr. Perioden derselben Art dürfen sich nicht überschneiden. Jede Periode gibt zudem an, wie sie bewertet wird: zum eigenen festen Tarif oder nach dem Day-ahead-Feed.",
   "tariff.kind": "Art",
@@ -295,7 +293,7 @@ export const de: Record<keyof typeof en, string> = {
     "Additive Bestandteile pro kWh, die auf den Tarif einer Periode aufgeschlagen werden — etwa ein Herkunftsnachweis oder eine Mindestvergütungsprämie zusätzlich zum Rücklieferungstarif, jeweils nur zwischen eigenem Beginn und Ende. Anders als die Perioden oben dürfen sich Zuschläge überschneiden; jeder passende wird zum Grundtarif addiert. Der Tarif für den Verkauf an Teilnehmer erhält keinen: Er ist der mit ihnen vereinbarte Preis.",
 
   // ---- Import readings ---------------------------------------------------
-  "readings.title": "Messwerte importieren",
+  "readings.intro": "Die Messwerte des Netzbetreibers aus einer CSV-Datei einlesen oder die gespeicherten als Tabelle ausgeben.",
   "readings.csvNote":
     "CSV-Spalten: timestamp, metric_kind, party, value_kwh — eine Zeile pro Zeitstempel und Messgrösse. metric_kind ist eines von {kinds}. party ist erforderlich (der Name eines Teilnehmers), wenn metric_kind consumption oder consumption_grid ist, und muss sonst leer bleiben. Ein erneuter Import überschreibt sich überschneidende Zeilen.",
   "readings.template": "CSV-Vorlage herunterladen",
@@ -430,7 +428,6 @@ export const de: Record<keyof typeof en, string> = {
   "parties.plantOf": "Detaillierter Ertrag von {name}",
 
   // ---- Billing -----------------------------------------------------------
-  "billing.title": "Fakturierung",
   "billing.cat.energie": "Energie",
   "billing.cat.netznutzung": "Netznutzung",
   "billing.cat.messung": "Messung",
@@ -522,7 +519,6 @@ export const de: Record<keyof typeof en, string> = {
   "invoice.reconciliationMatch": "Stimmt überein",
   "invoice.reconciliationDiff": "Abweichung {sign}{amount} CHF",
 
-  "account.title": "Konto",
   "account.intro": "Als wer Sie angemeldet sind, Ihre Rechnungen und ob sie bezahlt sind, und die Sprache der App.",
   "account.invoices": "Rechnungen",
   "account.filter.unpaid": "Unbezahlt",
@@ -539,8 +535,6 @@ export const de: Record<keyof typeof en, string> = {
   "account.markUnpaid": "Auf unbezahlt zurücksetzen",
   "billing.intro":
     "Erfassen Sie die Rechnung des Netzbetreibers Position für Position und erstellen Sie anschliessend für jeden vZEV-Teilnehmer eine Rechnung. Die Beträge verstehen sich inkl. MWST: Die MWST des Lieferanten wird unverändert weitergegeben, es kommt keine zusätzliche MWST hinzu.",
-  "billing.introParticipant":
-    "Die Tarife des Netzbetreibers, auf denen Ihre Rechnung beruht, und Ihre Rechnung für jede Periode. Beträge inkl. MWST: Die MWST des Lieferanten wird unverändert weitergegeben, es kommt keine MWST hinzu.",
 
   // ---- QR-bill -----------------------------------------------------------
   "qr.noBill":
@@ -550,8 +544,6 @@ export const de: Record<keyof typeof en, string> = {
   "qr.error": "Der QR-Einzahlungsschein konnte nicht erzeugt werden",
 
   // ---- Dashboard ---------------------------------------------------------
-  "dash.title": "Dashboard",
-  "dash.viewAs": "Dashboard von",
   "dash.intro": "Was die Anlage gerade tut, dann was sie in einem Zeitraum eingebracht hat und wie lange sie braucht, um ihre Kosten zu decken.",
   "dash.periodTitle": "Ersparnis und Amortisation",
   "dash.periodIntro": "Was die Anlage im gewählten Zeitraum eingebracht oder vermieden hat, und wie lange sie braucht, um ihre Kosten zu decken.",
@@ -706,8 +698,6 @@ export const de: Record<keyof typeof en, string> = {
   "billing.cents": "Rp.",
   "billing.centsPerKwh": "Rp./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
-  "party.intro": "Was die Anlage gerade tut, dann der Verbrauch von {name} in einem Zeitraum und was das vZEV eingespart hat.",
-  "party.section": "{name} als Verbraucher",
   "party.periodTitle": "Verbrauch und Ersparnis",
   "party.periodIntro": "Der Verbrauch von {name}, aufgeteilt in vZEV-Solarstrom und Netz, und die Ersparnis gegenüber der Direktversorgung.",
   "party.none": "Noch keine Teilnehmer — erfassen Sie sie in der Standortverwaltung.",
@@ -747,6 +737,8 @@ export const de: Record<keyof typeof en, string> = {
   "party.chart.title": "Verbrauch nach Herkunft",
   "party.chart.noteKwh": "Lokale Produktion und Netzbezug, pro {unit}.",
   "party.chart.noteChf": "Was über den vZEV bezahlt wurde, pro {unit}: lokale Energie, Netzenergie und Abgaben pro kWh sowie die Fixkosten — die Jahrestarife der Rechnung, verteilt auf die Tage jedes Balkens.",
+  "party.series.own": "Eigene Produktion",
+  "party.series.ownValue": "Eigene Produktion, zum Bezugspreis",
   "party.series.local": "Lokale Produktion",
   "party.series.grid": "Netzbezug",
   "party.series.localEnergy": "Lokale Energie",
@@ -756,7 +748,10 @@ export const de: Record<keyof typeof en, string> = {
   "party.series.directPerKwh": "Direkte Belieferung, pro kWh",
   "party.series.directFixed": "Direkte Belieferung, Grundtarife",
   "party.compareDirect": "Mit direkter Belieferung vergleichen",
+  "party.chart.noteOwn": "Die eigene Produktion — direkt verbraucht oder aus der Batterie — kommt in der Farbe der Sonne dazu: nie in Rechnung gestellt, darum in CHF schraffiert, bewertet zum Bezugspreis, den sie erspart hat.",
   "party.chart.noteDirect": "Der schraffierte Balken daneben ist derselbe Verbrauch bei Direktversorgung: jede kWh aus dem Netz und die Fixkosten allein getragen.",
+  "party.savedWithOwn": "Ersparnis, inklusive eigener Produktion",
+  "party.totalKwh": "Gesamtverbrauch",
   "party.localShare": "Lokaler Anteil",
   "party.paid": "Im vZEV bezahlt",
   "party.saved": "Ersparnis",

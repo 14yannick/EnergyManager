@@ -37,7 +37,7 @@ const positions = [
 ];
 
 const ctx = (overrides: Partial<PricingContext> = {}): PricingContext => ({
-  participantCount: 3,
+  participantCountOn: () => 3,
   positionsOn: () => positions,
   localRateOn: () => 0.1,
   ...overrides,
@@ -121,7 +121,7 @@ describe("priceConsumption", () => {
   it("saves nothing for a household alone on its connection that took nothing locally", () => {
     const units = dailyUnits("2026-01-01", "2026-01-31").map((u) => ({ ...u, localKwh: 0 }));
     const direct = positions.filter((p) => p.countsInDirectBilling);
-    const { totals } = priceConsumption(units, ctx({ participantCount: 1, positionsOn: () => direct }));
+    const { totals } = priceConsumption(units, ctx({ participantCountOn: () => 1, positionsOn: () => direct }));
     expect(totals.savedChf).toBeCloseTo(0, 9);
   });
 
@@ -188,5 +188,16 @@ describe("fixed charges", () => {
     for (const k of ["rcpFixedChf", "directFixedChf"] as const) {
       expect(periods.reduce((s, p) => s + p[k], 0)).toBeCloseTo(totals[k], 9);
     }
+  });
+});
+
+describe("a day outside the party's membership", () => {
+  it("costs what direct supply costs and saves nothing", () => {
+    const units = dailyUnits("2026-12-01", "2026-12-31").map((u) => ({ ...u, member: false }));
+    const { totals } = priceConsumption(units, ctx());
+    expect(totals.rcpCostChf).toBeCloseTo(totals.directCostChf, 9);
+    expect(totals.localEnergyChf).toBe(0);
+    expect(totals.savedChf).toBeCloseTo(0, 9);
+    expect(totals.directCostChf).toBeGreaterThan(0);
   });
 });

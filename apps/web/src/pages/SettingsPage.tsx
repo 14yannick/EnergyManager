@@ -33,11 +33,6 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">{t("settings.title")}</h1>
-        <p className="text-sm text-slate-500">{t("settings.intro")}</p>
-      </div>
-
       {/* Only once the role is actually known, so an admin never sees this
           flash by while `/api/me` is still in flight. */}
       {isKnown && !canEdit && (

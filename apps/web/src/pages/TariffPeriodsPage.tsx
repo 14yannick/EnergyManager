@@ -105,11 +105,6 @@ export function TariffPeriodsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">{t("tariff.title")}</h1>
-        <p className="text-sm text-slate-500">{t("tariff.intro")}</p>
-      </div>
-
       <form
         onSubmit={handleSubmit((input) =>
           editingId ? updateMutation.mutate(input) : createMutation.mutate(input),

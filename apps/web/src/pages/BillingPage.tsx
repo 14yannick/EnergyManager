@@ -119,12 +119,6 @@ export function BillingPage() {
 
   return (
     <div className="space-y-6">
-      <div className="print:hidden">
-        <h1 className="text-xl font-semibold text-slate-900">{t("billing.title")}</h1>
-        <p className="max-w-4xl text-sm text-slate-500">
-          {isParticipant ? t("billing.introParticipant") : t("billing.intro")}
-        </p>
-      </div>
       <PositionsSection siteId={siteId} />
       <InvoiceSection siteId={siteId} />
       {/* What has been issued, and settling it: the admin's side of the

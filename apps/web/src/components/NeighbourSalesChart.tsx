@@ -50,6 +50,10 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
     compared(p) > 0 ? p.gainChf / compared(p) : null;
   const barSize = Math.max(18, Math.min(56, Math.round(360 / Math.max(parties.length, 1))));
 
+  // A range with nobody to sell to — before the neighbours joined — gets no
+  // section at all, rather than one saying there was nothing to sell.
+  if (data && data.memberCount === 0) return null;
+
   return (
     <section className="space-y-3">
       <div>

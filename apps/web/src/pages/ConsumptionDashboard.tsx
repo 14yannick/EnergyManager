@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
+import type { PartyConsumption, PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { formatChf, formatKwh, formatKwhAuto } from "../lib/format";
 import { PALETTE } from "../lib/palette";
@@ -49,7 +49,13 @@ type ChartUnit = "kwh" | "chf";
 // The app's colour vocabulary (src/lib/palette.ts): violet for the shared
 // connection's standing charges, green for what came from the site's own
 // panels, blue for the grid. Validated as a stack in that order, bottom to top.
-const COLORS = { local: PALETTE.local, grid: PALETTE.grid, fixed: PALETTE.vzev };
+const COLORS = { local: PALETTE.local, grid: PALETTE.grid, fixed: PALETTE.vzev, own: PALETTE.sun };
+
+/** A producer's own consumption in one chart period: what their plant supplied the house, and what buying it would have cost. */
+interface OwnUse {
+  kwh: number;
+  valueChf: number;
+}
 
 const WARNING_TEXT: Record<PartyConsumptionWarning, MessageKey> = {
   no_positions: "party.warn.noPositions",
@@ -68,12 +74,70 @@ const localShare = (p: Pick<PartyConsumptionPeriod, "localKwh" | "gridKwh">) => 
 // one broke their decimal-point alignment.
 const kwh = (v: number) => `${formatKwh(v)} kWh`;
 
+/**
+ * One party's consumption over the range, priced. The same query key from
+ * the plant dashboard, which shows the party's consumer figures among its
+ * own, so the two never fetch twice for one page.
+ */
+export function usePartyConsumption(siteId: string, partyId: string, from: string, to: string, granularity: Granularity) {
+  return useQuery({
+    queryKey: ["party-consumption", siteId, partyId, from, to, granularity],
+    queryFn: () => api.parties.consumption(siteId, partyId, from, to, granularity),
+    // Keeps the page steady while a new range loads, instead of blanking it.
+    placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * The four figures of a party as a consumer: what the vZEV saved them, what
+ * they used, how much of it was local, what it cost. On their own dashboard
+ * these are the KPI block; on a producer's they join the plant's KPIs.
+ */
+export function ConsumptionKpis({ totals }: { totals: PartyConsumption["totals"] | undefined }) {
+  const t = useT();
+  const totalKwh = totals ? totals.localKwh + totals.gridKwh : 0;
+  const share = totals ? localShare(totals) : null;
+  return (
+    <>
+      <StatCard
+        label={t("party.kpi.saved")}
+        // The figure the page exists to answer, so it leads and stands out.
+        // Green only while it is a saving: a negative one is not good news.
+        emphasis={totals != null && totals.savedChf > 0 ? "positive" : "strong"}
+        hint={t("party.kpi.savedHint")}
+        value={totals?.savedChf}
+      />
+      <StatCard
+        label={t("party.kpi.total")}
+        value={totals ? totalKwh : undefined}
+        format={kwh}
+        sub={
+          totals
+            ? t("party.kpi.totalSub", { local: formatKwhAuto(totals.localKwh), grid: formatKwhAuto(totals.gridKwh) })
+            : undefined
+        }
+      />
+      {/* No kWh under it: the consumption card beside it already gives
+          the local kWh, and the share is the one thing this adds. */}
+      <StatCard label={t("party.kpi.localShare")} value={share} format={(v) => `${v.toFixed(0)} %`} />
+      <StatCard
+        label={t("party.kpi.cost")}
+        value={totals?.rcpCostChf}
+        // The direct-supply figure sits under the cost it is compared
+        // with, leaving the benefit to stand alone as the headline.
+        sub={totals ? t("party.kpi.savedSub", { direct: formatChf(totals.directCostChf) }) : undefined}
+      />
+    </>
+  );
+}
+
 export function ConsumptionDashboard({
   siteId,
   partyId,
   partyName,
   ownerView,
   embedded = false,
+  ownProduction = false,
 }: {
   siteId: string;
   partyId: string;
@@ -82,17 +146,34 @@ export function ConsumptionDashboard({
   /** An admin's or viewer's eyes: the feed-in rate may be drawn, and the vZEV's view is asked for this party by id. */
   ownerView: boolean;
   embedded?: boolean;
+  /**
+   * The party feeds in: their own production — used as it was made, or
+   * from the battery — joins the chart, so the whole of what the house used
+   * is in view, not only what came through the meter.
+   */
+  ownProduction?: boolean;
 }) {
   const t = useT();
   const { from, to, granularity, mode, set: setPeriod } = useSelectedPeriod();
 
-  const query = useQuery({
-    queryKey: ["party-consumption", siteId, partyId, from, to, granularity],
-    queryFn: () => api.parties.consumption(siteId, partyId, from, to, granularity),
-    // Keeps the page steady while a new range loads, instead of blanking it.
+  const query = usePartyConsumption(siteId, partyId, from, to, granularity);
+  const data = query.data;
+  // The plant's own-use figures, from the same rows the revenue chart draws:
+  // site-wide, which is the producer's plant while the site has one.
+  const ownQuery = useQuery({
+    queryKey: ["savings-revenue", siteId, from, to, granularity],
+    queryFn: () => api.savings.daily(siteId, from, to, granularity),
+    enabled: ownProduction === true,
     placeholderData: (previous) => previous,
   });
-  const data = query.data;
+  const ownUse = useMemo(() => {
+    if (!ownProduction) return undefined;
+    const map = new Map<string, OwnUse>();
+    for (const r of ownQuery.data ?? []) {
+      map.set(r.date, { kwh: r.directUseKwh + r.batteryDischargeConsumedKwh, valueChf: r.selfConsumptionValueChf });
+    }
+    return map;
+  }, [ownProduction, ownQuery.data]);
 
   // No lower bound: unlike payback, nothing here is averaged over the range, so
   // days before the first reading do no harm — they still carry standing
@@ -111,15 +192,13 @@ export function ConsumptionDashboard({
 
   const totals = data?.totals;
   const totalKwh = totals ? totals.localKwh + totals.gridKwh : 0;
-  const share = totals ? localShare(totals) : null;
   const name = data?.partyName ?? partyName;
 
   return (
     <div className="space-y-6">
-      {embedded ? (
-        // Under a producer's plant figures: the same person as a consumer.
-        <h2 className="text-sm font-medium text-slate-700">{t("party.section", { name })}</h2>
-      ) : (
+      {/* Embedded in a producer's dashboard, the chart below carries the
+          heading; the live picture and the period controls are above. */}
+      {!embedded && (
         <>
           {/* Straight under the title: the one thing on this page that is
               true only right now, so it should not need scrolling past to
@@ -155,48 +234,26 @@ export function ConsumptionDashboard({
         </p>
       ))}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium text-slate-700">{t("dash.kpi")}</h2>
-        {/* Two abreast even on a phone: four figures in a column is a screen
-            of scrolling for what fits in two rows. */}
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatCard
-            label={t("party.kpi.saved")}
-            // The figure the page exists to answer, so it leads and stands out.
-            // Green only while it is a saving: a negative one is not good news.
-            emphasis={totals != null && totals.savedChf > 0 ? "positive" : "strong"}
-            hint={t("party.kpi.savedHint")}
-            value={totals?.savedChf}
-          />
-          <StatCard
-            label={t("party.kpi.total")}
-            value={totals ? totalKwh : undefined}
-            format={kwh}
-            sub={
-              totals
-                ? t("party.kpi.totalSub", { local: formatKwhAuto(totals.localKwh), grid: formatKwhAuto(totals.gridKwh) })
-                : undefined
-            }
-          />
-          {/* No kWh under it: the consumption card beside it already gives
-              the local kWh, and the share is the one thing this adds. */}
-          <StatCard label={t("party.kpi.localShare")} value={share} format={(v) => `${v.toFixed(0)} %`} />
-          <StatCard
-            label={t("party.kpi.cost")}
-            value={totals?.rcpCostChf}
-            // The direct-supply figure sits under the cost it is compared
-            // with, leaving the benefit to stand alone as the headline.
-            sub={totals ? t("party.kpi.savedSub", { direct: formatChf(totals.directCostChf) }) : undefined}
-          />
-        </div>
-      </section>
+      {/* Embedded under a producer's plant figures, these four already sit
+          in the plant's KPI block above. */}
+      {!embedded && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-slate-700">{t("dash.kpi")}</h2>
+          {/* Two abreast even on a phone: four figures in a column is a screen
+              of scrolling for what fits in two rows. */}
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <ConsumptionKpis totals={totals} />
+          </div>
+        </section>
+      )}
 
       <ConsumptionChart
         periods={data?.periods ?? []}
+        ownUse={ownUse}
         from={from}
         to={to}
         granularity={granularity}
-        empty={!!data && totalKwh === 0}
+        empty={!!data && totalKwh === 0 && !(ownUse && [...ownUse.values()].some((o) => o.kwh > 0))}
       />
     </div>
   );
@@ -209,19 +266,26 @@ interface ChartRow extends PartyConsumptionPeriod {
   gridEnergyChf: number;
   /** Direct supply's per-kWh part: every kWh bought from the provider. */
   directEnergyChf: number;
+  /** A producer's own production used at home; zero for anyone else. */
+  ownKwh: number;
+  /** The same at the purchase price: what it would have cost from the grid. Never paid. */
+  ownValueChf: number;
 }
 
-/** Hatched fills for the direct-supply bar: same meaning, clearly not the bill paid. */
-const hatchId = (key: "grid" | "fixed") => `directHatch-${key}`;
+/** Hatched fills for what was not paid: the direct-supply bar, and own production valued. */
+const hatchId = (key: "grid" | "fixed" | "own") => `directHatch-${key}`;
 
 function ConsumptionChart({
   periods,
+  ownUse,
   from,
   to,
   granularity,
   empty,
 }: {
   periods: PartyConsumptionPeriod[];
+  /** Per chart period, for a producer; undefined for a party without a plant. */
+  ownUse?: Map<string, OwnUse>;
   from: string;
   to: string;
   granularity: Granularity;
@@ -246,15 +310,19 @@ function ConsumptionChart({
         directFixedChf: 0,
         savedChf: 0,
       };
+      const own = ownUse?.get(key);
       return {
         ...p,
         label: periodLabel(key, granularity, t("common.total"), granularity === "hourly" && from === to),
         gridEnergyChf: p.rcpCostChf - p.localEnergyChf - p.rcpFixedChf,
         directEnergyChf: p.directCostChf - p.directFixedChf,
+        ownKwh: own?.kwh ?? 0,
+        ownValueChf: own?.valueChf ?? 0,
       };
     });
-  }, [periods, from, to, granularity, t]);
+  }, [periods, ownUse, from, to, granularity, t]);
 
+  const showOwn = ownUse != null;
   const showDirect = unit === "chf" && compare;
   // Two bars share each period when comparing, so each gets half the room.
   const barSize =
@@ -281,7 +349,9 @@ function ConsumptionChart({
           text={
             (unit === "kwh"
               ? t("party.chart.noteKwh", { unit: periodUnit })
-              : t("party.chart.noteChf", { unit: periodUnit })) + (showDirect ? ` ${t("party.chart.noteDirect")}` : "")
+              : t("party.chart.noteChf", { unit: periodUnit })) +
+            (showOwn ? ` ${t("party.chart.noteOwn")}` : "") +
+            (showDirect ? ` ${t("party.chart.noteDirect")}` : "")
           }
         />
       </h2>
@@ -318,7 +388,7 @@ function ConsumptionChart({
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={rows} barCategoryGap="20%" barGap={4}>
                 <defs>
-                  {(["grid", "fixed"] as const).map((key) => (
+                  {(["grid", "fixed", "own"] as const).map((key) => (
                     <pattern key={key} id={hatchId(key)} patternUnits="userSpaceOnUse" width={5} height={5}
                       patternTransform="rotate(45)">
                       <rect width={5} height={5} fill={PALETTE.surface} />
@@ -335,6 +405,12 @@ function ConsumptionChart({
                 {/* The 2px white stroke is the gap between stacked segments. */}
                 {unit === "kwh" ? (
                   <>
+                    {/* The plant's own share at the foot: what the house ran
+                        on before anything came through the meter. */}
+                    {showOwn && (
+                      <Bar dataKey="ownKwh" name={t("party.series.own")} stackId="s"
+                        fill={COLORS.own} stroke={PALETTE.surface} strokeWidth={2} {...sizing} />
+                    )}
                     <Bar dataKey="localKwh" name={t("party.series.local")} stackId="s"
                       fill={COLORS.local} stroke={PALETTE.surface} strokeWidth={2} {...sizing} />
                     <Bar dataKey="gridKwh" name={t("party.series.grid")} stackId="s"
@@ -352,7 +428,15 @@ function ConsumptionChart({
                       fill={COLORS.local} stroke={PALETTE.surface} strokeWidth={2} {...sizing} />
                     <Bar dataKey="gridEnergyChf" name={t("party.series.gridPerKwh")} stackId="rcp"
                       fill={COLORS.grid} stroke={PALETTE.surface} strokeWidth={2} {...sizing}
-                      radius={[4, 4, 0, 0]} />
+                      radius={showOwn ? undefined : [4, 4, 0, 0]} />
+                    {/* Own production on top, hatched: never on the bill, but
+                        at the purchase price it is what the plant spared the
+                        house, and with it the bar is the whole consumption. */}
+                    {showOwn && (
+                      <Bar dataKey="ownValueChf" name={t("party.series.ownValue")} stackId="rcp"
+                        fill={`url(#${hatchId("own")})`} stroke={COLORS.own} strokeWidth={1} {...sizing}
+                        radius={[4, 4, 0, 0]} />
+                    )}
                     {showDirect && (
                       <>
                         <Bar dataKey="directFixedChf" name={t("party.series.directFixed")} stackId="direct"
@@ -360,7 +444,13 @@ function ConsumptionChart({
                           {...sizing} />
                         <Bar dataKey="directEnergyChf" name={t("party.series.directPerKwh")} stackId="direct"
                           fill={`url(#${hatchId("grid")})`} stroke={COLORS.grid} strokeWidth={1}
-                          {...sizing} radius={[4, 4, 0, 0]} />
+                          {...sizing} radius={showOwn ? undefined : [4, 4, 0, 0]} />
+                        {/* The same own production, so the two bars compare like for like. */}
+                        {showOwn && (
+                          <Bar dataKey="ownValueChf" name={t("party.series.ownValue")} stackId="direct"
+                            legendType="none" fill={`url(#${hatchId("own")})`} stroke={COLORS.own} strokeWidth={1}
+                            {...sizing} radius={[4, 4, 0, 0]} />
+                        )}
                       </>
                     )}
                   </>
@@ -409,20 +499,26 @@ function ConsumptionTooltip({
   return (
     <div className="w-72 max-w-[calc(100vw-3rem)] space-y-0.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md sm:text-sm">
       <p className="mb-1 font-medium text-slate-900">{heading}</p>
+      {row.ownKwh > 0 && line(t("party.series.own"), kwh(row.ownKwh), COLORS.own)}
       {line(t("party.series.local"), kwh(row.localKwh), COLORS.local)}
       {line(t("party.series.grid"), kwh(row.gridKwh), COLORS.grid)}
+      {row.ownKwh > 0 && line(t("party.totalKwh"), kwh(row.ownKwh + row.localKwh + row.gridKwh), undefined, true)}
       {line(t("party.localShare"), share == null ? "—" : `${share.toFixed(0)} %`)}
       <div className="my-1 border-t" />
       {line(t("party.series.fixed"), chf(row.rcpFixedChf), COLORS.fixed)}
       {line(t("party.series.localEnergy"), chf(row.localEnergyChf), COLORS.local)}
       {line(t("party.series.gridPerKwh"), chf(row.gridEnergyChf), COLORS.grid)}
       {line(t("party.paid"), chf(row.rcpCostChf), undefined, true)}
+      {row.ownKwh > 0 && line(t("party.series.ownValue"), chf(row.ownValueChf), COLORS.own)}
       <div className="my-1 border-t" />
       {line(t("party.series.directFixed"), chf(row.directFixedChf))}
       {line(t("party.series.directPerKwh"), chf(row.directEnergyChf))}
       {line(t("party.series.direct"), chf(row.directCostChf), undefined, true)}
       <div className="my-1 border-t" />
       {line(t("party.saved"), chf(row.savedChf), undefined, true)}
+      {/* For a producer: the saving once their own production counts, at
+          the purchase price it spared, on top of what the vZEV saved. */}
+      {row.ownKwh > 0 && line(t("party.savedWithOwn"), chf(row.savedChf + row.ownValueChf), undefined, true)}
     </div>
   );
 }

@@ -756,6 +756,12 @@ export interface NeighbourSales {
    * owner runs the RCP without being a member of it.
    */
   owner: { aloneChf: number; rcpChf: number; advantageChf: number } | null;
+  /**
+   * How many participants besides the owner were members for any part of
+   * the range. Zero means the vZEV had nobody to sell to in it — before the
+   * neighbours joined — and there is nothing here to show.
+   */
+  memberCount: number;
 }
 
 /**

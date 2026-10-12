@@ -395,9 +395,21 @@ export async function getNeighbourSales(siteId: string, from: string, to: string
   const fromBound = sql`(${from}::date AT TIME ZONE 'Europe/Zurich')`;
   const toBoundExclusive = sql`((${to}::date + interval '1 day') AT TIME ZONE 'Europe/Zurich')`;
 
-  const [rows, resolveRate] = await Promise.all([
+  const [rows, resolveRate, members] = await Promise.all([
     loadPartySales(siteId, fromBound, toBoundExclusive),
     loadRateResolver(siteId, fromBound, toBoundExclusive),
+    // Participants — not the owner — whose membership touches the range.
+    db
+      .select({ id: parties.id })
+      .from(parties)
+      .where(
+        and(
+          eq(parties.siteId, siteId),
+          eq(parties.role, "rcp_party"),
+          sql`(${parties.startDate} is null or ${parties.startDate} <= ${to}::date)`,
+          sql`(${parties.endDate} is null or ${parties.endDate} >= ${from}::date)`,
+        ),
+      ),
   ]);
 
   const draws = rows.map((r) => ({ partyId: r.partyId, name: r.name, ts: r.ts.toISOString(), kwh: r.kwh }));
@@ -416,5 +428,5 @@ export async function getNeighbourSales(siteId: string, from: string, to: string
         advantageChf: row?.rcpFixedAdvantageChf ?? 0,
       }
     : null;
-  return { ...priceNeighbourSales(draws, resolveRate, { from, to }, saved), owner };
+  return { ...priceNeighbourSales(draws, resolveRate, { from, to }, saved), owner, memberCount: members.length };
 }

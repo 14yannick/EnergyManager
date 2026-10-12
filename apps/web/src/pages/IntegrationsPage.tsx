@@ -30,11 +30,6 @@ export function IntegrationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">{t("integrations.title")}</h1>
-        <p className="max-w-3xl text-sm text-slate-500">{t("integrations.intro")}</p>
-      </div>
-
       {isKnown && !canEdit && (
         <p className="rounded-lg border border-slate-300 bg-slate-100 p-4 text-sm text-slate-600">
           {t("common.readOnly")}

@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { INITIAL_GRANULARITY, INITIAL_MODE, initialRange, type Granularity, type PeriodMode } from "./periods";
+import { INITIAL_GRANULARITY, INITIAL_MODE, PERIOD_MODES, initialRange, type Granularity, type PeriodMode } from "./periods";
 
 /**
  * The period the Dashboard and the Consumption page share: the range, how it
@@ -15,10 +15,10 @@ import { INITIAL_GRANULARITY, INITIAL_MODE, initialRange, type Granularity, type
  * on its default — "Quarter" — over a range that was one month, with the
  * stepper naming a quarter and the chart showing a month.
  *
- * Held above the routes rather than in each page, so it survives navigation.
- * Deliberately not persisted: a reload is the one moment where "back to the
- * current quarter" is the helpful answer, and a range restored from a previous
- * session is a range nobody chose today.
+ * Held above the routes rather than in each page, so it survives navigation,
+ * and remembered in this browser so it survives a reload too: the period
+ * somebody set is the period they want back, whatever the day. Only a
+ * browser that has never set one opens on the current quarter.
  */
 export interface SelectedPeriod {
   from: string;
@@ -31,13 +31,48 @@ export interface SelectedPeriod {
 
 const PeriodContext = createContext<SelectedPeriod | null>(null);
 
+const STORAGE_KEY = "em.period";
+type PeriodState = { from: string; to: string; granularity: Granularity; mode: PeriodMode };
+const GRANULARITIES: Granularity[] = ["hourly", "daily", "monthly", "quarterly", "yearly", "overall"];
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The remembered period, if the browser has one and it still makes sense. */
+function storedPeriod(): PeriodState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as Partial<PeriodState>;
+    if (
+      typeof p.from === "string" &&
+      typeof p.to === "string" &&
+      DAY.test(p.from) &&
+      DAY.test(p.to) &&
+      p.from <= p.to &&
+      GRANULARITIES.includes(p.granularity as Granularity) &&
+      PERIOD_MODES.includes(p.mode as PeriodMode)
+    ) {
+      return { from: p.from, to: p.to, granularity: p.granularity as Granularity, mode: p.mode as PeriodMode };
+    }
+  } catch {
+    /* storage unavailable or unreadable: start on the current quarter */
+  }
+  return null;
+}
+
+function remember(state: PeriodState) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* same */
+  }
+}
+
 export function PeriodProvider({ children }: { children: ReactNode }) {
-  const initial = useMemo(initialRange, []);
-  const [state, setState] = useState({
-    from: initial.from,
-    to: initial.to,
-    granularity: INITIAL_GRANULARITY,
-    mode: INITIAL_MODE as PeriodMode,
+  const [state, setState] = useState<PeriodState>(() => {
+    const stored = storedPeriod();
+    if (stored) return stored;
+    const initial = initialRange();
+    return { from: initial.from, to: initial.to, granularity: INITIAL_GRANULARITY, mode: INITIAL_MODE as PeriodMode };
   });
 
   const value = useMemo<SelectedPeriod>(
@@ -48,12 +83,16 @@ export function PeriodProvider({ children }: { children: ReactNode }) {
           const next = { from: range.from, to: range.to, granularity, mode: mode ?? current.mode };
           // Both pages clamp the range to their own data on mount, which would
           // otherwise write an identical value and re-render every consumer.
-          return next.from === current.from &&
+          if (
+            next.from === current.from &&
             next.to === current.to &&
             next.granularity === current.granularity &&
             next.mode === current.mode
-            ? current
-            : next;
+          ) {
+            return current;
+          }
+          remember(next);
+          return next;
         }),
     }),
     [state],

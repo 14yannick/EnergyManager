@@ -13,9 +13,9 @@ import {
   buildParticipantInvoice,
   inclusiveDays,
   isBilledParty,
-  ownerFixedCosts,
   ownerIsMember,
   participantCountOf,
+  ownerFixedCostsOn,
   partyValidForPeriod,
   periodBounds,
   positionsChangingWithin,
@@ -337,15 +337,20 @@ export async function runInvoices(
  * The owner's standing charges for any day, alone and inside the RCP — or null
  * when the owner is not a member (an `rcp_admin_only` administrator), who then
  * has no share in the connection to gain from.
+ *
+ * Who shares them is decided day by day: before the neighbours' membership
+ * starts, the owner carries the connection alone and gains nothing.
  */
 export async function loadOwnerFixedCosts(
   siteId: string,
 ): Promise<((day: string, days: number) => OwnerFixedCosts) | null> {
   const [positions, siteParties] = await Promise.all([
     listPositions(siteId),
-    db.select({ role: parties.role }).from(parties).where(eq(parties.siteId, siteId)),
+    db
+      .select({ role: parties.role, startDate: parties.startDate, endDate: parties.endDate })
+      .from(parties)
+      .where(eq(parties.siteId, siteId)),
   ]);
   if (!ownerIsMember(siteParties)) return null;
-  const participantCount = participantCountOf(siteParties);
-  return (day, days) => ownerFixedCosts(positionsValidOn(positions, day), participantCount, days);
+  return (day, days) => ownerFixedCostsOn(positionsValidOn(positions, day), siteParties, day, days);
 }

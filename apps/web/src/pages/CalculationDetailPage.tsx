@@ -110,11 +110,6 @@ export function CalculationDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">{t("calc.title")}</h1>
-        <p className="max-w-3xl text-sm text-slate-500">{t("calc.intro")}</p>
-      </div>
-
       <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-white p-3">
         <div className="flex overflow-hidden rounded-md border border-slate-300">
           <button

@@ -27,7 +27,7 @@ export function priceNeighbourSales(
   range: { from: string; to: string },
   /** What each party saved against direct supply, by party id. */
   savedByParty: ReadonlyMap<string, number> = new Map(),
-): Omit<NeighbourSales, "owner"> {
+): Omit<NeighbourSales, "owner" | "memberCount"> {
   const byParty = new Map<string, NeighbourSale>();
   const totals = emptyFigures();
 

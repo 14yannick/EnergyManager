@@ -6,6 +6,7 @@ import { logoutHref } from "./lib/session";
 import { PeriodProvider } from "./lib/usePeriod";
 import { LanguageSwitch } from "./components/LanguageSwitch";
 import { SkyIcon } from "./components/SkyIcon";
+import { ViewingAs } from "./components/ViewingAs";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TariffPeriodsPage } from "./pages/TariffPeriodsPage";
 import { CalculationDetailPage } from "./pages/CalculationDetailPage";
@@ -26,6 +27,8 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 interface NavItem {
   to: string;
   label: MessageKey;
+  /** What the page is for, as the tab's tooltip: the pages carry no title of their own. */
+  hint: MessageKey;
   end?: boolean;
 }
 
@@ -42,8 +45,8 @@ function navItems(participant: boolean): NavItem[] {
     ? [
         // Billing itself doesn't apply to a participant — the Account tab
         // carries their own dated invoices and status.
-        { to: "/", label: "nav.dashboard", end: true },
-        { to: "/account", label: "nav.account" },
+        { to: "/", label: "nav.dashboard", hint: "dash.intro", end: true },
+        { to: "/account", label: "nav.account", hint: "account.intro" },
       ]
     : [
         // What the system did, then what it bills, then the inputs that
@@ -51,14 +54,14 @@ function navItems(participant: boolean): NavItem[] {
         // before settings, because it is where you go to check the others.
         // Integrations closes the row: the installation's own connections,
         // set once and looked at least.
-        { to: "/", label: "nav.dashboard", end: true },
-        { to: "/billing", label: "nav.billing" },
-        { to: "/account", label: "nav.account" },
-        { to: "/tariff-periods", label: "nav.tariffs" },
-        { to: "/readings", label: "nav.readings" },
-        { to: "/calculation", label: "nav.calculation" },
-        { to: "/settings", label: "nav.settings" },
-        { to: "/integrations", label: "nav.integrations" },
+        { to: "/", label: "nav.dashboard", hint: "dash.intro", end: true },
+        { to: "/billing", label: "nav.billing", hint: "billing.intro" },
+        { to: "/account", label: "nav.account", hint: "account.intro" },
+        { to: "/tariff-periods", label: "nav.tariffs", hint: "tariff.intro" },
+        { to: "/readings", label: "nav.readings", hint: "readings.intro" },
+        { to: "/calculation", label: "nav.calculation", hint: "calc.intro" },
+        { to: "/settings", label: "nav.settings", hint: "settings.intro" },
+        { to: "/integrations", label: "nav.integrations", hint: "integrations.intro" },
       ];
 }
 
@@ -78,7 +81,7 @@ function NavBar({ items }: { items: NavItem[] }) {
   return (
     <nav className="order-last flex w-full gap-1 overflow-x-auto xl:order-none xl:w-auto xl:overflow-x-visible">
       {items.map((item) => (
-        <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
+        <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass} title={t(item.hint)}>
           {t(item.label)}
         </NavLink>
       ))}
@@ -191,6 +194,9 @@ export function App() {
             <SkyIcon />
             {t("app.name")}
           </span>
+          {/* Whose view this is, when it is not the signed-in person's own:
+              beside the brand, so it is on screen whatever the page. */}
+          {showNav && session.kind === "active" && <ViewingAs />}
           {showNav && <NavBar items={items} />}
         </div>
       </header>

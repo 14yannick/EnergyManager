@@ -15,6 +15,9 @@ export const en = {
   "nav.settings": "Site administration",
   "nav.integrations": "Integrations",
   "nav.billing": "Billing",
+  "nav.viewingAs": "Viewing as {name}",
+  "nav.onSite": "on {site}",
+  "nav.viewingAsHint": "What is shown is this member's, or this site's, not your own. Change it under Site administration.",
   "nav.account": "Account",
   "sky.night": "Night",
   "sky.dawn": "Sunrise",
@@ -30,7 +33,6 @@ export const en = {
   "role.admin": "admin",
   "role.viewer": "viewer",
   "role.participant": "participant",
-  "profile.intro": "Who you are signed in as, and the language the app speaks.",
   "profile.account": "Account",
   "profile.party": "Invoiced as",
   "profile.email": "Email",
@@ -70,7 +72,6 @@ export const en = {
   "common.nothingInRange": "Nothing in this range.",
 
   // ---- Calculation detail ------------------------------------------------
-  "calc.title": "Calculation detail",
   "calc.intro":
     "One day, and every figure behind it. Each rate is the average over the day, weighted by energy — expand a row to see the intervals it was built from.",
   "calc.prevDay": "Previous day",
@@ -150,10 +151,8 @@ export const en = {
   "calc.col.batteryOnly": "Battery-only saving",
 
   // ---- Settings ----------------------------------------------------------
-  "settings.title": "Site administration",
   "settings.intro":
     "Who is part of the site, the investment totals used for payback, and the Home Assistant sensors that supply its energy data.",
-  "integrations.title": "Integrations",
   "integrations.intro": "The outside services this installation talks to, and whether each is reachable. Which sensors a site reads is set under Site administration.",
   "integrations.driveSite": "Folder of the site being viewed: {site}",
   "integrations.priceFeeds": "Price feeds",
@@ -250,7 +249,6 @@ export const en = {
     "Charging is metered DC but everything priced is AC, so the export it displaced is reduced by this before being charged against the battery.",
 
   // ---- Tariff periods ----------------------------------------------------
-  "tariff.title": "Tariff periods",
   "tariff.intro":
     "Purchase, feed-in and neighbour-sale rates, each for a date/time range — as short as a quarter-hour or as long as a year. Periods of the same kind must not overlap. Each period also says how it is priced: at its own fixed rate, or from the day-ahead feed.",
   "tariff.kind": "Kind",
@@ -286,7 +284,7 @@ export const en = {
     "Additive per-kWh components stacked on top of a period's rate — e.g. a Herkunftsnachweis or Mindestvergütungsprämie on top of the feed-in rate, each applied only between its own start and end. Unlike periods above, surcharges may overlap each other; every matching one is added to the base rate. The neighbour-sale rate takes none: it is the price agreed with the participants.",
 
   // ---- Import readings ---------------------------------------------------
-  "readings.title": "Import readings",
+  "readings.intro": "Bring the grid provider's readings in from a CSV file, or take the stored ones out as a spreadsheet.",
   "readings.csvNote":
     "CSV columns: timestamp, metric_kind, party, value_kwh — one row per timestamp+metric. metric_kind is one of {kinds}. party is required (a participant's name) when metric_kind is consumption or consumption_grid, and must be blank otherwise. Re-importing overlapping rows overwrites them.",
   "readings.template": "Download CSV template",
@@ -419,7 +417,6 @@ export const en = {
   "parties.plantOf": "Detailed revenue of {name}",
 
   // ---- Billing -----------------------------------------------------------
-  "billing.title": "Billing",
   "billing.cat.energie": "Energy",
   "billing.cat.netznutzung": "Grid usage",
   "billing.cat.messung": "Metering",
@@ -508,7 +505,6 @@ export const en = {
   "invoice.reconciliationMatch": "Matches",
   "invoice.reconciliationDiff": "Off by {sign}{amount} CHF",
 
-  "account.title": "Account",
   "account.intro": "Who you are signed in as, your invoices and whether they've been paid, and the language the app speaks.",
   "account.invoices": "Invoices",
   "account.filter.unpaid": "Unpaid",
@@ -525,8 +521,6 @@ export const en = {
   "account.markUnpaid": "Revert to unpaid",
   "billing.intro":
     "Enter the grid operator's bill position by position, then generate an invoice for each vZEV participant. Amounts include VAT: the supplier's VAT is passed through as is, no VAT is added.",
-  "billing.introParticipant":
-    "The grid operator's rates your invoice is built from, and your invoice for each period. Amounts include VAT: the supplier's VAT is passed through as is, no VAT is added.",
 
   // ---- QR-bill -----------------------------------------------------------
   "qr.noBill":
@@ -536,8 +530,6 @@ export const en = {
   "qr.error": "QR-bill could not be generated",
 
   // ---- Dashboard ---------------------------------------------------------
-  "dash.title": "Dashboard",
-  "dash.viewAs": "Dashboard of",
   "dash.intro": "What the installation is doing right now, then what it earned over a period and how long it takes to pay back its cost.",
   "dash.periodTitle": "Savings & payback",
   "dash.periodIntro": "What the system earned or avoided over the selected range, and how long it takes to pay back its cost.",
@@ -687,8 +679,6 @@ export const en = {
   "billing.cents": "ct.",
   "billing.centsPerKwh": "ct./kWh",
   // ---- Consumption dashboard (one party) -------------------------------
-  "party.intro": "What the installation is doing right now, then {name}'s consumption over a period and what the vZEV saved them.",
-  "party.section": "{name} as a consumer",
   "party.periodTitle": "Consumption & savings",
   "party.periodIntro": "{name}'s consumption, split between the vZEV's own solar and the grid, and what that saved against direct supply.",
   "party.none": "No participants yet — add them under Site administration.",
@@ -728,6 +718,8 @@ export const en = {
   "party.chart.title": "Consumption by source",
   "party.chart.noteKwh": "Local production and grid draw, by {unit}.",
   "party.chart.noteChf": "What was paid through the vZEV, by {unit}: local energy, grid energy and levies per kWh, and the fixed charges — the invoice's annual rates spread over the days each bar covers.",
+  "party.series.own": "Own production",
+  "party.series.ownValue": "Own production, at purchase price",
   "party.series.local": "Local production",
   "party.series.grid": "Grid",
   "party.series.localEnergy": "Local energy",
@@ -737,7 +729,10 @@ export const en = {
   "party.series.directPerKwh": "Direct supply, per kWh",
   "party.series.directFixed": "Direct supply, fixed charges",
   "party.compareDirect": "Compare with direct supply",
+  "party.chart.noteOwn": "Own production — used as it was made, or from the battery — is added in the sun's colour: never on the bill, so hatched in CHF, where it stands at the purchase price it spared.",
   "party.chart.noteDirect": "The hatched bar beside it is the same consumption supplied directly: every kWh from the grid, and the fixed charges borne alone.",
+  "party.savedWithOwn": "Saved, own production included",
+  "party.totalKwh": "Total consumption",
   "party.localShare": "Local share",
   "party.paid": "Paid through the vZEV",
   "party.saved": "Saved",

@@ -27,6 +27,7 @@ import { StatCard } from "../components/StatCard";
 import { LiveSection } from "../components/LiveSection";
 import { NeighbourSalesChart } from "../components/NeighbourSalesChart";
 import { EnergyFlowChart } from "../components/EnergyFlowChart";
+import { ConsumptionDashboard, ConsumptionKpis, usePartyConsumption } from "./ConsumptionDashboard";
 import {
   MAX_HOURLY_DAYS,
   PERIODS_PER_YEAR,
@@ -137,6 +138,9 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
     queryKey: ["invoices", site.id],
     queryFn: () => api.invoices.list(site.id),
   });
+
+  // The party's own consumption over the same range, for the KPI block.
+  const consumption = usePartyConsumption(site.id, party.id, from, to, granularity);
 
   const summary = summaryQuery.data;
   const neighbours = neighboursQuery.data;
@@ -283,10 +287,19 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
             hint={t("dash.openInvoicesHint")}
             value={openInvoicesChf}
           />
+          {/* The producer as a consumer: the same four figures a member's
+              own dashboard leads with, here in the one KPI block. */}
+          <ConsumptionKpis totals={consumption.data?.totals} />
         </div>
       </section>
 
       <RevenueBreakdownChart siteId={site.id} from={from} to={to} granularity={granularity} />
+
+      {/* The producer as a consumer, right under what the plant earned: a
+          producer draws too — at night, or from another plant — and is
+          billed for it like anyone. Their own production joins the chart,
+          so the whole of what the house used is in view. */}
+      <ConsumptionDashboard siteId={site.id} partyId={party.id} partyName={party.name} ownerView embedded ownProduction />
 
       <NeighbourSalesChart siteId={site.id} from={from} to={to} />
 

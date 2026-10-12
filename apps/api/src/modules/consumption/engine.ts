@@ -29,10 +29,17 @@ export interface PricingUnit {
   days: number;
   localKwh: number;
   gridKwh: number;
+  /**
+   * Whether the party was a member of the vZEV on this day. Outside their
+   * membership they were supplied directly, so the day costs what direct
+   * supply costs and saves nothing. Defaults to true.
+   */
+  member?: boolean;
 }
 
 export interface PricingContext {
-  participantCount: number;
+  /** How many share the connection on a day — members whose dates cover it. */
+  participantCountOn: (day: string) => number;
   /** Grid-tariff positions valid on the given day. */
   positionsOn: (day: string) => GridTariffPosition[];
   /** The agreed neighbour rate on the given day, or null when none is set. */
@@ -108,7 +115,7 @@ export function priceConsumption(
       from: unit.day,
       to: unit.day,
       days: unit.days,
-      participantCount: ctx.participantCount,
+      participantCount: ctx.participantCountOn(unit.day),
       positions,
       localRateChf,
       usage: {
@@ -119,16 +126,28 @@ export function priceConsumption(
         localKwh: unit.localKwh,
       },
     });
-    const priced = {
-      localKwh: unit.localKwh,
-      gridKwh: unit.gridKwh,
-      rcpCostChf: costs.rcpChf,
-      localEnergyChf: costs.localEnergyChf,
-      rcpFixedChf: costs.rcpFixedChf,
-      directCostChf: costs.directChf,
-      directFixedChf: costs.directFixedChf,
-      savedChf: costs.directChf - costs.rcpChf,
-    };
+    const member = unit.member ?? true;
+    const priced = member
+      ? {
+          localKwh: unit.localKwh,
+          gridKwh: unit.gridKwh,
+          rcpCostChf: costs.rcpChf,
+          localEnergyChf: costs.localEnergyChf,
+          rcpFixedChf: costs.rcpFixedChf,
+          directCostChf: costs.directChf,
+          directFixedChf: costs.directFixedChf,
+          savedChf: costs.directChf - costs.rcpChf,
+        }
+      : {
+          localKwh: unit.localKwh,
+          gridKwh: unit.gridKwh,
+          rcpCostChf: costs.directChf,
+          localEnergyChf: 0,
+          rcpFixedChf: costs.directFixedChf,
+          directCostChf: costs.directChf,
+          directFixedChf: costs.directFixedChf,
+          savedChf: 0,
+        };
 
     const period = byKey.get(unit.key) ?? { date: unit.key, ...emptyTotals() };
     addInto(period, priced);

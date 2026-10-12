@@ -36,7 +36,6 @@ export function ReadingsImportPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">{t("readings.title")}</h1>
         <p className="max-w-4xl text-sm text-slate-500">
           {t("readings.csvNote", { kinds: intervalMetricKindSchema.options.join(", ") })}
         </p>
