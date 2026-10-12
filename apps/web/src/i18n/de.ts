@@ -748,7 +748,7 @@ export const de: Record<keyof typeof en, string> = {
   "party.series.directPerKwh": "Direkte Belieferung, pro kWh",
   "party.series.directFixed": "Direkte Belieferung, Grundtarife",
   "party.compareDirect": "Mit direkter Belieferung vergleichen",
-  "party.chart.noteOwn": "Die eigene Produktion — direkt verbraucht oder aus der Batterie — kommt in der Farbe der Sonne dazu: nie in Rechnung gestellt, darum in CHF schraffiert, bewertet zum Bezugspreis, den sie erspart hat.",
+  "party.chart.noteOwn": "Die eigene Produktion — direkt verbraucht oder aus der Batterie — kommt in der Farbe der Sonne dazu. Nie in Rechnung gestellt, kostet sie in CHF nichts; neben dem Direktbezug erscheint sie dort schraffiert, zum Bezugspreis, den sie erspart hat.",
   "party.chart.noteDirect": "Der schraffierte Balken daneben ist derselbe Verbrauch bei Direktversorgung: jede kWh aus dem Netz und die Fixkosten allein getragen.",
   "party.savedWithOwn": "Ersparnis, inklusive eigener Produktion",
   "party.totalKwh": "Gesamtverbrauch",

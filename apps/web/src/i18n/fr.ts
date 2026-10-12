@@ -737,7 +737,7 @@ export const fr: Record<keyof typeof en, string> = {
   "party.series.directPerKwh": "Approvisionnement direct, au kWh",
   "party.series.directFixed": "Approvisionnement direct, frais fixes",
   "party.compareDirect": "Comparer avec l'approvisionnement direct",
-  "party.chart.noteOwn": "La production propre — consommée au moment où elle est produite, ou depuis la batterie — s'ajoute dans la couleur du soleil : jamais facturée, donc hachurée en CHF, où elle vaut le prix d'achat qu'elle a évité.",
+  "party.chart.noteOwn": "La production propre — consommée au moment où elle est produite, ou depuis la batterie — s'ajoute dans la couleur du soleil. Jamais facturée, elle ne coûte rien en CHF ; à côté de l'approvisionnement direct, elle y apparaît hachurée, au prix d'achat qu'elle a évité.",
   "party.chart.noteDirect": "La barre hachurée à côté est la même consommation en fourniture directe : chaque kWh du réseau, et les frais fixes portés seul.",
   "party.savedWithOwn": "Économie, production propre comprise",
   "party.totalKwh": "Consommation totale",

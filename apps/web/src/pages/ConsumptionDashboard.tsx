@@ -79,7 +79,7 @@ const kwh = (v: number) => `${formatKwh(v)} kWh`;
  * the plant dashboard, which shows the party's consumer figures among its
  * own, so the two never fetch twice for one page.
  */
-export function usePartyConsumption(siteId: string, partyId: string, from: string, to: string, granularity: Granularity) {
+function usePartyConsumption(siteId: string, partyId: string, from: string, to: string, granularity: Granularity) {
   return useQuery({
     queryKey: ["party-consumption", siteId, partyId, from, to, granularity],
     queryFn: () => api.parties.consumption(siteId, partyId, from, to, granularity),
@@ -93,7 +93,7 @@ export function usePartyConsumption(siteId: string, partyId: string, from: strin
  * they used, how much of it was local, what it cost. On their own dashboard
  * these are the KPI block; on a producer's they join the plant's KPIs.
  */
-export function ConsumptionKpis({ totals }: { totals: PartyConsumption["totals"] | undefined }) {
+function ConsumptionKpis({ totals }: { totals: PartyConsumption["totals"] | undefined }) {
   const t = useT();
   const totalKwh = totals ? totals.localKwh + totals.gridKwh : 0;
   const share = totals ? localShare(totals) : null;
@@ -234,20 +234,8 @@ export function ConsumptionDashboard({
         </p>
       ))}
 
-      {/* Embedded under a producer's plant figures, these four already sit
-          in the plant's KPI block above. */}
-      {!embedded && (
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-700">{t("dash.kpi")}</h2>
-          {/* Two abreast even on a phone: four figures in a column is a screen
-              of scrolling for what fits in two rows. */}
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            <ConsumptionKpis totals={totals} />
-          </div>
-        </section>
-      )}
-
       <ConsumptionChart
+        totals={totals}
         periods={data?.periods ?? []}
         ownUse={ownUse}
         from={from}
@@ -276,6 +264,7 @@ interface ChartRow extends PartyConsumptionPeriod {
 const hatchId = (key: "grid" | "fixed" | "own") => `directHatch-${key}`;
 
 function ConsumptionChart({
+  totals,
   periods,
   ownUse,
   from,
@@ -283,6 +272,8 @@ function ConsumptionChart({
   granularity,
   empty,
 }: {
+  /** The range's totals, for the four figures that head the chart. */
+  totals: PartyConsumption["totals"] | undefined;
   periods: PartyConsumptionPeriod[];
   /** Per chart period, for a producer; undefined for a party without a plant. */
   ownUse?: Map<string, OwnUse>;
@@ -356,6 +347,14 @@ function ConsumptionChart({
         />
       </h2>
 
+      {/* The range's four figures first, the bars that make them up below:
+          one section for what this party consumed and what it cost. Two
+          abreast even on a phone: four figures in a column is a screen of
+          scrolling for what fits in two rows. */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <ConsumptionKpis totals={totals} />
+      </div>
+
       <div className="rounded-lg border bg-white p-4">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex rounded-md border border-slate-300 text-sm">
@@ -426,17 +425,12 @@ function ConsumptionChart({
                       fill={COLORS.fixed} stroke={PALETTE.surface} strokeWidth={2} {...sizing} />
                     <Bar dataKey="localEnergyChf" name={t("party.series.localEnergy")} stackId="rcp"
                       fill={COLORS.local} stroke={PALETTE.surface} strokeWidth={2} {...sizing} />
+                    {/* No own production on this bar: it was never on the
+                        bill, so in CHF it is a cost of nothing — the tooltip
+                        still gives what it was worth. */}
                     <Bar dataKey="gridEnergyChf" name={t("party.series.gridPerKwh")} stackId="rcp"
                       fill={COLORS.grid} stroke={PALETTE.surface} strokeWidth={2} {...sizing}
-                      radius={showOwn ? undefined : [4, 4, 0, 0]} />
-                    {/* Own production on top, hatched: never on the bill, but
-                        at the purchase price it is what the plant spared the
-                        house, and with it the bar is the whole consumption. */}
-                    {showOwn && (
-                      <Bar dataKey="ownValueChf" name={t("party.series.ownValue")} stackId="rcp"
-                        fill={`url(#${hatchId("own")})`} stroke={COLORS.own} strokeWidth={1} {...sizing}
-                        radius={[4, 4, 0, 0]} />
-                    )}
+                      radius={[4, 4, 0, 0]} />
                     {showDirect && (
                       <>
                         <Bar dataKey="directFixedChf" name={t("party.series.directFixed")} stackId="direct"
@@ -445,10 +439,13 @@ function ConsumptionChart({
                         <Bar dataKey="directEnergyChf" name={t("party.series.directPerKwh")} stackId="direct"
                           fill={`url(#${hatchId("grid")})`} stroke={COLORS.grid} strokeWidth={1}
                           {...sizing} radius={showOwn ? undefined : [4, 4, 0, 0]} />
-                        {/* The same own production, so the two bars compare like for like. */}
+                        {/* Own production on top of direct supply, hatched:
+                            supplied directly, every kWh of it would have been
+                            bought at the purchase price, so here it is what
+                            the plant spared the house. */}
                         {showOwn && (
                           <Bar dataKey="ownValueChf" name={t("party.series.ownValue")} stackId="direct"
-                            legendType="none" fill={`url(#${hatchId("own")})`} stroke={COLORS.own} strokeWidth={1}
+                            fill={`url(#${hatchId("own")})`} stroke={COLORS.own} strokeWidth={1}
                             {...sizing} radius={[4, 4, 0, 0]} />
                         )}
                       </>

@@ -27,7 +27,7 @@ import { StatCard } from "../components/StatCard";
 import { LiveSection } from "../components/LiveSection";
 import { NeighbourSalesChart } from "../components/NeighbourSalesChart";
 import { EnergyFlowChart } from "../components/EnergyFlowChart";
-import { ConsumptionDashboard, ConsumptionKpis, usePartyConsumption } from "./ConsumptionDashboard";
+import { ConsumptionDashboard } from "./ConsumptionDashboard";
 import {
   MAX_HOURLY_DAYS,
   PERIODS_PER_YEAR,
@@ -123,36 +123,7 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
     queryFn: () => api.savings.summary(site.id, from, to, granularity),
   });
 
-  // Shares its query key with NeighbourSalesChart's own fetch below, so this
-  // is cache, not a second network round trip.
-  const neighboursQuery = useQuery({
-    queryKey: ["savings-neighbours", site.id, from, to],
-    queryFn: () => api.savings.neighbours(site.id, from, to),
-  });
-
-  // Deliberately not scoped to the period above: an open invoice is a
-  // current-balance fact, not a historical one, so this is the same figure
-  // whichever range the rest of the page happens to be showing. Shares its
-  // key with the Account page's own fetch.
-  const invoicesQuery = useQuery({
-    queryKey: ["invoices", site.id],
-    queryFn: () => api.invoices.list(site.id),
-  });
-
-  // The party's own consumption over the same range, for the KPI block.
-  const consumption = usePartyConsumption(site.id, party.id, from, to, granularity);
-
   const summary = summaryQuery.data;
-  const neighbours = neighboursQuery.data;
-  const openInvoicesChf = invoicesQuery.data
-    ?.filter((inv) => inv.status === "issued")
-    .reduce((sum, inv) => sum + inv.totalChf, 0);
-  // What selling to participants gained (revenue less the export it displaced)
-  // plus the owner's own saving on standing charges from sharing the
-  // connection — the vZEV's whole economic point, net of what running it
-  // alone would have cost either way.
-  const netEarningChf =
-    neighbours == null ? undefined : neighbours.totals.gainChf + (neighbours.owner?.advantageChf ?? 0);
   // A profit-and-loss figure earns its colour: green while it is actually
   // positive, plain at zero or below. Tinting a zero would claim a gain the
   // number does not show.
@@ -206,24 +177,20 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
             />
           )}
         </h2>
-        {/* The page's answer first: what the system saved, what the vZEV
-            itself earned, and the energy behind both — what the panels
-            generated and what left the house. The saving and the production
-            are the sun's doing and wear its colour, the export the grid's;
-            the earning is a result, and is coloured only by its sign. The
-            four after them are the working figures. */}
+        {/* The plant's own figures only: what the system saved and the
+            energy behind it — what the panels generated and what left the
+            house — then the working figures. The saving and the production
+            are the sun's doing and wear its colour, the export the grid's.
+            What the vZEV earned sits with the sales to participants, the
+            producer's own consumption with their consumption chart, and the
+            saving without the battery and the battery's own revenue with
+            the payback they drive — each beside the figures it is made of. */}
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard
             tone="sun"
             label={t("dash.withBatteryTotal")}
             value={summary?.totals.withBatteryChf}
             sub={avgOf(summary?.avgDaily.withBatteryChf)}
-          />
-          <StatCard
-            tone={gainTone(netEarningChf)}
-            label={t("dash.netEarning")}
-            hint={t("dash.netEarningHint")}
-            value={netEarningChf}
           />
           <StatCard
             tone="sun"
@@ -253,11 +220,6 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
             }
           />
           <StatCard
-            label={t("dash.noBatteryTotal")}
-            value={summary?.totals.withoutBatteryChf}
-            sub={avgOf(summary?.avgDaily.withoutBatteryChf)}
-          />
-          <StatCard
             label={t("dash.soldPrice")}
             value={summary?.soldPricePerKwhChf}
             format={(v) => ct(v)}
@@ -275,21 +237,6 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
                 : undefined
             }
           />
-          <StatCard
-            tone={gainTone(summary?.totals.batteryRevenueChf)}
-            label={t("dash.batteryRevenue")}
-            hint={t("dash.batteryRevenueHint")}
-            value={summary?.totals.batteryRevenueChf}
-            sub={avgOf(summary?.avgDaily.batteryRevenueChf)}
-          />
-          <StatCard
-            label={t("dash.openInvoices")}
-            hint={t("dash.openInvoicesHint")}
-            value={openInvoicesChf}
-          />
-          {/* The producer as a consumer: the same four figures a member's
-              own dashboard leads with, here in the one KPI block. */}
-          <ConsumptionKpis totals={consumption.data?.totals} />
         </div>
       </section>
 
@@ -297,8 +244,9 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
 
       {/* The producer as a consumer, right under what the plant earned: a
           producer draws too — at night, or from another plant — and is
-          billed for it like anyone. Their own production joins the chart,
-          so the whole of what the house used is in view. */}
+          billed for it like anyone. Their consumer figures head the chart,
+          and their own production joins it, so the whole of what the house
+          used is in view. */}
       <ConsumptionDashboard siteId={site.id} partyId={party.id} partyName={party.name} ownerView embedded ownProduction />
 
       <NeighbourSalesChart siteId={site.id} from={from} to={to} />
@@ -327,6 +275,23 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
             })}
           />
         </h2>
+        {/* The two savings the categories below are projected from, beside
+            the whole system's in the KPI block above: what the panels alone
+            saved, and what the battery added on top. */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatCard
+            label={t("dash.noBatteryTotal")}
+            value={summary?.totals.withoutBatteryChf}
+            sub={avgOf(summary?.avgDaily.withoutBatteryChf)}
+          />
+          <StatCard
+            tone={gainTone(summary?.totals.batteryRevenueChf)}
+            label={t("dash.batteryRevenue")}
+            hint={t("dash.batteryRevenueHint")}
+            value={summary?.totals.batteryRevenueChf}
+            sub={avgOf(summary?.avgDaily.batteryRevenueChf)}
+          />
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <PaybackCard
             label={t("dash.withBattery")}

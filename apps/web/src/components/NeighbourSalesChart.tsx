@@ -12,9 +12,10 @@ import {
 } from "recharts";
 import type { NeighbourSale } from "@energy-manager/shared";
 import { api } from "../api/client";
-import { PALETTE } from "../lib/palette";
+import { PALETTE, type Tone } from "../lib/palette";
 import { useT } from "../i18n/context";
 import { InfoTip } from "./InfoTip";
+import { StatCard } from "./StatCard";
 import { axisTick } from "../lib/periods";
 
 /**
@@ -25,6 +26,10 @@ import { axisTick } from "../lib/periods";
  * Per participant rather than over time: the question it answers is who the
  * local sales pay off with, and a stack of participants per period would bury
  * the comparison it exists for. The table carries the gain itself.
+ *
+ * Two figures head the section: what the vZEV earned net over the range,
+ * and what participants still owe — the result of these sales, and the
+ * money from them that has not yet come in.
  */
 
 // The dashboard's own colours for the two flows being compared: neighbour
@@ -43,8 +48,28 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
     queryKey: ["savings-neighbours", siteId, from, to],
     queryFn: () => api.savings.neighbours(siteId, from, to),
   });
+  // Deliberately not scoped to the range: an open invoice is a
+  // current-balance fact, not a historical one, so this is the same figure
+  // whichever range the rest of the page happens to be showing. Shares its
+  // key with the Account page's own fetch.
+  const invoicesQuery = useQuery({
+    queryKey: ["invoices", siteId],
+    queryFn: () => api.invoices.list(siteId),
+  });
   const data = query.data;
   const parties = data?.parties ?? [];
+  const openInvoicesChf = invoicesQuery.data
+    ?.filter((inv) => inv.status === "issued")
+    .reduce((sum, inv) => sum + inv.totalChf, 0);
+  // What selling to participants gained (revenue less the export it displaced)
+  // plus the owner's own saving on standing charges from sharing the
+  // connection — the vZEV's whole economic point, net of what running it
+  // alone would have cost either way.
+  const netEarningChf = data == null ? undefined : data.totals.gainChf + (data.owner?.advantageChf ?? 0);
+  // A profit-and-loss figure earns its colour: green while it is actually
+  // positive, plain at zero or below. Tinting a zero would claim a gain the
+  // number does not show.
+  const gainTone = (chf: number | undefined): Tone | undefined => (chf != null && chf > 0 ? "local" : undefined);
   const compared = (p: Pick<NeighbourSale, "kwh" | "unpricedKwh">) => p.kwh - p.unpricedKwh;
   const gainPerKwh = (p: NeighbourSale | NonNullable<typeof data>["totals"]) =>
     compared(p) > 0 ? p.gainChf / compared(p) : null;
@@ -61,6 +86,16 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
           {t("dash.neighbours")}
           <InfoTip text={t("dash.neighboursNote")} />
         </h2>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard
+          tone={gainTone(netEarningChf)}
+          label={t("dash.netEarning")}
+          hint={t("dash.netEarningHint")}
+          value={netEarningChf}
+        />
+        <StatCard label={t("dash.openInvoices")} hint={t("dash.openInvoicesHint")} value={openInvoicesChf} />
       </div>
 
       <div className="space-y-4 rounded-lg border bg-white p-4">

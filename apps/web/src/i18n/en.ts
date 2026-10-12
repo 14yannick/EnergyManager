@@ -729,7 +729,7 @@ export const en = {
   "party.series.directPerKwh": "Direct supply, per kWh",
   "party.series.directFixed": "Direct supply, fixed charges",
   "party.compareDirect": "Compare with direct supply",
-  "party.chart.noteOwn": "Own production — used as it was made, or from the battery — is added in the sun's colour: never on the bill, so hatched in CHF, where it stands at the purchase price it spared.",
+  "party.chart.noteOwn": "Own production — used as it was made, or from the battery — is added in the sun's colour. Never on the bill, it costs nothing in CHF; beside direct supply it is hatched there, at the purchase price it spared.",
   "party.chart.noteDirect": "The hatched bar beside it is the same consumption supplied directly: every kWh from the grid, and the fixed charges borne alone.",
   "party.savedWithOwn": "Saved, own production included",
   "party.totalKwh": "Total consumption",
