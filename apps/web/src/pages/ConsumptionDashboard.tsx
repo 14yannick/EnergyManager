@@ -61,6 +61,7 @@ interface OwnUse {
 interface OwnRange {
   /** Own production used at home: direct, or from the battery. */
   kwh: number;
+  /** Everything the panels made, what charged the battery included — the Produced tile's figure. */
   producedKwh: number;
   /** Everything that left the house: to the grid, or to participants. */
   exportedKwh: number;
@@ -248,7 +249,9 @@ export function ConsumptionDashboard({
     const sum: OwnRange = { kwh: 0, producedKwh: 0, exportedKwh: 0 };
     for (const r of ownQuery.data ?? []) {
       sum.kwh += r.directUseKwh + r.batteryDischargeConsumedKwh;
-      sum.producedKwh += r.producedKwh;
+      // A row's `producedKwh` is the AC side alone; what charged the battery
+      // never passed through it, and is the panels' doing all the same.
+      sum.producedKwh += r.producedKwh + r.batteryChargeKwh;
       sum.exportedKwh += r.exportLocalKwh;
     }
     return sum;
