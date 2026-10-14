@@ -494,8 +494,8 @@ export function PartiesSection({ siteId, canEdit = true }: { siteId: string; can
                       </>
                     ) : (
                       <>
-                        {/* Whose dashboard to show — a member's, as with the
-                            site in the list above. */}
+                        {/* Step into a member's shoes: the app becomes
+                            theirs, tabs included, until Account. */}
                         {isVzevMember(p.role) &&
                           (viewed?.id === p.id ? (
                             <span className="mr-3 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
@@ -506,7 +506,7 @@ export function PartiesSection({ siteId, canEdit = true }: { siteId: string; can
                               onClick={() => chooseParty(siteId, p.id)}
                               className="mr-3 text-slate-500 hover:text-slate-900"
                             >
-                              {t("sites.view")}
+                              {t("parties.viewAs")}
                             </button>
                           ))}
                         {/* Only a member of the vZEV has a meter to put a sensor on. */}

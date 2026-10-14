@@ -187,6 +187,7 @@ export function ConsumptionDashboard({
   partyId,
   partyName,
   ownerView,
+  proxied = false,
   embedded = false,
   ownProduction = false,
 }: {
@@ -196,6 +197,8 @@ export function ConsumptionDashboard({
   partyName: string;
   /** An admin's or viewer's eyes: the feed-in rate may be drawn, and the vZEV's view is asked for this party by id. */
   ownerView: boolean;
+  /** An admin or a viewer in this party's shoes: asked for by id, like the owner would, but shown what the party is shown. */
+  proxied?: boolean;
   embedded?: boolean;
   /**
    * The party feeds in: their own production — used as it was made, or
@@ -271,7 +274,7 @@ export function ConsumptionDashboard({
               dynamic-tariffs and neighbours routes (see policy.ts). The
               vZEV's picture is asked for the party in view: a participant's
               own (the API knows who they are), or the one an admin picked. */}
-          <LiveSection siteId={siteId} owner={ownerView} flow="vzev" partyId={ownerView ? partyId : null} />
+          <LiveSection siteId={siteId} owner={ownerView} flow="vzev" partyId={ownerView || proxied ? partyId : null} />
 
           {/* Nothing above this line answers to the period selector, so it
               sits here. */}

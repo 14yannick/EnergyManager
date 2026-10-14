@@ -1,14 +1,20 @@
-import { useSyncExternalStore } from "react";
-import { effectiveSensorProfile, type Party } from "@energy-manager/shared";
+import { useEffect, useSyncExternalStore } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { effectiveSensorProfile, isVzevMember, type Party } from "@energy-manager/shared";
+import { api } from "../api/client";
+import { useIdentity } from "./useIdentity";
+import { useCurrentSite } from "./useCurrentSite";
 
 /**
- * Whose dashboard an admin or a viewer is looking at.
+ * Whose view an admin or a viewer is in.
  *
- * They may look at any member of the site, so the one in front of them is
- * a choice: made in the Participants list under Site administration, next
- * to the site it belongs to, remembered in this browser per site, and read
- * by the dashboard. A participant has no choice to make: the API shows
- * them their own.
+ * They may step into any member of the site's shoes: chosen in the
+ * Participants list under Site administration, next to the site it
+ * belongs to, remembered in this browser per site. While a member other
+ * than their own household is chosen, the app is that member's — their
+ * dashboard, their account, their tabs and nothing more — until they come
+ * back out under Account (see `useProxy`). A participant has no choice to
+ * make: the API shows them their own.
  *
  * Kept in `localStorage` like the site (see useCurrentSite): a viewing
  * preference, not data, and losing it only means starting on one's own
@@ -43,6 +49,20 @@ export function chooseParty(siteId: string, partyId: string) {
   for (const listener of listeners) listener();
 }
 
+/** Back to one's own view of this site. */
+export function clearParty(siteId: string) {
+  if (!(siteId in chosen)) return;
+  const rest = { ...chosen };
+  delete rest[siteId];
+  chosen = rest;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(chosen));
+  } catch {
+    /* same */
+  }
+  for (const listener of listeners) listener();
+}
+
 /** The member chosen for this site, if any was. */
 export function useChosenParty(siteId: string | null | undefined): string | null {
   const choices = useSyncExternalStore(subscribe, () => chosen);
@@ -61,4 +81,44 @@ export function pickParty(members: Party[], chosenId: string | null, homeId: str
     members.find((p) => effectiveSensorProfile(p).feedIn) ??
     members[0]
   );
+}
+
+/** A member's view an admin or a viewer has stepped into. */
+export interface ProxyView {
+  siteId: string;
+  party: Party;
+}
+
+/**
+ * Whether the signed-in admin or viewer is in a member's shoes: a member
+ * of the site in view is chosen, and it is not their own household.
+ *
+ * `pending` while a member is chosen but the site's parties have not
+ * loaded yet, so the shell shows the member's tabs from the first paint
+ * rather than the admin's for a moment. A chosen member who has since left
+ * the site ends the view by itself. Never for a participant.
+ */
+export function useProxy(): { proxy: ProxyView | null; pending: boolean } {
+  const identity = useIdentity();
+  const me = identity.data;
+  const isParticipant = me?.role === "participant";
+  const { site } = useCurrentSite({ enabled: identity.isSuccess && !isParticipant });
+  const partiesQuery = useQuery({
+    queryKey: ["parties", site?.id],
+    queryFn: () => api.parties.list(site!.id),
+    enabled: !!site && !isParticipant,
+  });
+  const chosenId = useChosenParty(site?.id);
+  const chosenOther = me != null && !isParticipant && site != null && chosenId != null && chosenId !== me.homeParty?.id;
+  const party = chosenOther
+    ? partiesQuery.data?.find((p) => p.id === chosenId && isVzevMember(p.role))
+    : undefined;
+  const gone = chosenOther && partiesQuery.isSuccess && party == null;
+  useEffect(() => {
+    if (gone && site) clearParty(site.id);
+  }, [gone, site]);
+  return {
+    proxy: party && site ? { siteId: site.id, party } : null,
+    pending: chosenOther && !partiesQuery.isSuccess,
+  };
 }

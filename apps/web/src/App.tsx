@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { useT, type MessageKey } from "./i18n/context";
 import { useSession } from "./lib/useIdentity";
+import { useProxy } from "./lib/useViewedParty";
 import { logoutHref } from "./lib/session";
 import { PeriodProvider } from "./lib/usePeriod";
 import { LanguageSwitch } from "./components/LanguageSwitch";
@@ -37,8 +38,10 @@ interface NavItem {
  *
  * A participant sees their own dashboard and their own account — invoices,
  * session, language — nothing else: every other page reads site-wide data
- * the API refuses them. Account follows billing for everyone, as the last
- * of the tabs that matter day to day.
+ * the API refuses them. An admin or a viewer in a member's shoes (see
+ * useProxy) gets the same two: the view is the member's, tabs included.
+ * Account follows billing for everyone, as the last of the tabs that
+ * matter day to day.
  */
 function navItems(participant: boolean): NavItem[] {
   return participant
@@ -172,7 +175,9 @@ function NoAccess({ email, status }: { email: string | null; status: number }) {
 export function App() {
   const session = useSession();
   const t = useT();
-  const participant = session.kind === "active" && session.identity.role === "participant";
+  const { proxy, pending } = useProxy();
+  const participant =
+    session.kind === "active" && (session.identity.role === "participant" || proxy != null || pending);
   const items = navItems(participant);
   // Hidden for a rejected session: none of it leads anywhere.
   const showNav = session.kind !== "rejected" && session.kind !== "expired";

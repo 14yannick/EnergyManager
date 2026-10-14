@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import { useT } from "../i18n/context";
 import { useIdentity } from "../lib/useIdentity";
 import { useCurrentSite } from "../lib/useCurrentSite";
-import { pickParty, useChosenParty } from "../lib/useViewedParty";
+import { pickParty, useChosenParty, useProxy } from "../lib/useViewedParty";
 import { PlantDashboard } from "./PlantDashboard";
 import { ConsumptionDashboard } from "./ConsumptionDashboard";
 
@@ -18,9 +18,10 @@ import { ConsumptionDashboard } from "./ConsumptionDashboard";
  * them. The party's options decide the rest (see PlantDashboard).
  *
  * A participant sees their own and nobody else's; the API knows who they
- * are. An admin or a viewer may look at any member of the site in view: the
- * one picked under Site administration (see useViewedParty), starting on
- * their own household where they have one, else on the first that feeds in.
+ * are. An admin or a viewer starts on their own household where they have
+ * one, else on the first that feeds in; in a member's shoes (see useProxy)
+ * they get what that member gets — the consumption view, feed-in rate and
+ * all the rest withheld — not the plant's figures with another name on.
  */
 export function DashboardPage() {
   const t = useT();
@@ -43,8 +44,21 @@ export function DashboardPage() {
 
   const chosenId = useChosenParty(siteId);
   const party = pickParty(members, chosenId, me?.homeParty?.id ?? null);
+  const { proxy, pending } = useProxy();
 
-  if (identity.isLoading) return <p className="text-slate-500">{t("common.loading")}</p>;
+  if (identity.isLoading || pending) return <p className="text-slate-500">{t("common.loading")}</p>;
+
+  if (proxy) {
+    return (
+      <ConsumptionDashboard
+        siteId={proxy.siteId}
+        partyId={proxy.party.id}
+        partyName={proxy.party.name}
+        ownerView={false}
+        proxied
+      />
+    );
+  }
 
   if (isParticipant) {
     if (!me?.siteId || !me.partyId) return <p className="text-slate-500">{t("common.loading")}</p>;
