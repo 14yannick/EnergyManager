@@ -871,6 +871,13 @@ export interface LiveEnergyView {
    * when the entity is missing.
    */
   sun: { elevation: number; rising: boolean } | null;
+  /**
+   * What the producers' PV made at this time of day on their best day of
+   * the last three weeks, in watts — the clear sky as these panels know it,
+   * which the brand mark grades the current output against (see
+   * shared/sky.ts). Null without a live PV sensor or its history.
+   */
+  pvReferenceW: number | null;
   /** Forecast for the whole day, in kWh. */
   forecastTodayKwh: number | null;
   /** Of that, still to come, in kWh. */

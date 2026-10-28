@@ -7,8 +7,9 @@ import { useLiveView } from "./LiveCards";
 /**
  * The brand mark, as the sky over the installation right now: a moon at
  * night, the sun on the horizon at dawn and dusk, and by day the sun
- * behind as much cloud as the panels' output says there is (the
- * thresholds live in shared/sky.ts). The plain sun stands in until the
+ * behind as much cloud as the panels' output says there is, against what
+ * they made at this hour on their best recent day (the thresholds live in
+ * shared/sky.ts). The plain sun stands in until the
  * live view has answered, and wherever there is nothing live to read.
  *
  * Reads the same live query the "Right now" cards do, so it costs no
@@ -31,7 +32,7 @@ export function SkyIcon() {
   const forecast = live?.today?.forecast ?? null;
   const sky: Sky | null =
     live && live.configured
-      ? skyFor({ sun: live.sun, pvW: live.pvW, hour, forecast })
+      ? skyFor({ sun: live.sun, pvW: live.pvW, hour, forecast, pvReferenceW: live.pvReferenceW })
       : live?.sun
         ? skyFor({ sun: live.sun, pvW: null, hour, forecast })
         : null;
@@ -75,6 +76,18 @@ function Horizon({ rising }: { rising: boolean }) {
       <path d="M12 6v3M4.9 9.9l1.4 1.4M19.1 9.9l-1.4 1.4M2 17h2.5M19.5 17H22M2 21h20" {...STROKE} />
       <path d={rising ? "M9.5 4.5 12 2l2.5 2.5" : "M9.5 2 12 4.5 14.5 2"} {...STROKE} />
     </g>
+  );
+}
+
+/** The horizon sun with a small cloud in front of it: a sunrise or sunset the panels barely notice. */
+function HorizonCloudy({ rising }: { rising: boolean }) {
+  return (
+    <>
+      <Horizon rising={rising} />
+      <g className="text-slate-500" transform="translate(11 9.5) scale(0.52)">
+        <path d={CLOUD} {...STROKE} strokeWidth={2.6} style={{ fill: "rgb(var(--c-surface))" }} />
+      </g>
+    </>
   );
 }
 
@@ -129,6 +142,10 @@ function Glyph({ sky }: { sky: Sky }) {
       return <Horizon rising />;
     case "dusk":
       return <Horizon rising={false} />;
+    case "dawnCloudy":
+      return <HorizonCloudy rising />;
+    case "duskCloudy":
+      return <HorizonCloudy rising={false} />;
     case "partly":
       return <Partly />;
     case "cloudy":

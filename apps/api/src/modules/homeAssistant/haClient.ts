@@ -186,6 +186,41 @@ export async function fetchStatistics(
 }
 
 /**
+ * Each statistic's mean per bucket over [start, end) — for a measurement
+ * such as a power sensor, which has a mean and no sum. Buckets with no
+ * mean are left out; ids Home Assistant has nothing for are absent.
+ */
+export async function fetchStatisticMeans(
+  statisticIds: string[],
+  start: Date,
+  end: Date,
+  period: HaPeriod,
+): Promise<Map<string, Array<{ start: Date; mean: number }>>> {
+  if (statisticIds.length === 0) return new Map();
+  return withSession(async (session) => {
+    const result = await session.call(
+      {
+        type: "recorder/statistics_during_period",
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        statistic_ids: statisticIds,
+        period,
+        types: ["mean"],
+      },
+      z.record(z.string(), z.array(z.object({ start: z.number(), mean: z.number().nullish() }))),
+    );
+    const out = new Map<string, Array<{ start: Date; mean: number }>>();
+    for (const [statisticId, buckets] of Object.entries(result)) {
+      out.set(
+        statisticId,
+        buckets.flatMap((b) => (b.mean == null ? [] : [{ start: new Date(b.start), mean: b.mean }])),
+      );
+    }
+    return out;
+  });
+}
+
+/**
  * A price-forecast entity of the shape a "dynamic tariff" sensor exposes: a
  * current price as the state, plus `today`/`tomorrow` arrays of priced
  * quarter-hour slots as attributes. This is not a stock Home Assistant

@@ -3,8 +3,9 @@ import type { HourKwh, LiveDayCurve, LiveEnergyView, PartySensorKind, TomorrowFo
 import { db } from "../../db/client.js";
 import { intervalMetrics, sites } from "../../db/schema/index.js";
 import { activeSensors } from "../partySensors/service.js";
-import { fetchHaNumericStates, fetchHaSunPosition, fetchSolarForecast } from "./haClient.js";
+import { fetchHaNumericStates, fetchHaSunPosition, fetchSolarForecast, fetchStatisticMeans } from "./haClient.js";
 import { SITE_TZ, forecastForDay, localDayHour, mergeForecastSources } from "./forecastCurve.js";
+import { bestByHour, referenceAt } from "./skyReference.js";
 
 /**
  * The forecast, remembered for a few minutes.
@@ -28,6 +29,39 @@ async function cachedForecastSources(): Promise<Array<Record<string, number>>> {
     // A forecast that cannot be read must not take the live figures down
     // with it. Serve the last one if there is one; otherwise draw no line.
     return forecastCache?.sources ?? [];
+  }
+}
+
+/**
+ * How far back the clear-sky reference looks: three weeks holds a few clear
+ * days in all but the dullest spells, and is short enough that the sun has
+ * not moved far — a reference from two months ago would grade a November
+ * noon against an October one.
+ */
+const REFERENCE_DAYS = 21;
+/** The reference changes with the day, not the minute: worked out hourly. */
+const REFERENCE_TTL_MS = 60 * 60 * 1000;
+const referenceCache = new Map<string, { at: number; profiles: number[][] }>();
+
+/**
+ * Each PV sensor's best hourly mean per local hour over the last three
+ * weeks (see skyReference.ts), from Home Assistant's long-term statistics —
+ * which a power sensor has as soon as it carries a state class. Cached per
+ * set of sensors for an hour. An empty list when Home Assistant cannot be
+ * read: the mark then falls back to its fixed thresholds.
+ */
+async function pvReferenceProfiles(entityIds: string[], now: Date): Promise<number[][]> {
+  const key = [...entityIds].sort().join(",");
+  const cached = referenceCache.get(key);
+  if (cached && now.getTime() - cached.at < REFERENCE_TTL_MS) return cached.profiles;
+  try {
+    const start = new Date(now.getTime() - REFERENCE_DAYS * 24 * 60 * 60 * 1000);
+    const means = await fetchStatisticMeans(entityIds, start, now, "hour");
+    const profiles = entityIds.map((id) => bestByHour(means.get(id) ?? []));
+    referenceCache.set(key, { at: now.getTime(), profiles });
+    return profiles;
+  } catch {
+    return cached?.profiles ?? [];
   }
 }
 
@@ -143,6 +177,7 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
       tomorrow,
       at,
       sun,
+      pvReferenceW: null,
       exportW: null,
       importW: null,
       pvW: null,
@@ -157,7 +192,18 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
     };
   }
 
-  const states = await fetchHaNumericStates(ids);
+  // The producers' PV sensors, each turned the way its flag says.
+  const pvSensors = sensors.filter((s) => s.feedIn && s.kind === "live_pv_power");
+  const [states, profiles] = await Promise.all([
+    fetchHaNumericStates(ids),
+    pvSensors.length > 0 ? pvReferenceProfiles(pvSensors.map((s) => s.entityId), now) : Promise.resolve([]),
+  ]);
+  // Several plants add up, as their output does. Null without a profile —
+  // no sensor, or none of its history readable.
+  const pvReferenceW =
+    profiles.length === 0 || profiles.every((p) => p.every((v) => v === 0))
+      ? null
+      : profiles.reduce((sum, p) => sum + referenceAt(p, now), 0);
   // This view is the plant's: what the producers' houses make, store, draw
   // and send out. Any member may map their grid import now, and a
   // neighbour's draw is no part of that balance — it would read as the
@@ -205,6 +251,7 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
     tomorrow,
     at,
     sun,
+    pvReferenceW,
     exportW: gridOut == null ? null : Math.max(gridOut, 0),
     // Its own sensor where a producer maps one; else the export sensor's
     // other sign, which is the same meter read the other way.
