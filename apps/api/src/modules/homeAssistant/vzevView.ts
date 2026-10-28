@@ -100,6 +100,9 @@ async function readPower(
     feedInW: sum(values("live_export_power", isProducer).map((v) => Math.max(v, 0))),
     ownW: viewerId ? drawOf(viewerId) : null,
     othersW: known.length > 0 ? known.reduce((a, b) => a + b, 0) : null,
+    // The viewer's whole house, where they map its load: what it runs on,
+    // the grid's share and their own plant's together.
+    ownLoadW: viewerId ? sum(values("live_load_power", (id) => id === viewerId)) : null,
   };
 }
 
@@ -123,7 +126,7 @@ async function readToday(
   const zone = sql.raw(`'${SITE_TZ}'`);
   const fromBound = sql`(${day}::date at time zone ${zone})`;
   const toBoundExclusive = sql`((${day}::date + interval '1 day') at time zone ${zone})`;
-  const [made, settlement] = await Promise.all([
+  const [made, settlement, house] = await Promise.all([
     db
       .select({
         productionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'production'), 0)`,
@@ -142,6 +145,26 @@ async function readToday(
     // split of a member's consumption where that is in, else what their
     // import sensor metered, shared by the vZEV's rule.
     loadVzevSettlement(siteId, fromBound, toBoundExclusive),
+    // The viewer's whole house today, from their house consumption counter
+    // — own production and battery included. Counted rows too, so a house
+    // with no counter reads as unknown rather than as nothing consumed.
+    viewerId
+      ? db
+          .select({
+            kwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}), 0)`,
+            rows: sql<number>`count(*)::int`,
+          })
+          .from(intervalMetrics)
+          .where(
+            and(
+              eq(intervalMetrics.siteId, siteId),
+              eq(intervalMetrics.partyId, viewerId),
+              eq(intervalMetrics.metricKind, "consumption_own"),
+              sql`${intervalMetrics.ts} >= ${fromBound}`,
+              sql`${intervalMetrics.ts} < ${toBoundExclusive}`,
+            ),
+          )
+      : Promise.resolve([]),
   ]);
 
   // What the plants made is their AC production plus what went into their
@@ -177,6 +200,7 @@ async function readToday(
     // made; that is not negative own use.
     keptKwh: Math.max(producedKwh - feedInKwh, 0),
     ownKwh: own ? own.local + own.grid : null,
+    ownLoadKwh: house[0] && house[0].rows > 0 ? toNumber(house[0].kwh) : null,
     othersKwh: othersLocalKwh != null && othersGridKwh != null ? othersLocalKwh + othersGridKwh : null,
     ownLocalKwh: own?.local ?? null,
     ownGridKwh: own?.grid ?? null,

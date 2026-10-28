@@ -166,6 +166,12 @@ export interface VzevPowerReading {
   ownW: number | null;
   /** What the other members are drawing together, producers among them. */
   othersW: number | null;
+  /**
+   * What the viewer's whole house is consuming, in watts — their own
+   * production and battery included, not only what the meter draws. Only
+   * where they map a load sensor; null otherwise.
+   */
+  ownLoadW?: number | null;
 }
 
 export interface VzevPowerFlows {
@@ -236,6 +242,12 @@ export interface VzevLiveView {
     keptKwh: number;
     /** The viewer's own consumption; null when there is no reading of it yet. */
     ownKwh: number | null;
+    /**
+     * What the viewer's whole house consumed today, own production and
+     * battery included — from their house consumption counter. Null when
+     * they map none, or nothing is stored for today yet.
+     */
+    ownLoadKwh?: number | null;
     othersKwh: number | null;
     /**
      * How that consumption was covered, settled interval by interval (see

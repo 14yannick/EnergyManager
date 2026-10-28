@@ -57,11 +57,17 @@ function dayOf(live: LiveEnergyView): { madeKwh: number; availableKwh: number } 
   };
 }
 
-/** The member's own draw: power now, and energy so far today. */
+/**
+ * The member's own consumption: what their meter draws now and has drawn
+ * today, and — where they map their house's load — what the whole house
+ * runs on, own production and battery included.
+ */
 export interface OwnDraw {
   w: number | null;
   kwh: number | null;
   localKwh: number | null;
+  loadW: number | null;
+  loadKwh: number | null;
 }
 
 /**
@@ -71,8 +77,14 @@ export interface OwnDraw {
  */
 export function ownDrawOf(view: VzevLiveView | undefined): OwnDraw | null {
   if (!view?.viewer?.consumes) return null;
-  const draw = { w: view.power.ownW, kwh: view.today.ownKwh, localKwh: view.today.ownLocalKwh };
-  return draw.w == null && draw.kwh == null ? null : draw;
+  const draw = {
+    w: view.power.ownW,
+    kwh: view.today.ownKwh,
+    localKwh: view.today.ownLocalKwh,
+    loadW: view.power.ownLoadW ?? null,
+    loadKwh: view.today.ownLoadKwh ?? null,
+  };
+  return draw.w == null && draw.kwh == null && draw.loadW == null ? null : draw;
 }
 
 const kw = (w: number) => `${formatNumber(w / 1000, 2)} kW`;
@@ -158,18 +170,34 @@ export function LiveCards({
       )}
       {/* The member's own meter: what it draws this instant, and what it
           has drawn since midnight — the figure the day's bill is made of. */}
+      {/* The member's own consumption. The whole house where its load is
+          mapped — what it runs on, own production and battery included;
+          otherwise what the meter draws. Either way with the local part
+          underneath: for the house, everything that did not come from the
+          grid — own production, the battery, and what the vZEV supplied. */}
       {own && (
         <StatCard
           label={t("party.live.drawing")}
-          value={own.w}
+          value={own.loadW ?? own.w}
           format={kw}
           sub={
-            own.kwh != null
-              ? t("party.live.drawingSub", {
-                  kwh: formatKwh(own.kwh),
-                  local: formatKwh(own.localKwh ?? 0),
-                })
-              : undefined
+            own.loadW != null
+              ? own.loadKwh != null
+                ? t("party.live.drawingSub", {
+                    kwh: formatKwh(own.loadKwh),
+                    // The meter's grid share is what the house did not cover
+                    // locally; the vZEV's part of the meter's draw is local.
+                    local: formatKwh(Math.max(own.loadKwh - ((own.kwh ?? 0) - (own.localKwh ?? 0)), 0)),
+                  })
+                : own.w != null
+                  ? t("party.live.houseNowSub", { kw: kw(Math.max(own.loadW - own.w, 0)) })
+                  : undefined
+              : own.kwh != null
+                ? t("party.live.drawingSub", {
+                    kwh: formatKwh(own.kwh),
+                    local: formatKwh(own.localKwh ?? 0),
+                  })
+                : undefined
           }
         />
       )}

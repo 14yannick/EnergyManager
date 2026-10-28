@@ -702,6 +702,7 @@ export const en = {
   "party.live.drawing": "Drawing now",
   "party.live.availableSub": "{kwh} kWh available to the vZEV",
   "party.live.stillExpectedSub": "{kwh} kWh still expected of {total} kWh",
+  "party.live.houseNowSub": "{kw} local",
   "party.live.drawingSub": "{kwh} kWh today, {local} kWh of it local",
   "party.live.chart": "Today, hour by hour",
   "party.live.chartNote": "What the panels made in each hour so far, against the forecast for the day. The hour in progress is partial until it ends. The feed-in rate is coloured by how good it is: dark red below zero, red under 8 ct., grey under 14 ct., green above, and dark green once it beats the purchase price. What the battery sends out counts as available too, so an hour can show more than the panels made in it.",

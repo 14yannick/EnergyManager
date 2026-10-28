@@ -710,6 +710,7 @@ export const fr: Record<keyof typeof en, string> = {
   "party.live.drawing": "Consommation actuelle",
   "party.live.availableSub": "{kwh} kWh disponibles pour le RCPv",
   "party.live.stillExpectedSub": "encore {kwh} kWh attendus sur {total} kWh",
+  "party.live.houseNowSub": "dont {kw} locaux",
   "party.live.drawingSub": "{kwh} kWh aujourd'hui, dont {local} kWh locaux",
   "party.live.chart": "Aujourd'hui, heure par heure",
   "party.live.chartNote": "Ce que les panneaux ont produit chaque heure jusqu'ici, face à la prévision du jour. L'heure en cours est partielle jusqu'à sa fin. Le tarif de reprise est coloré selon sa valeur : rouge foncé sous zéro, rouge sous 8 ct., gris sous 14 ct., vert au-dessus, et vert foncé dès qu'il dépasse le prix d'achat. Ce que la batterie renvoie compte aussi comme disponible, une heure peut donc afficher plus que ce que les panneaux y ont produit.",

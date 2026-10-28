@@ -721,6 +721,7 @@ export const de: Record<keyof typeof en, string> = {
   "party.live.drawing": "Bezug jetzt",
   "party.live.availableSub": "{kwh} kWh für den vZEV verfügbar",
   "party.live.stillExpectedSub": "noch {kwh} kWh von {total} kWh erwartet",
+  "party.live.houseNowSub": "davon {kw} lokal",
   "party.live.drawingSub": "{kwh} kWh heute, davon {local} kWh lokal",
   "party.live.chart": "Heute, Stunde für Stunde",
   "party.live.chartNote": "Was die Panels bisher in jeder Stunde erzeugt haben, gegenüber der Tagesprognose. Die laufende Stunde ist bis zu ihrem Ende unvollständig. Der Einspeisetarif ist nach seiner Güte gefärbt: dunkelrot unter null, rot unter 8 Rp., grau unter 14 Rp., grün darüber und dunkelgrün, sobald er den Bezugspreis übertrifft. Was die Batterie abgibt, zählt ebenfalls als verfügbar; eine Stunde kann daher mehr zeigen, als die Panels in ihr erzeugt haben.",
