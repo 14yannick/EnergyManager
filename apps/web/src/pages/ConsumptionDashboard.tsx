@@ -560,10 +560,24 @@ function ConsumptionTooltip({
   const hasOwn = row.ownKwh >= 0.05;
   const heading = granularity === "overall" ? t("dash.wholePeriod") : row.label;
 
-  const chf = (v: number) => `CHF ${formatChf(v)}`;
-  const line = (label: string, value: string, swatch?: string, strong = false) => (
+  // The unit after the figure, as with kWh above, so every amount lines up
+  // on its last digit down the right-hand column.
+  const chf = (v: number) => `${formatChf(v)} CHF`;
+  // A step added to the running sum: signed, so it reads as a difference
+  // and not as an amount paid. Rounded first, so a zero never shows "−".
+  const delta = (v: number) => {
+    const rounded = Math.round(v * 100) / 100;
+    return `${rounded < 0 ? "−" : "+"}${formatChf(Math.abs(rounded))} CHF`;
+  };
+  // Direct supply, as steps on top of what the vZEV cost: the fixed charges
+  // borne alone instead of shared, and every kWh at the grid's price
+  // instead of the vZEV's. The two add up to the vZEV's saving exactly.
+  const fixedDelta = row.directFixedChf - row.rcpFixedChf;
+  const energyDelta = row.directEnergyChf - row.localEnergyChf - row.gridEnergyChf;
+  const line = (label: string, value: string, swatch?: string, strong = false, prefix?: string) => (
     <div className={`flex items-center justify-between gap-4 ${strong ? "font-semibold" : ""}`}>
       <span className="min-w-0 text-slate-600">
+        {prefix && <span className="mr-1.5">{prefix}</span>}
         {swatch && (
           <span className="mr-1.5 inline-block h-2 w-2 rounded-sm align-middle" style={{ backgroundColor: swatch }} />
         )}
@@ -588,16 +602,24 @@ function ConsumptionTooltip({
       {line(t("party.series.localEnergy"), chf(row.localEnergyChf), COLORS.local)}
       {line(t("party.series.gridPerKwh"), chf(row.gridEnergyChf), COLORS.grid)}
       {line(t("party.paid"), chf(row.rcpCostChf), undefined, true)}
-      {hasOwn && line(t("party.series.ownValue"), chf(row.ownValueChf), COLORS.own)}
       <div className="my-1 border-t" />
-      {line(t("party.series.directFixed"), chf(row.directFixedChf))}
-      {line(t("party.series.directPerKwh"), chf(row.directEnergyChf))}
-      {line(t("party.series.direct"), chf(row.directCostChf), undefined, true)}
+      {/* A running sum from what the vZEV cost: what each line above would
+          have cost supplied directly, then — for a producer — what the
+          plant spared on top. The bold line closing it is the whole: direct
+          supply for a member without a plant, the bill without the plant
+          for a producer. */}
+      {line(t("party.series.fixed"), delta(fixedDelta), COLORS.fixed, false, "Δ")}
+      {line(t("party.series.gridPerKwh"), delta(energyDelta), COLORS.grid, false, "Δ")}
+      {hasOwn
+        ? <>
+            {line(t("party.series.own"), delta(row.ownValueChf), COLORS.own)}
+            {line(t("party.withoutPlant"), chf(row.directCostChf + row.ownValueChf), undefined, true)}
+          </>
+        : line(t("party.series.direct"), chf(row.directCostChf), undefined, true)}
       <div className="my-1 border-t" />
-      {line(t("party.saved"), chf(row.savedChf), undefined, true)}
-      {/* For a producer: the saving once their own production counts, at
-          the purchase price it spared, on top of what the vZEV saved. */}
-      {hasOwn && line(t("party.savedWithOwn"), chf(row.savedChf + row.ownValueChf), undefined, true)}
+      {/* The whole advantage, the difference between the two bold totals:
+          for a producer, own production at the price it spared included. */}
+      {line(t("party.saved"), chf(row.savedChf + (hasOwn ? row.ownValueChf : 0)), undefined, true)}
     </div>
   );
 }

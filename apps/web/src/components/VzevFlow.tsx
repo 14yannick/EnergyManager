@@ -199,6 +199,20 @@ interface Hover {
   y: number;
 }
 
+/**
+ * The vZEV right now, as one member sees it — shared by the flow picture and
+ * the "Drawing now" tile above it, so both read one request.
+ */
+export function useVzevLive(siteId: string | null | undefined, partyId?: string | null) {
+  return useQuery({
+    queryKey: ["vzev-live", siteId, partyId ?? null],
+    queryFn: () => api.vzev.live(siteId!, partyId ?? undefined),
+    enabled: !!siteId,
+    refetchInterval: REFRESH_MS,
+    placeholderData: (previous) => previous,
+  });
+}
+
 export function VzevFlow({
   siteId,
   partyId,
@@ -216,13 +230,7 @@ export function VzevFlow({
   const { ref: wrapRef, element: wrapEl, width } = useElementWidth();
   const [hover, setHover] = useState<Hover | null>(null);
 
-  const query = useQuery({
-    queryKey: ["vzev-live", siteId, partyId ?? null],
-    queryFn: () => api.vzev.live(siteId!, partyId ?? undefined),
-    enabled: !!siteId,
-    refetchInterval: REFRESH_MS,
-    placeholderData: (previous) => previous,
-  });
+  const query = useVzevLive(siteId, partyId);
   const view: VzevLiveView | undefined = query.data;
   // The card holds its place while the first answer is on its way, so the
   // day's curve beside it does not jump once it arrives.

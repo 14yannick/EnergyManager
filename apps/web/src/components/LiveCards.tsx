@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { LiveEnergyView } from "@energy-manager/shared";
+import type { LiveEnergyView, VzevLiveView } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { formatKwh, formatNumber } from "../lib/format";
 import { useT } from "../i18n/context";
@@ -8,8 +8,11 @@ import { StatCard } from "./StatCard";
 /**
  * What the installation is doing at this instant, read live from Home
  * Assistant and never stored. Shared by the participant's Consumption page
- * and the owner's Dashboard — the same four figures answer both "is there
- * cheap local energy about right now" and "how's the sun doing today".
+ * and the owner's Dashboard — the same figures answer both "is there cheap
+ * local energy about right now" and "how's the sun doing today".
+ *
+ * One tile sums up the day so far: what the panels made, what of it was
+ * available to the vZEV, and what the forecast still expects.
  */
 
 /**
@@ -37,57 +40,118 @@ export function useLiveView(siteId: string | null | undefined) {
  * site shows nothing at all rather than a row of dashes.
  */
 export function hasLiveCards(live: LiveEnergyView): boolean {
-  return (
-    live.configured &&
-    (live.exportW != null ||
-      live.pvW != null ||
-      live.forecastTodayKwh != null ||
-      live.forecastRemainingKwh != null ||
-      live.forecastTomorrowKwh != null)
-  );
+  return live.configured && (live.exportW != null || live.pvW != null || dayOf(live) != null);
+}
+
+/**
+ * The day so far, summed the way the hour-by-hour chart sums it: made is
+ * production plus what charged the battery, available is what left the
+ * house. Null when there is neither a curve nor a forecast to say anything.
+ */
+function dayOf(live: LiveEnergyView): { madeKwh: number; availableKwh: number } | null {
+  if (!live.today && live.forecastRemainingKwh == null) return null;
+  const sum = (hours: ReadonlyArray<{ kwh: number }> | undefined) => (hours ?? []).reduce((acc, h) => acc + h.kwh, 0);
+  return {
+    madeKwh: sum(live.today?.actual) + sum(live.today?.batteryCharge),
+    availableKwh: sum(live.today?.exportedLocal),
+  };
+}
+
+/** The member's own draw: power now, and energy so far today. */
+export interface OwnDraw {
+  w: number | null;
+  kwh: number | null;
+  localKwh: number | null;
+}
+
+/**
+ * The viewed member's own draw from the vZEV's live view, or null when
+ * their meter says nothing — no import sensor and, for a producer, no
+ * export sensor to read the other way.
+ */
+export function ownDrawOf(view: VzevLiveView | undefined): OwnDraw | null {
+  if (!view?.viewer?.consumes) return null;
+  const draw = { w: view.power.ownW, kwh: view.today.ownKwh, localKwh: view.today.ownLocalKwh };
+  return draw.w == null && draw.kwh == null ? null : draw;
 }
 
 const kw = (w: number) => `${formatNumber(w / 1000, 2)} kW`;
-const kwh = (v: number) => `${formatKwh(v)} kWh`;
 
-export function LiveCards({ live }: { live: LiveEnergyView }) {
+export function LiveCards({ live, own }: { live: LiveEnergyView; own?: OwnDraw | null }) {
   const t = useT();
-  if (!hasLiveCards(live)) return null;
+  if (!hasLiveCards(live) && !own) return null;
   const surplus = live.exportW != null && live.exportW >= SURPLUS_FLOOR_W;
+  const day = live.configured ? dayOf(live) : null;
+  // The feed-in sensor swings negative when the house is drawing from the
+  // grid, but nothing leaving is nothing exported, not a negative export.
+  const exportW = live.exportW == null ? null : Math.max(live.exportW, 0);
+  const exportNote =
+    exportW == null ? null : `${t("party.live.exportingShort", { kw: kw(exportW) })} · ${t(surplus ? "party.live.exportingSub" : "party.live.exportingNone")}`;
   return (
     // Two abreast even on a phone: four figures in a column is a screen of
     // scrolling for what fits in two rows.
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-      {live.pvW != null && <StatCard tone="sun" label={t("party.live.pv")} value={live.pvW} format={kw} />}
-      {live.exportW != null && (
+      {/* One tile for the plant: what it produces this instant, and under it
+          what leaves the house and whether that is a surplus worth using.
+          Without a PV sensor, the export becomes the headline instead. */}
+      {live.pvW != null ? (
         <StatCard
-          tone="grid"
-          label={t("party.live.exporting")}
-          // The feed-in sensor swings negative when the house is drawing from
-          // the grid, but a card titled "exporting" cannot show a negative:
-          // nothing is leaving, so nothing is what it says.
-          value={Math.max(live.exportW, 0)}
+          tone="sun"
+          label={t("party.live.pv")}
+          value={live.pvW}
           format={kw}
           emphasis={surplus ? "strong" : undefined}
-          sub={surplus ? t("party.live.exportingSub") : t("party.live.exportingNone")}
+          sub={exportNote ?? undefined}
+        />
+      ) : (
+        exportW != null && (
+          <StatCard
+            tone="grid"
+            label={t("party.live.exporting")}
+            value={exportW}
+            format={kw}
+            emphasis={surplus ? "strong" : undefined}
+            sub={t(surplus ? "party.live.exportingSub" : "party.live.exportingNone")}
+          />
+        )
+      )}
+      {/* The day so far, and what is still to come. */}
+      {day && (
+        <StatCard
+          tone="sun"
+          label={t("party.live.madeToday")}
+          hint={t("party.live.madeTodayHint")}
+          value={day.madeKwh}
+          format={(v) => `${formatKwh(v)} kWh`}
+          sub={[
+            t("party.live.availableSub", { kwh: formatKwh(day.availableKwh) }),
+            live.forecastRemainingKwh != null
+              ? t("party.live.stillExpectedSub", {
+                  kwh: formatKwh(live.forecastRemainingKwh),
+                  total: formatKwh(live.forecastTodayKwh ?? 0),
+                })
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         />
       )}
-      {/* Forecasts stay untinted: a prediction wears no flow's colour, the
-          same rule that draws it dashed and neutral on the day's chart. */}
-      {live.forecastRemainingKwh != null && (
+      {/* The member's own meter: what it draws this instant, and what it
+          has drawn since midnight — the figure the day's bill is made of. */}
+      {own && (
         <StatCard
-          label={t("party.live.remaining")}
-          value={live.forecastRemainingKwh}
-          format={kwh}
+          label={t("party.live.drawing")}
+          value={own.w}
+          format={kw}
           sub={
-            live.forecastTodayKwh != null
-              ? t("party.live.ofToday", { total: formatKwh(live.forecastTodayKwh) })
+            own.kwh != null
+              ? t("party.live.drawingSub", {
+                  kwh: formatKwh(own.kwh),
+                  local: formatKwh(own.localKwh ?? 0),
+                })
               : undefined
           }
         />
-      )}
-      {live.forecastTomorrowKwh != null && (
-        <StatCard label={t("party.live.tomorrow")} value={live.forecastTomorrowKwh} format={kwh} />
       )}
     </div>
   );

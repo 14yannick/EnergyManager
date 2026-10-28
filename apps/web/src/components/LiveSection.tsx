@@ -18,9 +18,9 @@ import { api } from "../api/client";
 import { PALETTE } from "../lib/palette";
 import { useT } from "../i18n/context";
 import { InfoTip } from "./InfoTip";
-import { LiveCards, hasLiveCards, useLiveView } from "./LiveCards";
+import { LiveCards, hasLiveCards, ownDrawOf, useLiveView } from "./LiveCards";
 import { LiveFlow, hasLiveFlow } from "./LiveFlow";
-import { VzevFlow } from "./VzevFlow";
+import { VzevFlow, useVzevLive } from "./VzevFlow";
 
 /**
  * What the site is doing right now, and what the day still holds — the
@@ -113,6 +113,9 @@ export function LiveSection({
   useEffect(() => setFlowView(flow), [flow, siteId, partyId]);
   const query = useLiveView(siteId);
   const live = query.data;
+  // The viewed member's own draw, from the same request the vZEV's picture
+  // makes — whichever picture is shown.
+  const own = ownDrawOf(useVzevLive(siteId, partyId).data);
   // Both the forecast and the day-ahead rate usually publish only from the
   // evening before, so there is often nothing to switch to yet.
   const showTomorrow = (live?.tomorrow?.hourly.some((h) => h.kwh > 0)) ?? false;
@@ -147,7 +150,7 @@ export function LiveSection({
   // reads production from the store and the forecast from Home Assistant's
   // own energy setup. Show whichever the site has, and nothing when it has
   // neither: an unset-up view is not a failure worth shouting about.
-  if (!hasLiveCards(live) && !live.today) return null;
+  if (!hasLiveCards(live) && !own && !live.today) return null;
   // The plant's picture needs its live sensors; without them there is only
   // the vZEV's, and nothing to switch between.
   const canSwitch = switchable && hasLiveFlow(live);
@@ -172,7 +175,7 @@ export function LiveSection({
           <InfoTip text={t("party.liveNote")} />
         </h2>
       </div>
-      <LiveCards live={live} />
+      <LiveCards live={live} own={own} />
       {/* Side by side once there is room: the flow is square, the curve is
           wide, and a full-width square below a full-width chart is a
           screen of scrolling for two things that belong together. */}
@@ -522,14 +525,8 @@ function DayCurveChart({
   const rateTicks = rateAxisTicks(rates);
   if (points.length === 0) return null;
 
-  // What the panels made today, one figure: production (AC delivered) plus
-  // whatever charged the battery (DC, so production alone never counted it —
-  // see LiveDayCurve.batteryCharge). The same "production + charging" figure
-  // the admin dashboard's own line shows, so the two never disagree.
-  const producedKwh = today.actual.reduce((sum, h) => sum + h.kwh, 0);
-  const batteryChargeKwh = today.batteryCharge.reduce((sum, h) => sum + h.kwh, 0);
-  const exportedKwh = today.exportedLocal.reduce((sum, h) => sum + h.kwh, 0);
-  const madeKwh = producedKwh + batteryChargeKwh;
+  // What the panels made and what was available today are in the
+  // "Made today" tile above (LiveCards); the header keeps the forecast.
   const forecastKwh = (view === "tomorrow" ? (tomorrow?.hourly ?? []) : today.forecast).reduce(
     (sum, h) => sum + h.kwh,
     0,
@@ -546,12 +543,6 @@ function DayCurveChart({
           {showTomorrow && <DayViewToggle view={view} onChange={onDayViewChange} />}
         </div>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
-          {view === "today" && (
-            <>
-              <DayStat label={t("party.live.madeToday")} hint={t("party.live.madeTodayHint")} value={`${formatKwh(madeKwh)} kWh`} />
-              <DayStat label={t("party.live.leftHouse")} value={`${formatKwh(exportedKwh)} kWh`} />
-            </>
-          )}
           <DayStat label={t("party.live.forecastTotal")} value={`${formatKwh(forecastKwh)} kWh`} />
         </div>
       </div>
