@@ -20,7 +20,7 @@ export function StatCard({
   value,
   sub,
   hint,
-  format = (v) => `CHF ${formatChf(v)}`,
+  format = (v) => `${formatChf(v)} CHF`,
   emphasis,
   tone,
 }: {

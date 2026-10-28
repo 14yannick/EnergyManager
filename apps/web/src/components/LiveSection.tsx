@@ -18,7 +18,7 @@ import { api } from "../api/client";
 import { PALETTE } from "../lib/palette";
 import { useT } from "../i18n/context";
 import { InfoTip } from "./InfoTip";
-import { LiveCards, hasLiveCards, ownDrawOf, useLiveView } from "./LiveCards";
+import { LiveCards, hasLiveCards, ownDrawOf, useLiveView, type DayMoney } from "./LiveCards";
 import { LiveFlow, hasLiveFlow } from "./LiveFlow";
 import { VzevFlow, useVzevLive } from "./VzevFlow";
 
@@ -78,6 +78,8 @@ export function LiveSection({
   flow,
   partyId,
   switchable = false,
+  dayPartyId,
+  earnings = false,
 }: {
   siteId: string | null | undefined;
   /**
@@ -104,6 +106,18 @@ export function LiveSection({
    * only where it starts.
    */
   switchable?: boolean;
+  /**
+   * Whose day in money to show beside the live figures: the member whose
+   * page this is. A participant passes their own; the API allows nothing
+   * else.
+   */
+  dayPartyId?: string | null;
+  /**
+   * Whether that member's day is told as a producer's earnings (the
+   * plant's, which only the owner and the admins may see) rather than as
+   * the vZEV's advantage on their bill.
+   */
+  earnings?: boolean;
 }) {
   const showFeedInRate = owner;
   const t = useT();
@@ -116,6 +130,35 @@ export function LiveSection({
   // The viewed member's own draw, from the same request the vZEV's picture
   // makes — whichever picture is shown.
   const own = ownDrawOf(useVzevLive(siteId, partyId).data);
+
+  // Today in money. "Today" is the site's day, as the curve below has it;
+  // before the curve has loaded, the same day read in the site's zone.
+  const day =
+    live?.today?.day ??
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Zurich", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  // Both refresh every five minutes: they move with the metering sync, not
+  // by the second like the power figures.
+  const dayConsumption = useQuery({
+    queryKey: ["party-consumption", siteId, dayPartyId, day, day, "overall"],
+    queryFn: () => api.parties.consumption(siteId!, dayPartyId!, day, day, "overall"),
+    enabled: !!siteId && !!dayPartyId,
+    refetchInterval: 5 * 60 * 1000,
+  });
+  const dayEarnings = useQuery({
+    queryKey: ["savings-summary", siteId, day, day, "daily"],
+    queryFn: () => api.savings.summary(siteId!, day, day, "daily"),
+    enabled: !!siteId && earnings,
+    refetchInterval: 5 * 60 * 1000,
+  });
+  const costs = dayConsumption.data?.totals;
+  const money: DayMoney | null =
+    !dayPartyId || (!costs && !dayEarnings.data)
+      ? null
+      : {
+          kind: earnings ? "earning" : "advantage",
+          valueChf: earnings ? (dayEarnings.data?.totals.withBatteryChf ?? null) : (costs?.savedChf ?? null),
+          costChf: costs?.rcpCostChf ?? null,
+        };
   // Both the forecast and the day-ahead rate usually publish only from the
   // evening before, so there is often nothing to switch to yet.
   const showTomorrow = (live?.tomorrow?.hourly.some((h) => h.kwh > 0)) ?? false;
@@ -150,7 +193,7 @@ export function LiveSection({
   // reads production from the store and the forecast from Home Assistant's
   // own energy setup. Show whichever the site has, and nothing when it has
   // neither: an unset-up view is not a failure worth shouting about.
-  if (!hasLiveCards(live) && !own && !live.today) return null;
+  if (!hasLiveCards(live) && !own && !money && !live.today) return null;
   // The plant's picture needs its live sensors; without them there is only
   // the vZEV's, and nothing to switch between.
   const canSwitch = switchable && hasLiveFlow(live);
@@ -175,7 +218,7 @@ export function LiveSection({
           <InfoTip text={t("party.liveNote")} />
         </h2>
       </div>
-      <LiveCards live={live} own={own} />
+      <LiveCards live={live} own={own} money={money} />
       {/* Side by side once there is room: the flow is square, the curve is
           wide, and a full-width square below a full-width chart is a
           screen of scrolling for two things that belong together. */}

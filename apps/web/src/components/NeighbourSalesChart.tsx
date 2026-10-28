@@ -39,7 +39,7 @@ const SALE_COLOR = PALETTE.local;
 const EXPORT_COLOR = PALETTE.grid;
 const EXPORT_HATCH = "neighbourExportHatch";
 
-const chf = (v: number) => `CHF ${formatChf(v)}`;
+const chf = (v: number) => `${formatChf(v)} CHF`;
 const ctPerKwh = (chfPerKwh: number, unit: string) => `${formatNumber(chfPerKwh * 100, 1)} ${unit}`;
 
 export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from: string; to: string }) {

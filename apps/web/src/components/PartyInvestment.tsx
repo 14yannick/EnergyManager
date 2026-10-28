@@ -107,12 +107,12 @@ export function PartyInvestment({ siteId, party, canEdit }: { siteId: string; pa
                 readOnly
                 hint={row.split ? t("settings.splitItems", { count: row.matching.length }) : undefined}
               >
-                <ReadOnlyValue>CHF {formatChf(row.total)}</ReadOnlyValue>
+                <ReadOnlyValue>{formatChf(row.total)} CHF</ReadOnlyValue>
               </Field>
             ),
           )}
           <Field label={t("common.total")} readOnly hint={t("settings.totalHint")}>
-            <ReadOnlyValue>CHF {formatChf(total)}</ReadOnlyValue>
+            <ReadOnlyValue>{formatChf(total)} CHF</ReadOnlyValue>
           </Field>
         </div>
       </div>

@@ -56,7 +56,7 @@ type RevenueUnit = "chf" | "both" | "kwh";
 const barUnit = (u: RevenueUnit): "chf" | "kwh" => (u === "kwh" ? "kwh" : "chf");
 
 const formatRevenue = (value: number, unit: RevenueUnit) =>
-  barUnit(unit) === "chf" ? `CHF ${formatChf(value)}` : `${formatKwh(value)} kWh`;
+  barUnit(unit) === "chf" ? `${formatChf(value)} CHF` : `${formatKwh(value)} kWh`;
 
 // Two of the four series are named for the money they earn, which reads wrong
 // once the bars are energy: the same segment is a revenue in one unit and a
@@ -88,7 +88,7 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
     granularity === "overall"
       ? t("dash.overallAvg", { days: inclusiveDays(from, to) })
       : null;
-  /** "CHF 1.23/day avg", or the overall view's "over N days". */
+  /** "1.23 CHF/day avg", or the overall view's "over N days". */
   /** CHF per kWh written in cents, as the provider's own bill does. */
   const ct = (chfPerKwh: number) => `${formatNumber(chfPerKwh * 100, 1)} ${t("billing.centsPerKwh")}`;
   const kwh = (value: number) => `${formatKwhAuto(value)} kWh`;
@@ -143,6 +143,8 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
         flow={profile.detailedLiveView ? "plant" : "vzev"}
         partyId={party.id}
         switchable={profile.detailedLiveView}
+        dayPartyId={party.id}
+        earnings
       />
 
       {/* The period selector lives here rather than beside the page title:

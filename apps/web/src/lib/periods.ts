@@ -317,10 +317,12 @@ export const PERIOD_MODES: PeriodMode[] = ["day", "week", "month", "quarter", "y
 /**
  * Which views make sense for each period, finest first. Nothing coarser than
  * the period itself — a month viewed yearly is one bar — and no hourly view
- * beyond a week, which is where its cap sits.
+ * beyond a week, which is where its cap sits. "Overall" is the exception
+ * everywhere: one bar for the whole range, a day included, is the totals
+ * and their tooltip without the hours around them.
  */
 export const VIEWS_FOR: Record<PeriodMode, Granularity[]> = {
-  day: ["hourly"],
+  day: ["hourly", "overall"],
   week: ["hourly", "daily", "overall"],
   month: ["daily", "overall"],
   quarter: ["daily", "monthly", "overall"],

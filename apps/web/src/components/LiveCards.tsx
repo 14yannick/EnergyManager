@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { LiveEnergyView, VzevLiveView } from "@energy-manager/shared";
 import { api } from "../api/client";
-import { formatKwh, formatNumber } from "../lib/format";
+import { formatChf, formatKwh, formatNumber } from "../lib/format";
 import { useT } from "../i18n/context";
 import { StatCard } from "./StatCard";
 
@@ -76,10 +76,30 @@ export function ownDrawOf(view: VzevLiveView | undefined): OwnDraw | null {
 }
 
 const kw = (w: number) => `${formatNumber(w / 1000, 2)} kW`;
+const chf = (v: number) => `${formatChf(v)} CHF`;
 
-export function LiveCards({ live, own }: { live: LiveEnergyView; own?: OwnDraw | null }) {
+/**
+ * Today in money, for the member in view: what the day earned a producer,
+ * or what the vZEV saved a member — and either way what their own
+ * consumption has cost so far.
+ */
+export interface DayMoney {
+  kind: "earning" | "advantage";
+  valueChf: number | null;
+  costChf: number | null;
+}
+
+export function LiveCards({
+  live,
+  own,
+  money,
+}: {
+  live: LiveEnergyView;
+  own?: OwnDraw | null;
+  money?: DayMoney | null;
+}) {
   const t = useT();
-  if (!hasLiveCards(live) && !own) return null;
+  if (!hasLiveCards(live) && !own && !money) return null;
   const surplus = live.exportW != null && live.exportW >= SURPLUS_FLOOR_W;
   const day = live.configured ? dayOf(live) : null;
   // The feed-in sensor swings negative when the house is drawing from the
@@ -149,6 +169,21 @@ export function LiveCards({ live, own }: { live: LiveEnergyView; own?: OwnDraw |
                   kwh: formatKwh(own.kwh),
                   local: formatKwh(own.localKwh ?? 0),
                 })
+              : undefined
+          }
+        />
+      )}
+      {/* Today in money: the producer's earnings, or a member's vZEV
+          advantage, with the day's consumption cost underneath. */}
+      {money && (
+        <StatCard
+          label={t(money.kind === "earning" ? "party.live.earningToday" : "party.live.advantageToday")}
+          value={money.valueChf}
+          format={chf}
+          emphasis={money.valueChf != null && money.valueChf > 0 ? "positive" : undefined}
+          sub={
+            money.costChf != null
+              ? t("party.live.costToday", { total: chf(money.costChf) })
               : undefined
           }
         />
