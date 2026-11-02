@@ -16,6 +16,7 @@ import { PALETTE, type Tone } from "../lib/palette";
 import { useT } from "../i18n/context";
 import { InfoTip } from "./InfoTip";
 import { StatCard } from "./StatCard";
+import { useComparison } from "./PeriodControls";
 import { axisTick } from "../lib/periods";
 
 /**
@@ -66,6 +67,20 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
   // connection — the vZEV's whole economic point, net of what running it
   // alone would have cost either way.
   const netEarningChf = data == null ? undefined : data.totals.gainChf + (data.owner?.advantageChf ?? 0);
+  // The same for the comparison period, when one is chosen.
+  const comparison = useComparison();
+  const compareQuery = useQuery({
+    queryKey: ["savings-neighbours", siteId, comparison?.from, comparison?.to],
+    queryFn: () => api.savings.neighbours(siteId, comparison!.from, comparison!.to),
+    enabled: comparison != null,
+  });
+  const before = compareQuery.data;
+  const netEarningCompare = comparison
+    ? {
+        label: comparison.label,
+        value: before ? before.totals.gainChf + (before.owner?.advantageChf ?? 0) : null,
+      }
+    : null;
   // A profit-and-loss figure earns its colour: green while it is actually
   // positive, plain at zero or below. Tinting a zero would claim a gain the
   // number does not show.
@@ -94,6 +109,7 @@ export function NeighbourSalesChart({ siteId, from, to }: { siteId: string; from
           label={t("dash.netEarning")}
           hint={t("dash.netEarningHint")}
           value={netEarningChf}
+          compare={netEarningCompare}
         />
         <StatCard label={t("dash.openInvoices")} hint={t("dash.openInvoicesHint")} value={openInvoicesChf} />
       </div>

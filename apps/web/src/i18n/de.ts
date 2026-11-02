@@ -688,6 +688,8 @@ export const de: Record<keyof typeof en, string> = {
   "period.year": "Jahr",
   "period.all": "Alle Daten",
   "period.custom": "Benutzerdefiniert",
+  "period.compare": "Vergleichen",
+  "period.comparedTo": "Verglichen mit",
   "dash.step.prevDay": "Vorheriger Tag",
   "dash.step.nextDay": "Nächster Tag",
   "dash.step.prevWeek": "Vorherige Woche",

@@ -1,6 +1,21 @@
 import type { Tone } from "../lib/palette";
 import { InfoTip } from "./InfoTip";
-import { formatChf } from "../lib/format";
+import { formatChf, formatNumber } from "../lib/format";
+import { changeFrom } from "../lib/periods";
+
+/**
+ * The same figure for the comparison period, written under the card's own:
+ * the period's name, the figure in the card's format, and the change —
+ * relative for an amount, in points for a share. Neutral ink on purpose: a
+ * higher cost and a higher saving are both "up", and only the reader knows
+ * which one they hoped for.
+ */
+export interface StatCompare {
+  label: string;
+  value: number | null | undefined;
+  /** A share in percent: the change is written in points, not as a percentage of a percentage. */
+  points?: boolean;
+}
 
 /**
  * Written out in full rather than built from the tone name: Tailwind only
@@ -23,6 +38,7 @@ export function StatCard({
   format = (v) => `${formatChf(v)} CHF`,
   emphasis,
   tone,
+  compare,
 }: {
   label: string;
   value?: number | null;
@@ -43,6 +59,8 @@ export function StatCard({
    * (a price, a balance) belong to no flow.
    */
   tone?: Tone;
+  /** The figure in the comparison period, when one is chosen. */
+  compare?: StatCompare | null;
 }) {
   const toned = tone ? TONE_CLASS[tone] : null;
   const valueClass = toned
@@ -62,6 +80,19 @@ export function StatCard({
         {value != null ? format(value) : "—"}
       </p>
       {sub && <p className={`mt-1 text-xs ${toned ? `${toned.ink} opacity-80` : "text-slate-500"}`}>{sub}</p>}
+      {compare && (
+        <p className={`mt-1 border-t pt-1 text-xs ${toned ? `${toned.ink} opacity-80 border-current/20` : "text-slate-500"}`}>
+          {compare.label} · {compare.value != null ? format(compare.value) : "—"}
+          {(() => {
+            if (value == null || compare.value == null) return null;
+            const change = changeFrom(value, compare.value, compare.points);
+            if (change == null) return null;
+            const sign = change > 0.05 ? "+" : change < -0.05 ? "−" : "±";
+            const amount = formatNumber(Math.abs(change), compare.points ? 1 : 0);
+            return ` (${sign}${amount}${compare.points ? " pt" : " %"})`;
+          })()}
+        </p>
+      )}
     </div>
   );
 }

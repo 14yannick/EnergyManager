@@ -1,4 +1,5 @@
 import { useI18n, type MessageKey } from "../i18n/context";
+import { useSelectedPeriod } from "../lib/usePeriod";
 import {
   GRANULARITY_LABEL,
   PERIOD_MODES,
@@ -48,7 +49,7 @@ const QUARTER_PREFIX = { fr: "T", de: "Q", en: "Q" } as const;
 const swiss = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
 
 /** The period being looked at, in words — same conventions as the billing page. */
-function periodName(mode: PeriodMode, range: Range, locale: keyof typeof INTL_TAG): string {
+export function periodName(mode: PeriodMode, range: Range, locale: keyof typeof INTL_TAG): string {
   const [y, m] = range.from.split("-").map(Number);
   switch (mode) {
     case "day":
@@ -94,6 +95,7 @@ export function PeriodControls({
   onChange,
   dataRange,
   bounds,
+  variant = "main",
 }: {
   range: Range;
   granularity: Granularity;
@@ -101,9 +103,16 @@ export function PeriodControls({
   onChange: (range: Range, granularity: Granularity, mode: PeriodMode) => void;
   dataRange: DataRange;
   bounds: { min: string | null; max: string };
+  /**
+   * "compare" draws the same controls for the comparison period: no view of
+   * its own — it is grouped like the main period, so the two line up — and
+   * no comparison of its own.
+   */
+  variant?: "main" | "compare";
 }) {
   const { t, locale } = useI18n();
-  const views = VIEWS_FOR[mode];
+  const period = useSelectedPeriod();
+  const views = variant === "compare" ? [] : VIEWS_FOR[mode];
 
   const apply = (r: Range, g: Granularity, anchor?: "from" | "to", m: PeriodMode = mode) =>
     onChange(fitRange(r, g, bounds, anchor), g, m);
@@ -148,7 +157,7 @@ export function PeriodControls({
         disabled={disabled}
         aria-label={label}
         title={label}
-        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        className="h-9 rounded-md border border-slate-300 bg-white px-3 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {glyph}
       </button>
@@ -169,9 +178,9 @@ export function PeriodControls({
   return (
     <div className="flex min-w-0 max-w-full flex-wrap items-end gap-3 text-sm">
       <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-        {t("common.period")}
+        {t(variant === "compare" ? "period.comparedTo" : "common.period")}
         <select
-          className="input w-36"
+          className="input h-9 w-36"
           value={mode}
           onChange={(e) => selectMode(e.target.value as PeriodMode)}
         >
@@ -191,7 +200,7 @@ export function PeriodControls({
                 {t("common.from")}
                 <input
                   type="date"
-                  className="input w-36"
+                  className="input h-9 w-36"
                   value={range.from}
                   min={bounds.min ?? undefined}
                   max={range.to}
@@ -202,7 +211,7 @@ export function PeriodControls({
                 {t("common.to")}
                 <input
                   type="date"
-                  className="input w-36"
+                  className="input h-9 w-36"
                   value={range.to}
                   min={range.from}
                   max={bounds.max}
@@ -218,7 +227,7 @@ export function PeriodControls({
                 {t("common.from")}
                 <input
                   type="month"
-                  className="input w-36"
+                  className="input h-9 w-36"
                   value={range.from.slice(0, 7)}
                   onChange={(e) => setCustom({ ...range, from: `${e.target.value}-01` })}
                 />
@@ -227,7 +236,7 @@ export function PeriodControls({
                 {t("common.to")}
                 <input
                   type="month"
-                  className="input w-36"
+                  className="input h-9 w-36"
                   value={range.to.slice(0, 7)}
                   onChange={(e) => setCustom({ ...range, to: endOfMonth(`${e.target.value}-01`) })}
                 />
@@ -240,7 +249,7 @@ export function PeriodControls({
               <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
                 {t("common.from")}
                 <select
-                  className="input w-36"
+                  className="input h-9 w-36"
                   value={quarterKeyOf(range.from)}
                   onChange={(e) =>
                     setCustom({ ...range, from: startOfQuarter(quarterKeyToDate(e.target.value)) })
@@ -256,7 +265,7 @@ export function PeriodControls({
               <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
                 {t("common.to")}
                 <select
-                  className="input w-36"
+                  className="input h-9 w-36"
                   value={quarterKeyOf(range.to)}
                   onChange={(e) =>
                     setCustom({ ...range, to: endOfQuarter(quarterKeyToDate(e.target.value)) })
@@ -277,7 +286,7 @@ export function PeriodControls({
               <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
                 {t("common.from")}
                 <select
-                  className="input w-36"
+                  className="input h-9 w-36"
                   value={range.from.slice(0, 4)}
                   onChange={(e) => setCustom({ ...range, from: `${e.target.value}-01-01` })}
                 >
@@ -291,7 +300,7 @@ export function PeriodControls({
               <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
                 {t("common.to")}
                 <select
-                  className="input w-36"
+                  className="input h-9 w-36"
                   value={range.to.slice(0, 4)}
                   onChange={(e) => setCustom({ ...range, to: `${e.target.value}-12-31` })}
                 >
@@ -319,6 +328,40 @@ export function PeriodControls({
           onChange={(g) => apply(range, g)}
         />
       )}
+
+      {/* Compare: a second period beside the first, opening on the same
+          interval a year earlier and changed with the same controls. */}
+      {variant === "main" && (
+        <button
+          type="button"
+          onClick={period.toggleCompare}
+          aria-pressed={period.compare != null}
+          className={`h-9 rounded-md border px-3 text-sm font-medium ${
+            period.compare
+              ? "border-slate-900 bg-slate-900 text-white"
+              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          {t("period.compare")}
+        </button>
+      )}
+      {variant === "main" && period.compare && (
+        // Beside the button that turned it on, on the same line while there
+        // is room; on a narrow screen it wraps under, like the rest.
+        <div className="flex min-w-0 max-w-full">
+          <PeriodControls
+            variant="compare"
+            range={{ from: period.compare.from, to: period.compare.to }}
+            granularity={granularity}
+            mode={period.compare.mode}
+            onChange={(r, _g, m) => period.setCompare(r, m)}
+            dataRange={dataRange}
+            // Any time with readings, the future excepted: a comparison
+            // reaches back before the main period's own lower bound.
+            bounds={{ min: dataRange.from, max: bounds.max }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -341,13 +384,15 @@ function Segmented<T extends string>({
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-medium text-slate-600">
       {label}
-      <div className="flex max-w-full overflow-x-auto rounded-md border border-slate-300" role="group" aria-label={label}>
+      {/* As tall as the inputs beside it (h-9), so every control in the row
+          — and so every label above one — sits at the same height. */}
+      <div className="flex h-9 max-w-full overflow-x-auto rounded-md border border-slate-300" role="group" aria-label={label}>
         {options.map((o) => (
           <button
             key={o.value}
             onClick={() => onChange(o.value)}
             aria-pressed={value === o.value}
-            className={`shrink-0 whitespace-nowrap px-3 py-1.5 capitalize ${
+            className={`shrink-0 whitespace-nowrap px-3 text-sm capitalize ${
               value === o.value ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
             }`}
           >
@@ -357,4 +402,16 @@ function Segmented<T extends string>({
       </div>
     </div>
   );
+}
+
+/**
+ * The comparison period, if one is chosen, with its name as the period
+ * selector writes it — what every figure compared against it is labelled
+ * with.
+ */
+export function useComparison(): { from: string; to: string; label: string } | null {
+  const { locale } = useI18n();
+  const { compare } = useSelectedPeriod();
+  if (!compare) return null;
+  return { from: compare.from, to: compare.to, label: periodName(compare.mode, compare, locale) };
 }

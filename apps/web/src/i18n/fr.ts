@@ -678,6 +678,8 @@ export const fr: Record<keyof typeof en, string> = {
   "period.year": "Année",
   "period.all": "Global",
   "period.custom": "Personnalisé",
+  "period.compare": "Comparer",
+  "period.comparedTo": "Comparé à",
   "dash.step.prevDay": "Jour précédent",
   "dash.step.nextDay": "Jour suivant",
   "dash.step.prevWeek": "Semaine précédente",

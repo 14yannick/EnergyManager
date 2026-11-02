@@ -670,6 +670,8 @@ export const en = {
   "period.year": "Year",
   "period.all": "All data",
   "period.custom": "Custom",
+  "period.compare": "Compare",
+  "period.comparedTo": "Compared with",
   "dash.step.prevDay": "Previous day",
   "dash.step.nextDay": "Next day",
   "dash.step.prevWeek": "Previous week",

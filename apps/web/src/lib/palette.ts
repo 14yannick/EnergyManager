@@ -66,6 +66,12 @@ export const NEUTRALS: Record<
     ink: string;
     localForgone: string;
     batteryExport: string;
+    /**
+     * The comparison period, filled in grey as IBCS draws a previous period:
+     * a reference the current figures are read against, wearing no flow's
+     * colour. At least 3:1 against its surface, as a filled mark needs.
+     */
+    previous: string;
     /** The feed-in rate line by band (shared/feedInBands.ts): a loss, poor, fair, good, and better than buying. */
     rateLoss: string;
     ratePoor: string;
@@ -101,6 +107,7 @@ export const NEUTRALS: Record<
      * from each, against a floor of 8.
      */
     batteryExport: "#9a3412",
+    previous: "#8b95a5",
     rateLoss: "#991b1b",
     ratePoor: "#dc2626",
     rateFair: "#94a3b8",
@@ -138,6 +145,7 @@ export const NEUTRALS: Record<
     // Lighter on the dark surface, as with the forgone local: at least 17
     // apart from its neighbours under every colour-vision deficiency.
     batteryExport: "#fed7aa",
+    previous: "#7d8898",
     // "Darker" reads as "stronger" on a dark surface: the loss red is the
     // saturated one, the best green the bright one.
     rateLoss: "#ef4444",
@@ -233,6 +241,7 @@ export function cssVariables(mode: Mode): Record<string, string> {
     "--c-ink": rgbTriplet(n.ink),
     "--c-local-forgone": rgbTriplet(n.localForgone),
     "--c-battery-export": rgbTriplet(n.batteryExport),
+    "--c-previous": rgbTriplet(n.previous),
     "--c-rate-loss": rgbTriplet(n.rateLoss),
     "--c-rate-poor": rgbTriplet(n.ratePoor),
     "--c-rate-fair": rgbTriplet(n.rateFair),
@@ -263,6 +272,7 @@ export const PALETTE = {
   vzev: v("vzev"),
   localForgone: v("local-forgone"),
   batteryExport: v("battery-export"),
+  previous: v("previous"),
   forecast: v("forecast"),
   forecastFill: v("forecast-fill"),
   house: v("house"),

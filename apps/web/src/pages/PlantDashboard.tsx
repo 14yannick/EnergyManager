@@ -14,13 +14,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { effectiveSensorProfile, type Party, type Site } from "@energy-manager/shared";
+import { effectiveSensorProfile, type DailySavings, type Party, type Site } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { formatChf, formatKwh, formatKwhAuto, formatNumber } from "../lib/format";
 import { PALETTE, type Tone } from "../lib/palette";
 import { useT, type Translate } from "../i18n/context";
 import { useSelectedPeriod } from "../lib/usePeriod";
-import { PeriodControls } from "../components/PeriodControls";
+import { PeriodControls, useComparison } from "../components/PeriodControls";
 import { PeriodHeader } from "../components/PeriodHeader";
 import { InfoTip } from "../components/InfoTip";
 import { StatCard } from "../components/StatCard";
@@ -128,6 +128,18 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
   });
 
   const summary = summaryQuery.data;
+
+  // The same figures for the comparison period, when one is chosen.
+  const comparison = useComparison();
+  const compareQuery = useQuery({
+    queryKey: ["savings-summary", site.id, comparison?.from, comparison?.to, granularity],
+    queryFn: () => api.savings.summary(site.id, comparison!.from, comparison!.to, granularity),
+    enabled: comparison != null,
+  });
+  /** A card's comparison line: its figure in the comparison period. */
+  const vs = (pick: (s: NonNullable<typeof summary>) => number | null, points = false) =>
+    comparison ? { label: comparison.label, value: compareQuery.data ? pick(compareQuery.data) : null, points } : null;
+
   // A profit-and-loss figure earns its colour: green while it is actually
   // positive, plain at zero or below. Tinting a zero would claim a gain the
   // number does not show.
@@ -195,12 +207,14 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
           <StatCard
             tone="sun"
             label={t("dash.withBatteryTotal")}
+            compare={vs((s) => s.totals.withBatteryChf)}
             value={summary?.totals.withBatteryChf}
             sub={avgOf(summary?.avgDaily.withBatteryChf)}
           />
           <StatCard
             tone="sun"
             label={t("dash.produced")}
+            compare={vs((s) => s.energy.producedKwh)}
             hint={t("dash.producedHint")}
             value={summary?.energy.producedKwh}
             format={kwh}
@@ -213,6 +227,7 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
           <StatCard
             tone="grid"
             label={t("dash.exported")}
+            compare={vs((s) => s.energy.exportedGridKwh + s.energy.exportedNeighbourKwh)}
             hint={t("dash.exportedHint")}
             value={summary ? summary.energy.exportedGridKwh + summary.energy.exportedNeighbourKwh : undefined}
             format={kwh}
@@ -227,6 +242,7 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
           />
           <StatCard
             label={t("dash.soldPrice")}
+            compare={vs((s) => s.soldPricePerKwhChf)}
             value={summary?.soldPricePerKwhChf}
             format={(v) => ct(v)}
             sub={
@@ -287,12 +303,14 @@ export function PlantDashboard({ site, party }: { site: Site; party: Party }) {
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard
             label={t("dash.noBatteryTotal")}
+            compare={vs((s) => s.totals.withoutBatteryChf)}
             value={summary?.totals.withoutBatteryChf}
             sub={avgOf(summary?.avgDaily.withoutBatteryChf)}
           />
           <StatCard
             tone={gainTone(summary?.totals.batteryRevenueChf)}
             label={t("dash.batteryRevenue")}
+            compare={vs((s) => s.totals.batteryRevenueChf)}
             hint={t("dash.batteryRevenueHint")}
             value={summary?.totals.batteryRevenueChf}
             sub={avgOf(summary?.avgDaily.batteryRevenueChf)}
@@ -366,6 +384,25 @@ const OUTLINE_WIDTH = 2;
 
 /** The two series drawn as an outline rather than a fill. */
 const HOLLOW_SERIES = new Set(["batteryChargingChf", "neighborForgoneChf"]);
+
+/**
+ * One savings row's whole revenue, in money and in energy — the stack's
+ * total, as the bars add it. What the comparison period is drawn as: one
+ * outlined bar per period, its total, not a second stack.
+ */
+function flowTotals(row: DailySavings | undefined): { chf: number; kwh: number } {
+  if (!row) return { chf: 0, kwh: 0 };
+  return {
+    chf:
+      row.directConsumptionRevenueChf +
+      row.directExportRevenueChf +
+      row.batteryDischargeConsumedValueChf +
+      row.batteryDischargeExportedValueChf +
+      row.neighborSellRevenueChf +
+      row.rcpFixedAdvantageChf,
+    kwh: row.directUseKwh + row.exportedKwh + row.batteryDischargeConsumedKwh + row.neighborConsumptionKwh,
+  };
+}
 
 interface LegendEntry {
   value?: string;
@@ -474,6 +511,15 @@ interface RevenuePeriod extends RevenueFlows {
   batteryChf: number;
   batteryExportChf: number;
   neighborChf: number;
+  /**
+   * The comparison period's total at the same position — its first period
+   * beside this one's first, and so on — in the bars' unit, and in both
+   * units for the tooltip. Null while comparison is off, or where the
+   * comparison period is shorter.
+   */
+  compareTotal: number | null;
+  compareChf: number | null;
+  compareKwh: number | null;
   /** What the participants' share would have earned exported, and the sale net of it. */
   neighborExportForgoneChf: number;
   neighborNetChf: number;
@@ -535,12 +581,15 @@ function RevenueTooltip({
   granularity,
   unit,
   showProduction,
+  comparisonLabel,
 }: {
   active?: boolean;
   payload?: RevenueTooltipEntry[];
   granularity: Granularity;
   unit: RevenueUnit;
   showProduction?: boolean;
+  /** The comparison period's name, when one is chosen. */
+  comparisonLabel?: string;
 }) {
   const t = useT();
   if (!active || !payload || payload.length === 0) return null;
@@ -684,6 +733,15 @@ function RevenueTooltip({
             </div>
           </>
         )}
+        {/* The comparison period's total at this position, in both units. */}
+        {comparisonLabel && row.compareChf != null && (
+          <div className="flex items-center justify-between gap-6 border-t pt-1">
+            <span className="text-slate-600">{comparisonLabel}</span>
+            <span className="font-semibold tabular-nums text-slate-900">
+              {formatKwh(row.compareKwh ?? 0)} kWh · {formatRevenue(row.compareChf, "chf")}
+            </span>
+          </div>
+        )}
         {showProduction && (
           <div className="flex items-center justify-between gap-6">
             <span className="text-slate-600">{t("dash.productionPlusCharging")}</span>
@@ -720,12 +778,26 @@ function RevenueBreakdownChart({
     queryKey: ["savings-revenue", siteId, from, to, granularity],
     queryFn: () => api.savings.daily(siteId, from, to, granularity),
   });
+  // The comparison period, grouped the same way, so its periods line up with
+  // these one for one.
+  const comparison = useComparison();
+  const compareQuery = useQuery({
+    queryKey: ["savings-revenue", siteId, comparison?.from, comparison?.to, granularity],
+    queryFn: () => api.savings.daily(siteId, comparison!.from, comparison!.to, granularity),
+    enabled: comparison != null,
+  });
+  const compareTotals = useMemo(() => {
+    if (!comparison) return null;
+    const byKey = new Map((compareQuery.data ?? []).map((r) => [r.date, r]));
+    return periodKeys(comparison.from, comparison.to, granularity).map((key) => flowTotals(byKey.get(key)));
+  }, [comparison?.from, comparison?.to, compareQuery.data, granularity]);
 
   const chartData: RevenuePeriod[] = useMemo(() => {
     const byKey = new Map((query.data ?? []).map((r) => [r.date, r]));
-    return periodKeys(from, to, granularity).map((key) => {
+    return periodKeys(from, to, granularity).map((key, index) => {
       const row = byKey.get(key);
       const batteryExportedKwh = row?.batteryDischargeExportedKwh ?? 0;
+      const before = compareTotals?.[index];
 
       // Both units are always computed, segment for segment, so the kWh view is
       // the energy behind each money figure rather than a different breakdown.
@@ -759,6 +831,9 @@ function RevenueBreakdownChart({
         key,
         label: periodLabel(key, granularity, t("common.total"), granularity === "hourly" && from === to),
         ...bars,
+        compareTotal: before ? (barUnit(unit) === "chf" ? before.chf : before.kwh) : null,
+        compareChf: before?.chf ?? null,
+        compareKwh: before?.kwh ?? null,
         consumptionChf: chf.consumption,
         directChf: chf.direct,
         batteryChf: chf.battery,
@@ -783,12 +858,17 @@ function RevenueBreakdownChart({
         neighborForgoneChf: -(row?.neighborExportForgoneChf ?? 0),
       };
     });
-  }, [query.data, from, to, granularity, unit]);
+  }, [query.data, from, to, granularity, unit, compareTotals]);
 
   const total = chartData.reduce(
     (sum, d) => sum + d.consumption + d.direct + d.battery + d.batteryExport + d.neighbor + d.rcp,
     0,
   );
+  // The comparison period's whole total, all of it — not only the part with
+  // a counterpart here, when the two differ in length.
+  const compareTotal = compareTotals
+    ? compareTotals.reduce((sum, c) => sum + (barUnit(unit) === "chf" ? c.chf : c.kwh), 0)
+    : null;
 
   // A series with nothing in it over the range stays out of the legend: no
   // battery export on a day the battery only ran the house, no sales before
@@ -837,7 +917,7 @@ function RevenueBreakdownChart({
       Math.max(d.consumption, 0) + Math.max(d.direct, 0) + Math.max(d.battery, 0) + Math.max(d.batteryExport, 0) +
       Math.max(d.neighbor, 0) +
       Math.max(d.rcp, 0);
-    const maxLeft = Math.max(0, ...chartData.map(posOf));
+    const maxLeft = Math.max(0, ...chartData.map(posOf), ...chartData.map((d) => d.compareTotal ?? 0));
     // Both below-zero bars stack downward, so the axis has to clear their sum —
     // and reclaim that space when they are switched off.
     const minLeft = Math.min(
@@ -948,6 +1028,12 @@ function RevenueBreakdownChart({
           <span className="ml-auto text-sm text-slate-600">
             {barUnit(unit) === "chf" ? t("dash.totalRevenue") : t("dash.totalEnergy")}{" "}
             <span className="font-semibold text-slate-900">{formatRevenue(total, unit)}</span>
+            {comparison && compareTotal != null && (
+              <span className="text-slate-500">
+                {" · "}
+                {comparison.label} {formatRevenue(compareTotal, unit)}
+              </span>
+            )}
           </span>
         </div>
 
@@ -1011,6 +1097,7 @@ function RevenueBreakdownChart({
                   granularity={granularity}
                   unit={unit}
                   showProduction={showProduction}
+                  comparisonLabel={comparison?.label}
                 />
               }
             />
@@ -1092,6 +1179,19 @@ function RevenueBreakdownChart({
               maxBarSize={barSize}
               radius={[4, 4, 0, 0]}
             />
+            {/* The comparison period: its total beside each period's stack,
+                filled grey as IBCS draws a previous period — a reference to
+                read the stack against, wearing no flow's colour. */}
+            {comparison && (
+              <Bar
+                yAxisId="bars"
+                dataKey="compareTotal"
+                name={comparison.label}
+                fill={PALETTE.previous}
+                maxBarSize={barSize}
+                radius={[4, 4, 0, 0]}
+              />
+            )}
             {barUnit(unit) === "chf" && showForgone && (
               <Bar
                 yAxisId="bars"

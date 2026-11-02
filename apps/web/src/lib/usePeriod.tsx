@@ -1,5 +1,13 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { INITIAL_GRANULARITY, INITIAL_MODE, PERIOD_MODES, initialRange, type Granularity, type PeriodMode } from "./periods";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  INITIAL_GRANULARITY,
+  INITIAL_MODE,
+  PERIOD_MODES,
+  initialRange,
+  previousYear,
+  type Granularity,
+  type PeriodMode,
+} from "./periods";
 
 /**
  * The period the Dashboard and the Consumption page share: the range, how it
@@ -27,6 +35,22 @@ export interface SelectedPeriod {
   mode: PeriodMode;
   /** The mode is kept unless one is given: a clamp or a view change is not a change of unit. */
   set: (range: { from: string; to: string }, granularity: Granularity, mode?: PeriodMode) => void;
+  /**
+   * The period the figures are compared with, or null while comparison is
+   * off. Grouped like the main one — its view is the main one's — so the two
+   * line up period by period.
+   */
+  compare: ComparePeriod | null;
+  /** Turn comparison on, opening on the same interval a year earlier, or off. */
+  toggleCompare: () => void;
+  /** Set the comparison period by hand; from then on it no longer follows the main one. */
+  setCompare: (range: { from: string; to: string }, mode: PeriodMode) => void;
+}
+
+export interface ComparePeriod {
+  from: string;
+  to: string;
+  mode: PeriodMode;
 }
 
 const PeriodContext = createContext<SelectedPeriod | null>(null);
@@ -67,6 +91,45 @@ function remember(state: PeriodState) {
   }
 }
 
+/**
+ * The comparison, remembered on its own key. `follow` holds while it is the
+ * default — the same interval a year earlier — and moves with the main
+ * period; set by hand, it stays where it was put.
+ */
+const COMPARE_KEY = "em.compare";
+type CompareState = { enabled: boolean; follow: boolean; from: string; to: string; mode: PeriodMode };
+
+function storedCompare(): CompareState | null {
+  try {
+    const raw = localStorage.getItem(COMPARE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw) as Partial<CompareState>;
+    if (
+      typeof c.enabled === "boolean" &&
+      typeof c.follow === "boolean" &&
+      typeof c.from === "string" &&
+      typeof c.to === "string" &&
+      DAY.test(c.from) &&
+      DAY.test(c.to) &&
+      c.from <= c.to &&
+      PERIOD_MODES.includes(c.mode as PeriodMode)
+    ) {
+      return c as CompareState;
+    }
+  } catch {
+    /* storage unavailable or unreadable: comparison starts off */
+  }
+  return null;
+}
+
+function rememberCompare(state: CompareState) {
+  try {
+    localStorage.setItem(COMPARE_KEY, JSON.stringify(state));
+  } catch {
+    /* same */
+  }
+}
+
 export function PeriodProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PeriodState>(() => {
     const stored = storedPeriod();
@@ -75,9 +138,39 @@ export function PeriodProvider({ children }: { children: ReactNode }) {
     return { from: initial.from, to: initial.to, granularity: INITIAL_GRANULARITY, mode: INITIAL_MODE as PeriodMode };
   });
 
+  const [compareState, setCompareState] = useState<CompareState>(
+    () =>
+      storedCompare() ?? { enabled: false, follow: true, ...previousYear(state), mode: state.mode },
+  );
+  const updateCompare = (next: CompareState) => {
+    rememberCompare(next);
+    setCompareState(next);
+  };
+
+  // A comparison still on its default follows the main period: a year
+  // earlier, whatever the main one moves to.
+  useEffect(() => {
+    if (!compareState.follow) return;
+    const shifted = previousYear(state);
+    if (shifted.from === compareState.from && shifted.to === compareState.to && state.mode === compareState.mode) return;
+    updateCompare({ ...compareState, ...shifted, mode: state.mode });
+    // Follows the main period only.
+  }, [state.from, state.to, state.mode, compareState.follow]);
+
   const value = useMemo<SelectedPeriod>(
     () => ({
       ...state,
+      compare: compareState.enabled
+        ? { from: compareState.from, to: compareState.to, mode: compareState.mode }
+        : null,
+      toggleCompare: () =>
+        updateCompare(
+          compareState.enabled
+            ? { ...compareState, enabled: false }
+            : // Turned on, it opens on its default again.
+              { enabled: true, follow: true, ...previousYear(state), mode: state.mode },
+        ),
+      setCompare: (range, mode) => updateCompare({ enabled: true, follow: false, ...range, mode }),
       set: (range, granularity, mode) =>
         setState((current) => {
           const next = { from: range.from, to: range.to, granularity, mode: mode ?? current.mode };
@@ -95,7 +188,7 @@ export function PeriodProvider({ children }: { children: ReactNode }) {
           return next;
         }),
     }),
-    [state],
+    [state, compareState],
   );
 
   return <PeriodContext.Provider value={value}>{children}</PeriodContext.Provider>;

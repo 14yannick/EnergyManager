@@ -10,13 +10,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { PartyConsumption, PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
+import type { DailySavings, PartyConsumption, PartyConsumptionPeriod, PartyConsumptionWarning } from "@energy-manager/shared";
 import { api } from "../api/client";
 import { formatChf, formatKwh, formatKwhAuto } from "../lib/format";
 import { PALETTE } from "../lib/palette";
 import { useSelectedPeriod } from "../lib/usePeriod";
 import { useT, type MessageKey } from "../i18n/context";
-import { PeriodControls } from "../components/PeriodControls";
+import { PeriodControls, useComparison } from "../components/PeriodControls";
 import { PeriodHeader } from "../components/PeriodHeader";
 import { InfoTip } from "../components/InfoTip";
 import { StatCard } from "../components/StatCard";
@@ -117,12 +117,62 @@ function usePartyConsumption(siteId: string, partyId: string, from: string, to: 
  * made and sent out, for the export share; undefined for a party without
  * a plant.
  */
-function ConsumptionKpis({ totals, own }: { totals: PartyConsumption["totals"] | undefined; own?: OwnRange }) {
+/** A producer's plant over a range, summed from the savings rows (see OwnRange). */
+function ownRangeOf(rows: ReadonlyArray<DailySavings> | undefined): OwnRange {
+  const sum: OwnRange = { kwh: 0, producedKwh: 0, exportedKwh: 0, exportRevenueChf: 0 };
+  for (const r of rows ?? []) {
+    sum.kwh += r.directUseKwh + r.batteryDischargeConsumedKwh;
+    // A row's `producedKwh` is the AC side alone; what charged the battery
+    // never passed through it, and is the panels' doing all the same.
+    sum.producedKwh += r.producedKwh + r.batteryChargeKwh;
+    sum.exportedKwh += r.exportLocalKwh;
+    sum.exportRevenueChf += r.exportRevenueChf;
+  }
+  return sum;
+}
+
+/**
+ * The figures the tiles show, worked out once for any range — the one in
+ * view and the one it is compared with alike, so the two can never be
+ * computed two different ways.
+ */
+function figuresOf(totals: PartyConsumption["totals"] | undefined, own: OwnRange | undefined) {
+  const ownKwh = own?.kwh;
+  return {
+    saved: totals?.savedChf ?? null,
+    totalKwh: totals ? (ownKwh ?? 0) + totals.localKwh + totals.gridKwh : null,
+    share: totals ? localShare({ ...totals, ownKwh }) : null,
+    exportShare: own && own.producedKwh > 0 ? (own.exportedKwh / own.producedKwh) * 100 : null,
+    cost: totals?.rcpCostChf ?? null,
+    balance: own && totals ? own.exportRevenueChf - totals.rcpCostChf : null,
+  };
+}
+
+/** The comparison period's data, for the tiles' comparison lines. */
+interface KpiBefore {
+  label: string;
+  totals: PartyConsumption["totals"] | undefined;
+  own: OwnRange | undefined;
+}
+
+function ConsumptionKpis({
+  totals,
+  own,
+  before,
+}: {
+  totals: PartyConsumption["totals"] | undefined;
+  own?: OwnRange;
+  before?: KpiBefore | null;
+}) {
   const t = useT();
   const ownKwh = own?.kwh;
   const totalKwh = totals ? (ownKwh ?? 0) + totals.localKwh + totals.gridKwh : 0;
   const share = totals ? localShare({ ...totals, ownKwh }) : null;
   const exportShare = own && own.producedKwh > 0 ? (own.exportedKwh / own.producedKwh) * 100 : null;
+  // Each tile's figure in the comparison period, when one is chosen.
+  const past = before ? figuresOf(before.totals, before.own) : null;
+  const vs = (pick: (f: ReturnType<typeof figuresOf>) => number | null, points = false) =>
+    before && past ? { label: before.label, value: before.totals ? pick(past) : null, points } : null;
   return (
     <>
       <StatCard
@@ -132,10 +182,12 @@ function ConsumptionKpis({ totals, own }: { totals: PartyConsumption["totals"] |
         emphasis={totals != null && totals.savedChf > 0 ? "positive" : "strong"}
         hint={t("party.kpi.savedHint")}
         value={totals?.savedChf}
+        compare={vs((f) => f.saved)}
       />
       <StatCard
         label={t("party.kpi.total")}
         value={totals ? totalKwh : undefined}
+        compare={vs((f) => f.totalKwh)}
         format={kwh}
         sub={
           totals
@@ -156,6 +208,7 @@ function ConsumptionKpis({ totals, own }: { totals: PartyConsumption["totals"] |
       <StatCard
         label={t("party.kpi.localShare")}
         value={share}
+        compare={vs((f) => f.share, true)}
         format={(v) => `${v.toFixed(0)} %`}
         sub={ownKwh != null ? t("party.kpi.localShareSub", { own: formatKwhAuto(ownKwh) }) : undefined}
       />
@@ -166,6 +219,7 @@ function ConsumptionKpis({ totals, own }: { totals: PartyConsumption["totals"] |
           label={t("party.kpi.exportShare")}
           hint={t("party.kpi.exportShareHint")}
           value={exportShare}
+          compare={vs((f) => f.exportShare, true)}
           format={(v) => `${v.toFixed(0)} %`}
           sub={t("party.kpi.exportShareSub", {
             exported: formatKwhAuto(own.exportedKwh),
@@ -176,6 +230,7 @@ function ConsumptionKpis({ totals, own }: { totals: PartyConsumption["totals"] |
       <StatCard
         label={t("party.kpi.cost")}
         value={totals?.rcpCostChf}
+        compare={vs((f) => f.cost)}
         // The direct-supply figure sits under the cost it is compared
         // with, leaving the benefit to stand alone as the headline.
         sub={totals ? t("party.kpi.savedSub", { direct: formatChf(totals.directCostChf) }) : undefined}
@@ -190,6 +245,7 @@ function ConsumptionKpis({ totals, own }: { totals: PartyConsumption["totals"] |
           label={t("party.kpi.gridBalance")}
           hint={t("party.kpi.gridBalanceHint")}
           value={own.exportRevenueChf - totals.rcpCostChf}
+          compare={vs((f) => f.balance)}
           emphasis={own.exportRevenueChf - totals.rcpCostChf > 0 ? "positive" : "strong"}
           sub={t("party.kpi.gridBalanceSub", {
             revenue: formatChf(own.exportRevenueChf),
@@ -266,19 +322,47 @@ export function ConsumptionDashboard({
   const totals = data?.totals;
   const totalKwh = totals ? totals.localKwh + totals.gridKwh : 0;
   // A producer's plant over the whole range, for the figures that head the chart.
-  const own = useMemo<OwnRange | undefined>(() => {
-    if (!ownProduction) return undefined;
-    const sum: OwnRange = { kwh: 0, producedKwh: 0, exportedKwh: 0, exportRevenueChf: 0 };
-    for (const r of ownQuery.data ?? []) {
-      sum.kwh += r.directUseKwh + r.batteryDischargeConsumedKwh;
-      // A row's `producedKwh` is the AC side alone; what charged the battery
-      // never passed through it, and is the panels' doing all the same.
-      sum.producedKwh += r.producedKwh + r.batteryChargeKwh;
-      sum.exportedKwh += r.exportLocalKwh;
-      sum.exportRevenueChf += r.exportRevenueChf;
-    }
-    return sum;
-  }, [ownProduction, ownQuery.data]);
+  const own = useMemo<OwnRange | undefined>(
+    () => (ownProduction ? ownRangeOf(ownQuery.data) : undefined),
+    [ownProduction, ownQuery.data],
+  );
+
+  // The comparison period, when one is chosen: the same figures over it, as
+  // one total each.
+  const comparison = useComparison();
+  // Fetched at the chart's own grouping: its totals feed the tiles, its
+  // periods the chart's grey bars.
+  const beforeConsumption = useQuery({
+    queryKey: ["party-consumption", siteId, partyId, comparison?.from, comparison?.to, granularity],
+    queryFn: () => api.parties.consumption(siteId, partyId, comparison!.from, comparison!.to, granularity),
+    enabled: comparison != null,
+  });
+  const beforeOwn = useQuery({
+    queryKey: ["savings-revenue", siteId, comparison?.from, comparison?.to, granularity],
+    queryFn: () => api.savings.daily(siteId, comparison!.from, comparison!.to, granularity),
+    enabled: comparison != null && ownProduction === true,
+  });
+  // The comparison per chart period, in the order of its own periods: the
+  // vZEV cost, and everything consumed — own production included, as the
+  // kWh bars count it.
+  const beforeSeries = useMemo(() => {
+    if (!comparison) return null;
+    const periodsByKey = new Map((beforeConsumption.data?.periods ?? []).map((p) => [p.date, p]));
+    const ownByKey = new Map((beforeOwn.data ?? []).map((r) => [r.date, r]));
+    return periodKeys(comparison.from, comparison.to, granularity).map((key) => {
+      const p = periodsByKey.get(key);
+      const o = ownByKey.get(key);
+      const ownKwh = ownProduction && o ? o.directUseKwh + o.batteryDischargeConsumedKwh : 0;
+      return { chf: p?.rcpCostChf ?? 0, kwh: (p ? p.localKwh + p.gridKwh : 0) + ownKwh };
+    });
+  }, [comparison?.from, comparison?.to, granularity, beforeConsumption.data, beforeOwn.data, ownProduction]);
+  const before: KpiBefore | null = comparison
+    ? {
+        label: comparison.label,
+        totals: beforeConsumption.data?.totals,
+        own: ownProduction ? ownRangeOf(beforeOwn.data) : undefined,
+      }
+    : null;
   const name = data?.partyName ?? partyName;
 
   return (
@@ -330,6 +414,8 @@ export function ConsumptionDashboard({
       <ConsumptionChart
         totals={totals}
         own={own}
+        before={before}
+        comparison={comparison && beforeSeries ? { label: comparison.label, series: beforeSeries } : null}
         periods={data?.periods ?? []}
         ownUse={ownUse}
         from={from}
@@ -352,6 +438,13 @@ interface ChartRow extends PartyConsumptionPeriod {
   ownKwh: number;
   /** The same at the purchase price: what it would have cost from the grid. Never paid. */
   ownValueChf: number;
+  /**
+   * The comparison period at the same position — the vZEV cost and
+   * everything consumed. Null while comparison is off, or where the
+   * comparison period is shorter.
+   */
+  compareChf: number | null;
+  compareKwh: number | null;
 }
 
 /** Hatched fills for what was not paid: the direct-supply bar, and own production valued. */
@@ -360,6 +453,8 @@ const hatchId = (key: "grid" | "fixed" | "own") => `directHatch-${key}`;
 function ConsumptionChart({
   totals,
   own,
+  before,
+  comparison,
   periods,
   ownUse,
   from,
@@ -371,6 +466,10 @@ function ConsumptionChart({
   totals: PartyConsumption["totals"] | undefined;
   /** A producer's plant over the range; undefined for a party without a plant. */
   own?: OwnRange;
+  /** The comparison period's figures, when one is chosen. */
+  before?: KpiBefore | null;
+  /** The comparison period per chart period, matched by position, for the grey bars. */
+  comparison?: { label: string; series: Array<{ chf: number; kwh: number }> } | null;
   periods: PartyConsumptionPeriod[];
   /** Per chart period, for a producer; undefined for a party without a plant. */
   ownUse?: Map<string, OwnUse>;
@@ -386,7 +485,8 @@ function ConsumptionChart({
   // Every period in the range, with or without data, so a gap reads as a gap.
   const rows: ChartRow[] = useMemo(() => {
     const byKey = new Map(periods.map((p) => [p.date, p]));
-    return periodKeys(from, to, granularity).map((key) => {
+    return periodKeys(from, to, granularity).map((key, index) => {
+      const before = comparison?.series[index];
       const p = byKey.get(key) ?? {
         date: key,
         localKwh: 0,
@@ -406,9 +506,11 @@ function ConsumptionChart({
         directEnergyChf: p.directCostChf - p.directFixedChf,
         ownKwh: own?.kwh ?? 0,
         ownValueChf: own?.valueChf ?? 0,
+        compareChf: before?.chf ?? null,
+        compareKwh: before?.kwh ?? null,
       };
     });
-  }, [periods, ownUse, from, to, granularity, t]);
+  }, [periods, ownUse, from, to, granularity, t, comparison]);
 
   const showOwn = ownUse != null;
   const showDirect = unit === "chf" && compare;
@@ -418,15 +520,17 @@ function ConsumptionChart({
   const hasLocal = rows.some((r) => r.localKwh > 0);
   const hasOwn = rows.some((r) => r.ownKwh > 0);
   const legend = (has: boolean) => (has ? undefined : ("none" as const));
-  // Two bars share each period when comparing, so each gets half the room.
+  // The bars sharing a period — the vZEV's, direct supply's when compared,
+  // and the comparison period's — split its room between them.
+  const barsPerPeriod = 1 + (showDirect ? 1 : 0) + (comparison ? 1 : 0);
   const barSize =
     (granularity === "overall" ? 90 : Math.max(10, Math.min(72, Math.round(880 / Math.max(rows.length, 1))))) /
-    (showDirect ? 2 : 1);
+    barsPerPeriod;
   // A maximum width centres each bar in its own half of the period's slot,
   // which with few periods left the pair a hand's width apart. An exact width
   // packs them side by side — safe while there are few enough periods to fit
   // on a phone; beyond that the maximum takes over again.
-  const sizing = showDirect && rows.length <= 12 ? { barSize } : { maxBarSize: barSize };
+  const sizing = barsPerPeriod > 1 && rows.length <= 12 ? { barSize } : { maxBarSize: barSize };
   const tickInterval =
     granularity === "hourly"
       ? 2
@@ -457,7 +561,7 @@ function ConsumptionChart({
       {/* A producer's six figures sit three abreast in two rows; a member's
           four in one. */}
       <div className={`grid grid-cols-2 gap-3 ${own ? "xl:grid-cols-3" : "xl:grid-cols-4"}`}>
-        <ConsumptionKpis totals={totals} own={own} />
+        <ConsumptionKpis totals={totals} own={own} before={before} />
       </div>
 
       <div className="rounded-lg border bg-white p-4">
@@ -503,7 +607,7 @@ function ConsumptionChart({
                 <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.gridline} vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={tickInterval} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={axisTick} width={56} />
-                <Tooltip content={<ConsumptionTooltip granularity={granularity} />} />
+                <Tooltip content={<ConsumptionTooltip granularity={granularity} comparisonLabel={comparison?.label} />} />
                 {/* Ink-coloured names: the swatch carries the series colour. */}
                 <Legend formatter={(value: string) => <span className="text-slate-700">{value}</span>} />
                 {/* The 2px white stroke is the gap between stacked segments. */}
@@ -559,6 +663,18 @@ function ConsumptionChart({
                     )}
                   </>
                 )}
+                {/* The comparison period, beside the period's own bar: its
+                    whole in the unit shown, filled grey as IBCS draws a
+                    previous period. */}
+                {comparison && (
+                  <Bar
+                    dataKey={unit === "kwh" ? "compareKwh" : "compareChf"}
+                    name={comparison.label}
+                    fill={PALETTE.previous}
+                    radius={[4, 4, 0, 0]}
+                    {...sizing}
+                  />
+                )}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -574,10 +690,13 @@ function ConsumptionTooltip({
   active,
   payload,
   granularity,
+  comparisonLabel,
 }: {
   active?: boolean;
   payload?: Array<{ payload: ChartRow }>;
   granularity: Granularity;
+  /** The comparison period's name, when one is chosen. */
+  comparisonLabel?: string;
 }) {
   const t = useT();
   if (!active || !payload || payload.length === 0) return null;
@@ -648,6 +767,14 @@ function ConsumptionTooltip({
       {/* The whole advantage, the difference between the two bold totals:
           for a producer, own production at the price it spared included. */}
       {line(t("party.saved"), chf(row.savedChf + (hasOwn ? row.ownValueChf : 0)), undefined, true)}
+      {/* The comparison period at this position: everything consumed, and
+          what it cost through the vZEV. */}
+      {comparisonLabel && row.compareChf != null && (
+        <>
+          <div className="my-1 border-t" />
+          {line(comparisonLabel, `${kwh(row.compareKwh ?? 0)} · ${chf(row.compareChf)}`, PALETTE.previous)}
+        </>
+      )}
     </div>
   );
 }

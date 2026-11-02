@@ -393,3 +393,35 @@ export function cutAtToday(r: { from: string; to: string }): { from: string; to:
 
 /** What a dashboard opens on: the quarter so far, viewed by month. */
 export const initialRange = () => cutAtToday(periodRange(INITIAL_MODE, today()));
+
+/**
+ * A day `years` years away. A month's last day stays its month's last day —
+ * 29 February 2028 a year back is 28 February 2027, and 28 February 2027 a
+ * year on is 29 February 2028 — so a range of whole months stays whole.
+ */
+export function addYears(d: string, years: number): string {
+  const y = Number(d.slice(0, 4)) + years;
+  const month = d.slice(5, 7);
+  if (d === endOfMonth(d)) return endOfMonth(`${y}-${month}-01`);
+  return `${y}-${month}-${d.slice(8, 10)}`;
+}
+
+/**
+ * The same interval a year earlier: both ends moved back a year, so a
+ * quarter cut at today is set against the same stretch of last year's, not
+ * the whole of it. What a comparison opens on.
+ */
+export function previousYear(r: { from: string; to: string }): { from: string; to: string } {
+  return { from: addYears(r.from, -1), to: addYears(r.to, -1) };
+}
+
+/**
+ * The change from a comparison figure to the current one, as the card under
+ * a figure writes it: relative for amounts, in points for shares. Null when
+ * there is nothing to compare, or a relative change from zero.
+ */
+export function changeFrom(current: number, previous: number, points = false): number | null {
+  if (points) return current - previous;
+  if (previous === 0) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
