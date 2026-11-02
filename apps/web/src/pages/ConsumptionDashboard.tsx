@@ -65,6 +65,8 @@ interface OwnRange {
   producedKwh: number;
   /** Everything that left the house: to the grid, or to participants. */
   exportedKwh: number;
+  /** What the grid paid for the part of it that reached the grid, at the feed-in rate. */
+  exportRevenueChf: number;
 }
 
 const WARNING_TEXT: Record<PartyConsumptionWarning, MessageKey> = {
@@ -178,6 +180,23 @@ function ConsumptionKpis({ totals, own }: { totals: PartyConsumption["totals"] |
         // with, leaving the benefit to stand alone as the headline.
         sub={totals ? t("party.kpi.savedSub", { direct: formatChf(totals.directCostChf) }) : undefined}
       />
+      {/* A producer's two sides of the grid provider's bill, set against
+          each other: what the grid paid for the feed-in, less what the
+          household's consumption cost. The provider's own bill nets the
+          same two, so the figures can be checked against it — off only by
+          the difference between these sensors and the official meter. */}
+      {own && totals && (
+        <StatCard
+          label={t("party.kpi.gridBalance")}
+          hint={t("party.kpi.gridBalanceHint")}
+          value={own.exportRevenueChf - totals.rcpCostChf}
+          emphasis={own.exportRevenueChf - totals.rcpCostChf > 0 ? "positive" : "strong"}
+          sub={t("party.kpi.gridBalanceSub", {
+            revenue: formatChf(own.exportRevenueChf),
+            cost: formatChf(totals.rcpCostChf),
+          })}
+        />
+      )}
     </>
   );
 }
@@ -249,13 +268,14 @@ export function ConsumptionDashboard({
   // A producer's plant over the whole range, for the figures that head the chart.
   const own = useMemo<OwnRange | undefined>(() => {
     if (!ownProduction) return undefined;
-    const sum: OwnRange = { kwh: 0, producedKwh: 0, exportedKwh: 0 };
+    const sum: OwnRange = { kwh: 0, producedKwh: 0, exportedKwh: 0, exportRevenueChf: 0 };
     for (const r of ownQuery.data ?? []) {
       sum.kwh += r.directUseKwh + r.batteryDischargeConsumedKwh;
       // A row's `producedKwh` is the AC side alone; what charged the battery
       // never passed through it, and is the panels' doing all the same.
       sum.producedKwh += r.producedKwh + r.batteryChargeKwh;
       sum.exportedKwh += r.exportLocalKwh;
+      sum.exportRevenueChf += r.exportRevenueChf;
     }
     return sum;
   }, [ownProduction, ownQuery.data]);
@@ -434,7 +454,9 @@ function ConsumptionChart({
           one section for what this party consumed and what it cost. Two
           abreast even on a phone: four figures in a column is a screen of
           scrolling for what fits in two rows. */}
-      <div className={`grid grid-cols-2 gap-3 ${own ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
+      {/* A producer's six figures sit three abreast in two rows; a member's
+          four in one. */}
+      <div className={`grid grid-cols-2 gap-3 ${own ? "xl:grid-cols-3" : "xl:grid-cols-4"}`}>
         <ConsumptionKpis totals={totals} own={own} />
       </div>
 

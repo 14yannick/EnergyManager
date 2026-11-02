@@ -656,7 +656,7 @@ export const de: Record<keyof typeof en, string> = {
   "dash.notReached": "im Zeitraum nicht erreicht",
 
   "dash.revenue": "Erträge",
-  "dash.revenueNote": "Direktverbrauch (vermiedener Bezug), Direkteinspeisung, Batterie, Verkäufe an Teilnehmer und die im vZEV geteilten Fixkosten, pro {unit}",
+  "dash.revenueNote": "Direktverbrauch (vermiedener Bezug), Direkteinspeisung, Batterieentladung ins Haus (vermiedener Bezug) und ins Netz, Verkäufe an Teilnehmer und die im vZEV geteilten Fixkosten, pro {unit}",
   "dash.revenueKwh": " — die Energie hinter jeder Zahl",
   "dash.revenueBoth": " — mit derselben Aufteilung in kWh, schraffiert, auf der rechten Achse",
   "dash.revenueCharging": " Unterhalb der Achse: worauf die Energie verzichtet hat — die Batterieladung und der Anteil der Teilnehmer, jeweils zum Einspeisetarif, den sie eingespeist erzielt hätten.",
@@ -667,7 +667,8 @@ export const de: Record<keyof typeof en, string> = {
 
   "dash.flow.consumption": "Direktverbrauch",
   "dash.flow.direct": "Direkte Einspeisung",
-  "dash.flow.battery": "Batterieentladung",
+  "dash.flow.battery": "Batterie",
+  "dash.flow.batteryExport": "Batterie-Export",
   "dash.flow.neighborSale": "Verkauf an Teilnehmer",
   "dash.flow.neighborSupply": "Lieferung an Teilnehmer",
   "dash.flow.rcpFixed": "vZEV: geteilte Grundtarife",
@@ -743,6 +744,9 @@ export const de: Record<keyof typeof en, string> = {
   "party.kpi.totalSub": "{local} kWh lokal · {grid} kWh Netz",
   "party.kpi.totalSubOwn": "{own} kWh eigen · {local} kWh lokal · {grid} kWh Netz",
   "party.kpi.localShareSub": "{own} kWh eigene Produktion, direkt oder aus der Batterie",
+  "party.kpi.gridBalance": "Netzsaldo",
+  "party.kpi.gridBalanceSub": "{revenue} CHF eingespeist − {cost} CHF im vZEV",
+  "party.kpi.gridBalanceHint": "Was das Netz für die eingespeiste Energie bezahlt hat, abzüglich der Kosten des Haushaltsverbrauchs im vZEV — der Saldo der Rechnung des Netzbetreibers, gemessen mit den Sensoren dieser App statt mit dem offiziellen Zähler, daher leicht abweichend.",
   "party.kpi.exportShare": "Exportanteil",
   "party.kpi.exportShareSub": "{exported} kWh von {produced} kWh Produktion",
   "party.kpi.exportShareHint": "Was das Haus verlassen hat — ins Netz oder zu den Teilnehmern — als Anteil dessen, was die Module erzeugt haben. Der Rest hat das Haus versorgt, direkt oder über die Batterie.",

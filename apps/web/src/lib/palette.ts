@@ -65,6 +65,7 @@ export const NEUTRALS: Record<
     axis: string;
     ink: string;
     localForgone: string;
+    batteryExport: string;
     /** The feed-in rate line by band (shared/feedInBands.ts): a loss, poor, fair, good, and better than buying. */
     rateLoss: string;
     ratePoor: string;
@@ -93,6 +94,13 @@ export const NEUTRALS: Record<
     ink: "#0f172a",
     /** Export forgone on local sales: a darker local, hung below the axis. Picked to clear the CVD floor against the battery orange above it. */
     localForgone: "#007c64",
+    /**
+     * The battery's discharge sold to the grid: a darker battery, stacked
+     * against the battery orange, the grid blue and the local green. Checked
+     * in OKLab under all three colour-vision deficiencies: at least 19 apart
+     * from each, against a floor of 8.
+     */
+    batteryExport: "#9a3412",
     rateLoss: "#991b1b",
     ratePoor: "#dc2626",
     rateFair: "#94a3b8",
@@ -127,6 +135,9 @@ export const NEUTRALS: Record<
     // darker — the direction that stands out from the surface — and stays
     // clearly apart from the hue it belongs to.
     localForgone: "#7ee8c9",
+    // Lighter on the dark surface, as with the forgone local: at least 17
+    // apart from its neighbours under every colour-vision deficiency.
+    batteryExport: "#fed7aa",
     // "Darker" reads as "stronger" on a dark surface: the loss red is the
     // saturated one, the best green the bright one.
     rateLoss: "#ef4444",
@@ -221,6 +232,7 @@ export function cssVariables(mode: Mode): Record<string, string> {
     "--c-axis": rgbTriplet(n.axis),
     "--c-ink": rgbTriplet(n.ink),
     "--c-local-forgone": rgbTriplet(n.localForgone),
+    "--c-battery-export": rgbTriplet(n.batteryExport),
     "--c-rate-loss": rgbTriplet(n.rateLoss),
     "--c-rate-poor": rgbTriplet(n.ratePoor),
     "--c-rate-fair": rgbTriplet(n.rateFair),
@@ -250,6 +262,7 @@ export const PALETTE = {
   battery: v("battery"),
   vzev: v("vzev"),
   localForgone: v("local-forgone"),
+  batteryExport: v("battery-export"),
   forecast: v("forecast"),
   forecastFill: v("forecast-fill"),
   house: v("house"),

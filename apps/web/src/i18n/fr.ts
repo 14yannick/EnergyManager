@@ -646,7 +646,7 @@ export const fr: Record<keyof typeof en, string> = {
   "dash.notReached": "non atteint dans la plage",
 
   "dash.revenue": "Revenus",
-  "dash.revenueNote": "Consommation directe (achat évité), injection directe, batterie, ventes aux participants et frais fixes partagés dans le RCPv, par {unit}",
+  "dash.revenueNote": "Consommation directe (achat évité), injection directe, décharge de la batterie vers la maison (achat évité) et vers le réseau, ventes aux participants et frais fixes partagés dans le RCPv, par {unit}",
   "dash.revenueKwh": " — l'énergie derrière chaque chiffre",
   "dash.revenueBoth": " — avec le même découpage en kWh, hachuré, sur l'axe de droite",
   "dash.revenueCharging": " Sous l'axe : ce que l'énergie a abandonné pour être là où elle est — la charge de la batterie et la part des participants, chacune au tarif de reprise qu'elle aurait gagné en injection.",
@@ -657,7 +657,8 @@ export const fr: Record<keyof typeof en, string> = {
 
   "dash.flow.consumption": "Consommation directe",
   "dash.flow.direct": "Injection directe",
-  "dash.flow.battery": "Décharge batterie",
+  "dash.flow.battery": "Batterie",
+  "dash.flow.batteryExport": "Batterie export",
   "dash.flow.neighborSale": "Vente aux participants",
   "dash.flow.neighborSupply": "Fourniture aux participants",
   "dash.flow.rcpFixed": "RCPv : frais fixes partagés",
@@ -732,6 +733,9 @@ export const fr: Record<keyof typeof en, string> = {
   "party.kpi.totalSub": "{local} kWh locale · {grid} kWh réseau",
   "party.kpi.totalSubOwn": "{own} kWh propre · {local} kWh locale · {grid} kWh réseau",
   "party.kpi.localShareSub": "{own} kWh de production propre, directe ou depuis la batterie",
+  "party.kpi.gridBalance": "Solde réseau",
+  "party.kpi.gridBalanceSub": "{revenue} CHF injectés − {cost} CHF via le RCPv",
+  "party.kpi.gridBalanceHint": "Ce que le réseau a payé pour l'énergie injectée, moins ce qu'a coûté la consommation du ménage via le RCPv — le solde de la facture du fournisseur, mesuré avec les capteurs de l'application plutôt qu'avec le compteur officiel, donc légèrement différent.",
   "party.kpi.exportShare": "Part exportée",
   "party.kpi.exportShareSub": "{exported} kWh sur {produced} kWh produits",
   "party.kpi.exportShareHint": "Ce qui a quitté la maison — vers le réseau ou vers les participants — en part de ce que les panneaux ont produit. Le reste a alimenté la maison, directement ou via la batterie.",

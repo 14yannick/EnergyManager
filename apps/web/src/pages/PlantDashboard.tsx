@@ -68,6 +68,10 @@ const seriesNames = (unit: RevenueUnit, t: Translate) => ({
   // the battery delivered, while the KPI of that name is net of charging. Two
   // different numbers under one label was the confusion.
   battery: t("dash.flow.battery"),
+  // What the battery sold to the grid, apart from what the house used: an
+  // evening discharge at the peak price is a different decision from
+  // running the house at night.
+  batteryExport: t("dash.flow.batteryExport"),
   neighbor: barUnit(unit) === "chf" ? t("dash.flow.neighborSale") : t("dash.flow.neighborSupply"),
   rcp: t("dash.flow.rcpFixed"),
 });
@@ -327,6 +331,7 @@ const REVENUE_COLORS = {
   consumption: PALETTE.sun,
   direct: PALETTE.grid,
   battery: PALETTE.battery,
+  batteryExport: PALETTE.batteryExport,
   neighbor: PALETTE.local,
 };
 
@@ -384,7 +389,9 @@ interface LegendEntry {
 function RevenueLegend({ payload }: { payload?: readonly LegendEntry[] }) {
   return (
     <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-2 pt-3">
-      {(payload ?? []).map((entry) => {
+      {/* A custom legend is handed every series, those marked
+          legendType="none" included: dropped here, as recharts' own does. */}
+      {(payload ?? []).filter((entry) => entry.type !== "none").map((entry) => {
         const hollow = HOLLOW_SERIES.has(String(entry.dataKey));
         return (
           <li
@@ -439,11 +446,14 @@ function OutlinedBar(props: unknown) {
 }
 
 
-/** The four flows, in whichever unit the field name says. */
+/** The flows, in whichever unit the field name says. */
 interface RevenueFlows {
   consumption: number;
   direct: number;
+  /** The battery's discharge the house used. */
   battery: number;
+  /** The battery's discharge that went on to the grid. */
+  batteryExport: number;
   neighbor: number;
   /**
    * The owner's saving on standing charges from sharing the connection. Money
@@ -462,6 +472,7 @@ interface RevenuePeriod extends RevenueFlows {
   consumptionChf: number;
   directChf: number;
   batteryChf: number;
+  batteryExportChf: number;
   neighborChf: number;
   /** What the participants' share would have earned exported, and the sale net of it. */
   neighborExportForgoneChf: number;
@@ -478,6 +489,7 @@ interface RevenuePeriod extends RevenueFlows {
   consumptionKwh: number;
   directKwh: number;
   batteryKwh: number;
+  batteryExportKwh: number;
   neighborKwh: number;
   /**
    * Charging priced as the export it displaced. Normally a cost, but it goes
@@ -558,6 +570,7 @@ function RevenueTooltip({
     { key: "consumption", name: names.consumption, chf: row.consumptionChf, kwh: row.consumptionKwh },
     { key: "direct", name: names.direct, chf: row.directChf, kwh: row.directKwh },
     { key: "battery", name: names.battery, chf: row.batteryChf, kwh: row.batteryKwh },
+    { key: "batteryExport", name: names.batteryExport, chf: row.batteryExportChf, kwh: row.batteryExportKwh },
     { key: "neighbor", name: names.neighbor, chf: row.neighborChf, kwh: row.neighborKwh },
   ] as const;
   const totalChf = flows.reduce((sum, f) => sum + f.chf, 0);
@@ -724,15 +737,19 @@ function RevenueBreakdownChart({
         // gross means the gap between the two bars is the battery's net
         // contribution exactly once — and equals the Battery revenue card.
         direct: row?.directExportRevenueChf ?? 0,
-        battery:
-          (row?.batteryDischargeConsumedValueChf ?? 0) + (row?.batteryDischargeExportedValueChf ?? 0),
+        // Split by where it went: the house, at the purchase price it
+        // spared, and the grid, at the feed-in rate it fetched. Together
+        // still the gross discharge value.
+        battery: row?.batteryDischargeConsumedValueChf ?? 0,
+        batteryExport: row?.batteryDischargeExportedValueChf ?? 0,
         neighbor: row?.neighborSellRevenueChf ?? 0,
         rcp: row?.rcpFixedAdvantageChf ?? 0,
       };
       const kwh: RevenueFlows = {
         consumption: row?.directUseKwh ?? 0,
         direct: (row?.exportedKwh ?? 0) - batteryExportedKwh,
-        battery: (row?.batteryDischargeConsumedKwh ?? 0) + batteryExportedKwh,
+        battery: row?.batteryDischargeConsumedKwh ?? 0,
+        batteryExport: batteryExportedKwh,
         neighbor: row?.neighborConsumptionKwh ?? 0,
         rcp: 0,
       };
@@ -745,6 +762,7 @@ function RevenueBreakdownChart({
         consumptionChf: chf.consumption,
         directChf: chf.direct,
         batteryChf: chf.battery,
+        batteryExportChf: chf.batteryExport,
         neighborChf: chf.neighbor,
         neighborExportForgoneChf: row?.neighborExportForgoneChf ?? 0,
         neighborNetChf: row?.neighborNetChf ?? 0,
@@ -755,6 +773,7 @@ function RevenueBreakdownChart({
         consumptionKwh: kwh.consumption,
         directKwh: kwh.direct,
         batteryKwh: kwh.battery,
+        batteryExportKwh: kwh.batteryExport,
         neighborKwh: kwh.neighbor,
         // Direct consumption and neighbour sales don't involve the battery, so
         // they carry over into the counterfactual unchanged.
@@ -767,9 +786,26 @@ function RevenueBreakdownChart({
   }, [query.data, from, to, granularity, unit]);
 
   const total = chartData.reduce(
-    (sum, d) => sum + d.consumption + d.direct + d.battery + d.neighbor + d.rcp,
+    (sum, d) => sum + d.consumption + d.direct + d.battery + d.batteryExport + d.neighbor + d.rcp,
     0,
   );
+
+  // A series with nothing in it over the range stays out of the legend: no
+  // battery export on a day the battery only ran the house, no sales before
+  // the first participant joined. Read in both units, so switching between
+  // them never makes an entry come and go.
+  const seen = (pick: (d: RevenuePeriod) => number) => chartData.some((d) => Math.abs(pick(d)) >= 0.005);
+  const inLegend = (has: boolean) => (has ? undefined : ("none" as const));
+  const legendFor = {
+    rcp: inLegend(seen((d) => d.rcpChf)),
+    consumption: inLegend(seen((d) => d.consumptionChf) || seen((d) => d.consumptionKwh)),
+    direct: inLegend(seen((d) => d.directChf) || seen((d) => d.directKwh)),
+    battery: inLegend(seen((d) => d.batteryChf) || seen((d) => d.batteryKwh)),
+    batteryExport: inLegend(seen((d) => d.batteryExportChf) || seen((d) => d.batteryExportKwh)),
+    neighbor: inLegend(seen((d) => d.neighborChf) || seen((d) => d.neighborKwh)),
+    batteryCharging: inLegend(seen((d) => d.batteryChargingChf)),
+    neighborForgone: inLegend(seen((d) => d.neighborForgoneChf)),
+  };
 
   // A year of daily bars is ~365 labels in the width of a dozen: thin them to
   // roughly a dozen ticks so they stay readable, and label every month.
@@ -798,7 +834,8 @@ function RevenueBreakdownChart({
    */
   const axisDomains = useMemo(() => {
     const posOf = (d: RevenuePeriod) =>
-      Math.max(d.consumption, 0) + Math.max(d.direct, 0) + Math.max(d.battery, 0) + Math.max(d.neighbor, 0) +
+      Math.max(d.consumption, 0) + Math.max(d.direct, 0) + Math.max(d.battery, 0) + Math.max(d.batteryExport, 0) +
+      Math.max(d.neighbor, 0) +
       Math.max(d.rcp, 0);
     const maxLeft = Math.max(0, ...chartData.map(posOf));
     // Both below-zero bars stack downward, so the axis has to clear their sum —
@@ -815,7 +852,7 @@ function RevenueBreakdownChart({
       0,
       ...chartData.map((d) =>
         Math.max(
-          unit === "both" ? d.consumptionKwh + d.directKwh + d.batteryKwh + d.neighborKwh : 0,
+          unit === "both" ? d.consumptionKwh + d.directKwh + d.batteryKwh + d.batteryExportKwh + d.neighborKwh : 0,
           showProduction ? d.producedKwh : 0,
         ),
       ),
@@ -985,6 +1022,7 @@ function RevenueBreakdownChart({
               <Bar
                 yAxisId="bars"
                 dataKey="rcp"
+                legendType={legendFor.rcp}
                 name={names.rcp}
                 stackId="revenue"
                 fill={REVENUE_COLORS.rcp}
@@ -994,6 +1032,7 @@ function RevenueBreakdownChart({
             <Bar
               yAxisId="bars"
               dataKey="consumption"
+              legendType={legendFor.consumption}
               name={names.consumption}
               stackId="revenue"
               fill={flowFill("consumption")}
@@ -1004,6 +1043,7 @@ function RevenueBreakdownChart({
             <Bar
               yAxisId="bars"
               dataKey="direct"
+              legendType={legendFor.direct}
               name={names.direct}
               stackId="revenue"
               fill={flowFill("direct")}
@@ -1018,6 +1058,7 @@ function RevenueBreakdownChart({
             <Bar
               yAxisId="bars"
               dataKey="battery"
+              legendType={legendFor.battery}
               name={names.battery}
               stackId="revenue"
               fill={flowFill("battery")}
@@ -1025,9 +1066,24 @@ function RevenueBreakdownChart({
               strokeWidth={1}
               maxBarSize={barSize}
             />
+            {/* The battery's discharge that went on to the grid, above what
+                the house used of it: the evening sale at the peak price,
+                apart from running the house at night. */}
+            <Bar
+              yAxisId="bars"
+              dataKey="batteryExport"
+              legendType={legendFor.batteryExport}
+              name={names.batteryExport}
+              stackId="revenue"
+              fill={flowFill("batteryExport")}
+              stroke={flowStroke("batteryExport")}
+              strokeWidth={1}
+              maxBarSize={barSize}
+            />
             <Bar
               yAxisId="bars"
               dataKey="neighbor"
+              legendType={legendFor.neighbor}
               name={names.neighbor}
               stackId="revenue"
               fill={flowFill("neighbor")}
@@ -1041,6 +1097,7 @@ function RevenueBreakdownChart({
                 yAxisId="bars"
                 shape={OutlinedBar}
                 dataKey="batteryChargingChf"
+                legendType={legendFor.batteryCharging}
                 name={t("dash.chargingCostSeries")}
                 stackId="revenue"
                 // Outlined, not filled. These two are not revenue given up out
@@ -1061,6 +1118,7 @@ function RevenueBreakdownChart({
                 yAxisId="bars"
                 shape={OutlinedBar}
                 dataKey="neighborForgoneChf"
+                legendType={legendFor.neighborForgone}
                 name={t("dash.neighborForgone")}
                 stackId="revenue"
                 // Hollow for the same reason as the charging bar above.
@@ -1081,7 +1139,7 @@ function RevenueBreakdownChart({
               // money bar. Same colours on purpose, so a segment can be read
               // across from one bar to the other; they are kept out of the
               // legend because the money bar already names them.
-              (["consumption", "direct", "battery", "neighbor"] as const).map((flow, i) => (
+              (["consumption", "direct", "battery", "batteryExport", "neighbor"] as const).map((flow, i, all) => (
                 <Bar
                   key={flow}
                   yAxisId="kwh"
@@ -1093,7 +1151,7 @@ function RevenueBreakdownChart({
                   strokeWidth={1}
                   maxBarSize={barSize}
                   legendType="none"
-                  radius={i === 3 ? [4, 4, 0, 0] : undefined}
+                  radius={i === all.length - 1 ? [4, 4, 0, 0] : undefined}
                 />
               ))}
             {showProduction && (

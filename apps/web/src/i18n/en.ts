@@ -638,7 +638,7 @@ export const en = {
   "dash.notReached": "not reached in range",
 
   "dash.revenue": "Revenue",
-  "dash.revenueNote": "Direct consumption (avoided import), direct export, battery, participant sales and the fixed charges shared in the vZEV, by {unit}",
+  "dash.revenueNote": "Direct consumption (avoided import), direct export, the battery's discharge to the house (avoided import) and to the grid, participant sales and the fixed charges shared in the vZEV, by {unit}",
   "dash.revenueKwh": " — the energy behind each figure",
   "dash.revenueBoth": " — with the same split in kWh, hatched, on the right axis",
   "dash.revenueCharging": " Below the axis: what the energy gave up to be where it is — the battery's charge and the participants' share, each at the feed-in rate it would have earned exported.",
@@ -649,7 +649,8 @@ export const en = {
 
   "dash.flow.consumption": "Direct consumption",
   "dash.flow.direct": "Direct export",
-  "dash.flow.battery": "Battery discharge",
+  "dash.flow.battery": "Battery",
+  "dash.flow.batteryExport": "Battery export",
   "dash.flow.neighborSale": "Neighbour sale",
   "dash.flow.neighborSupply": "Neighbour supply",
   "dash.flow.rcpFixed": "vZEV: shared fixed charges",
@@ -724,6 +725,9 @@ export const en = {
   "party.kpi.totalSub": "{local} kWh local · {grid} kWh grid",
   "party.kpi.totalSubOwn": "{own} kWh own · {local} kWh local · {grid} kWh grid",
   "party.kpi.localShareSub": "{own} kWh of own production, direct or from the battery",
+  "party.kpi.gridBalance": "Grid balance",
+  "party.kpi.gridBalanceSub": "{revenue} CHF fed in − {cost} CHF through the vZEV",
+  "party.kpi.gridBalanceHint": "What the grid paid for the energy fed into it, less what the household's consumption cost through the vZEV — the balance of the grid provider's bill, measured with this app's sensors rather than the official meter, so slightly off from it.",
   "party.kpi.exportShare": "Export share",
   "party.kpi.exportShareSub": "{exported} kWh of {produced} kWh produced",
   "party.kpi.exportShareHint": "What left the house — to the grid or to participants — as a share of what the panels made. The rest ran the house, directly or through the battery.",
