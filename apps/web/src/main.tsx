@@ -6,7 +6,11 @@ import { App } from "./App";
 import { SessionExpiredError } from "./api/client";
 import { I18nProvider } from "./i18n/context";
 import { ThemeProvider } from "./lib/theme";
+import { installTouchLeave } from "./lib/touchLeave";
 import "./index.css";
+
+// A tap outside a chart closes its tooltip, as moving the mouse away does.
+installTouchLeave();
 
 /**
  * Any request can be the first to learn that the session is gone — a live
