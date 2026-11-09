@@ -520,6 +520,13 @@ interface RevenuePeriod extends RevenueFlows {
   compareTotal: number | null;
   compareChf: number | null;
   compareKwh: number | null;
+  /**
+   * The feed-in price, in CHF/kWh: in the quarter-hour view the exact price
+   * of that quarter, surcharges included; in any coarser view the price the
+   * period's grid export actually realised — its revenue over its priced
+   * kWh. Null where nothing was exported to price.
+   */
+  feedInRate: number | null;
   /** What the participants' share would have earned exported, and the sale net of it. */
   neighborExportForgoneChf: number;
   neighborNetChf: number;
@@ -581,6 +588,7 @@ function RevenueTooltip({
   granularity,
   unit,
   showProduction,
+  showRate,
   comparisonLabel,
 }: {
   active?: boolean;
@@ -588,6 +596,8 @@ function RevenueTooltip({
   granularity: Granularity;
   unit: RevenueUnit;
   showProduction?: boolean;
+  /** Whether the feed-in price line is drawn, so its figure belongs here too. */
+  showRate?: boolean;
   /** The comparison period's name, when one is chosen. */
   comparisonLabel?: string;
 }) {
@@ -606,7 +616,9 @@ function RevenueTooltip({
           ? `${m}.${y}`
           : granularity === "hourly"
             ? `${row.key.slice(8, 10)}.${m}.${y} ${row.key.slice(11, 13)}h`
-            : `${d}.${m}.${y}`;
+            : granularity === "quarter_hourly"
+              ? `${row.key.slice(8, 10)}.${m}.${y} ${row.key.slice(11, 16)}`
+              : `${d}.${m}.${y}`;
 
   // Built from the row rather than the chart's payload entries: the payload
   // holds whichever bars happen to be rendered, which changes with the mode
@@ -742,6 +754,14 @@ function RevenueTooltip({
             </span>
           </div>
         )}
+        {showRate && row.feedInRate != null && (
+          <div className="flex items-center justify-between gap-6">
+            <span className="text-slate-600">
+              {granularity === "quarter_hourly" ? t("dash.feedInPrice") : t("dash.feedInPriceRealised")}
+            </span>
+            <span className="font-semibold tabular-nums text-slate-900">{formatNumber(row.feedInRate, 3)} CHF/kWh</span>
+          </div>
+        )}
         {showProduction && (
           <div className="flex items-center justify-between gap-6">
             <span className="text-slate-600">{t("dash.productionPlusCharging")}</span>
@@ -768,6 +788,9 @@ function RevenueBreakdownChart({
 }) {
   const t = useT();
   const [showProduction, setShowProduction] = useState(false);
+  // On by default: under a dynamic tariff the price is half of the story
+  // the bars tell.
+  const [showRate, setShowRate] = useState(true);
   // Off by default: these two are annotations on the revenue, not part of it,
   // and a chart that opens with bars hanging below the axis invites reading
   // the total as net of them.
@@ -829,9 +852,20 @@ function RevenueBreakdownChart({
 
       return {
         key,
-        label: periodLabel(key, granularity, t("common.total"), granularity === "hourly" && from === to),
+        label: periodLabel(
+          key,
+          granularity,
+          t("common.total"),
+          (granularity === "hourly" || granularity === "quarter_hourly") && from === to,
+        ),
         ...bars,
         compareTotal: before ? (barUnit(unit) === "chf" ? before.chf : before.kwh) : null,
+        feedInRate:
+          granularity === "quarter_hourly"
+            ? (row?.sellRateChfPerKwh ?? null)
+            : row && row.exportedPricedKwh >= 0.01
+              ? row.exportRevenueChf / row.exportedPricedKwh
+              : null,
         compareChf: before?.chf ?? null,
         compareKwh: before?.kwh ?? null,
         consumptionChf: chf.consumption,
@@ -864,6 +898,8 @@ function RevenueBreakdownChart({
     (sum, d) => sum + d.consumption + d.direct + d.battery + d.batteryExport + d.neighbor + d.rcp,
     0,
   );
+  // The price line, where there is a price to draw.
+  const hasRate = showRate && chartData.some((d) => d.feedInRate != null);
   // The comparison period's whole total, all of it — not only the part with
   // a counterpart here, when the two differ in length.
   const compareTotal = compareTotals
@@ -966,7 +1002,9 @@ function RevenueBreakdownChart({
     barUnit(unit) === "kwh" ? REVENUE_COLORS[flow] : undefined;
 
   const tickInterval =
-    granularity === "hourly"
+    granularity === "quarter_hourly"
+      ? 7 // every 2 hours — 96 bars, a label on each eighth
+      : granularity === "hourly"
       ? 2 // every 3rd hour — 168 bars is far too many to label individually
       : granularity === "daily"
         ? Math.max(Math.ceil(chartData.length / 12) - 1, 0)
@@ -1014,6 +1052,10 @@ function RevenueBreakdownChart({
               onChange={(e) => setShowProduction(e.target.checked)}
             />
             {t("dash.production")}
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={showRate} onChange={(e) => setShowRate(e.target.checked)} />
+            {t("dash.feedInPrice")}
           </label>
           {barUnit(unit) === "chf" && (
             <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -1091,12 +1133,25 @@ function RevenueBreakdownChart({
                 width={56}
               />
             )}
+            {/* The feed-in price on an axis of its own, beside the kWh one when
+                both are shown: a price and an energy share no scale. */}
+            {hasRate && (
+              <YAxis
+                yAxisId="rate"
+                orientation="right"
+                tick={{ fontSize: 11, fill: PALETTE.axis }}
+                tickFormatter={(v: number) => formatNumber(v, 2)}
+                domain={["auto", "auto"]}
+                width={44}
+              />
+            )}
             <Tooltip
               content={
                 <RevenueTooltip
                   granularity={granularity}
                   unit={unit}
                   showProduction={showProduction}
+                  showRate={hasRate}
                   comparisonLabel={comparison?.label}
                 />
               }
@@ -1254,6 +1309,20 @@ function RevenueBreakdownChart({
                   radius={i === all.length - 1 ? [4, 4, 0, 0] : undefined}
                 />
               ))}
+            {hasRate && (
+              <Line
+                yAxisId="rate"
+                type={granularity === "quarter_hourly" ? "stepAfter" : "monotone"}
+                dataKey="feedInRate"
+                name={granularity === "quarter_hourly" ? t("dash.feedInPrice") : t("dash.feedInPriceRealised")}
+                stroke={PALETTE.ink}
+                strokeWidth={1.5}
+                strokeDasharray="5 3"
+                dot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            )}
             {showProduction && (
               // Gross PV yield. When the bars are already kWh it shares their
               // axis — same unit, so a second scale would be misleading.

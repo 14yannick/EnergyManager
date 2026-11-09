@@ -258,6 +258,9 @@ export const haSyncRequestSchema = z.object({
 export type HaSyncRequest = z.infer<typeof haSyncRequestSchema>;
 
 export const savingsGranularitySchema = z.enum([
+  // One day's quarter-hours — the metering interval itself, and since
+  // November 2026 the day-ahead market's own price step.
+  "quarter_hourly",
   "hourly",
   "daily",
   "monthly",

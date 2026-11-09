@@ -6,7 +6,7 @@ import { intervalMetrics, parties, tariffPeriods } from "../../db/schema/index.j
 import { toNumber } from "../../lib/numeric.js";
 import { participantCountOn, partyValidForPeriod, positionsValidOn } from "../billing/engine.js";
 import { listPositions } from "../billing/service.js";
-import { localDayHour } from "../homeAssistant/forecastCurve.js";
+import { localQuarterKey } from "../savings/service.js";
 import { loadVzevSettlement } from "../vzev/settlement.js";
 import {
   daysIn,
@@ -68,14 +68,15 @@ async function loadPricingContext(
   };
 }
 
-/** One party's draw in one local hour, split by where it came from. */
+/** One party's draw in one local quarter-hour, split by where it came from. */
 interface HourDraw {
   localKwh: number;
   gridKwh: number;
 }
 
 /**
- * Every party's draw over the range, by local hour ("YYYY-MM-DDTHH"), from
+ * Every party's draw over the range, by local quarter-hour
+ * ("YYYY-MM-DDTHH:MM"; an hour's readings land on its :00), from
  * the same settlement the revenue and the vZEV view read: the grid
  * provider's split where it is in, else the party's own import sensor,
  * shared by the vZEV's rule (see vzev/settlement.ts).
@@ -98,8 +99,7 @@ async function loadPartyDraws(
   const producers = new Set(siteParties.filter((p) => effectiveSensorProfile(p).feedIn).map((p) => p.id));
   const draws = new Map<string, Map<string, HourDraw>>();
   for (const interval of settlement) {
-    const { day, hour } = localDayHour(interval.ts);
-    const key = `${day}T${String(hour).padStart(2, "0")}`;
+    const key = localQuarterKey(interval.ts);
     for (const share of interval.shares) {
       const ownFeedIn = !share.official && producers.has(share.partyId);
       const hours = draws.get(share.partyId) ?? new Map<string, HourDraw>();
@@ -201,23 +201,39 @@ export async function getPartyConsumption(
   // Every day of the range is a unit, with or without readings: the standing
   // charges accrue on a day whether or not anything was metered on it.
   const units: PricingUnit[] = [];
+  // The draws summed into whatever unit the view prices in: a quarter-hour
+  // as stored, its hour ("YYYY-MM-DDTHH"), or its day — each total built in
+  // one pass, so a year of days does not rescan every quarter-hour per day.
+  const totals = new Map<string, HourDraw>();
+  const addTo = (key: string, draw: HourDraw) => {
+    const sum = totals.get(key) ?? { localKwh: 0, gridKwh: 0 };
+    sum.localKwh += draw.localKwh;
+    sum.gridKwh += draw.gridKwh;
+    totals.set(key, sum);
+  };
+  for (const [key, draw] of usage) {
+    addTo(key.slice(0, 13), draw);
+    addTo(key.slice(0, 10), draw);
+  }
+  const sumOver = (key: string): HourDraw => totals.get(key) ?? { localKwh: 0, gridKwh: 0 };
   for (const day of daysIn(from, to)) {
-    if (granularity === "hourly") {
-      for (let h = 0; h < 24; h++) {
-        const key = periodKeyOf(day, granularity, h);
+    const member = memberOn(partyId, day);
+    if (granularity === "quarter_hourly") {
+      for (let q = 0; q < 96; q++) {
+        const key = periodKeyOf(day, granularity, Math.floor(q / 4), (q % 4) * 15);
         const u = usage.get(key);
-        units.push({ day, key, days: 1 / 24, localKwh: u?.localKwh ?? 0, gridKwh: u?.gridKwh ?? 0, member: memberOn(partyId, day) });
+        units.push({ day, key, days: 1 / 96, localKwh: u?.localKwh ?? 0, gridKwh: u?.gridKwh ?? 0, member });
       }
       continue;
     }
-    let localKwh = 0;
-    let gridKwh = 0;
-    for (let h = 0; h < 24; h++) {
-      const u = usage.get(`${day}T${String(h).padStart(2, "0")}`);
-      localKwh += u?.localKwh ?? 0;
-      gridKwh += u?.gridKwh ?? 0;
+    if (granularity === "hourly") {
+      for (let h = 0; h < 24; h++) {
+        const key = periodKeyOf(day, granularity, h);
+        units.push({ day, key, days: 1 / 24, ...sumOver(key), member });
+      }
+      continue;
     }
-    units.push({ day, key: periodKeyOf(day, granularity), days: 1, localKwh, gridKwh, member: memberOn(partyId, day) });
+    units.push({ day, key: periodKeyOf(day, granularity), days: 1, ...sumOver(day), member });
   }
 
   const priced = priceConsumption(units, ctx);

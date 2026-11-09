@@ -10,7 +10,8 @@ import { consumptionCosts } from "../billing/engine.js";
 /**
  * A party's consumption, priced — pure, like billing/engine.ts it builds on.
  *
- * The range is priced in small units (a day, or an hour on the hourly view)
+ * The range is priced in small units (a day, an hour on the hourly view, a
+ * quarter-hour on the quarter-hour one)
  * and the units summed into the periods the chart shows. Each unit is costed
  * with the invoice's own arithmetic, so what the dashboard says a quarter
  * cost is what the invoice for that quarter says. Pricing unit by unit rather
@@ -25,7 +26,7 @@ export interface PricingUnit {
   day: string;
   /** Which chart period the unit belongs to. */
   key: string;
-  /** How much of a day the unit spans — 1, or 1/24 for an hour. */
+  /** How much of a day the unit spans — 1, 1/24 for an hour, 1/96 for a quarter-hour. */
   days: number;
   localKwh: number;
   gridKwh: number;
@@ -49,8 +50,10 @@ export interface PricingContext {
 const OVERALL_KEY = "overall";
 
 /** The chart period a day (or an hour of it) falls in — same keys as the savings series. */
-export function periodKeyOf(day: string, granularity: Granularity, hour?: number): string {
+export function periodKeyOf(day: string, granularity: Granularity, hour?: number, minute?: number): string {
   switch (granularity) {
+    case "quarter_hourly":
+      return `${day}T${String(hour ?? 0).padStart(2, "0")}:${String(minute ?? 0).padStart(2, "0")}`;
     case "hourly":
       return `${day}T${String(hour ?? 0).padStart(2, "0")}`;
     case "daily":

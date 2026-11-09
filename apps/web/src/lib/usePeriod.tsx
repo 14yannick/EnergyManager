@@ -57,7 +57,7 @@ const PeriodContext = createContext<SelectedPeriod | null>(null);
 
 const STORAGE_KEY = "em.period";
 type PeriodState = { from: string; to: string; granularity: Granularity; mode: PeriodMode };
-const GRANULARITIES: Granularity[] = ["hourly", "daily", "monthly", "quarterly", "yearly", "overall"];
+const GRANULARITIES: Granularity[] = ["quarter_hourly", "hourly", "daily", "monthly", "quarterly", "yearly", "overall"];
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The remembered period, if the browser has one and it still makes sense. */

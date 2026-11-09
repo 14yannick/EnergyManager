@@ -41,6 +41,7 @@ export const axisTick = (v: number) => {
 };
 
 export const PERIOD_UNIT: Record<Granularity, MessageKey> = {
+  quarter_hourly: "dash.unit.quarterHour",
   hourly: "dash.unit.hour",
   daily: "dash.unit.day",
   monthly: "dash.unit.month",
@@ -51,6 +52,7 @@ export const PERIOD_UNIT: Record<Granularity, MessageKey> = {
 
 /** The same words in the plural, for "annualised at 12 months a year". */
 export const PERIOD_UNITS: Record<Granularity, MessageKey> = {
+  quarter_hourly: "dash.units.quarterHour",
   hourly: "dash.units.hour",
   daily: "dash.units.day",
   monthly: "dash.units.month",
@@ -60,6 +62,7 @@ export const PERIOD_UNITS: Record<Granularity, MessageKey> = {
 };
 
 export const GRANULARITY_LABEL: Record<Granularity, MessageKey> = {
+  quarter_hourly: "dash.g.quarterHourly",
   hourly: "dash.g.hourly",
   daily: "dash.g.daily",
   monthly: "dash.g.monthly",
@@ -78,6 +81,7 @@ export const INITIAL_MODE: StepUnit = "quarter";
 export const INITIAL_GRANULARITY: Granularity = "monthly";
 
 export const PERIODS_PER_YEAR: Record<Granularity, number> = {
+  quarter_hourly: 35040,
   hourly: 8760,
   daily: 365,
   monthly: 12,
@@ -130,6 +134,8 @@ export const addMonths = (d: string, n: number) => {
  */
 /** At most this many days of hourly detail — 7 days is already 168 bars. */
 export const MAX_HOURLY_DAYS = 7;
+/** Quarter-hours for one day at a time: 96 bars is as many as a chart can carry. */
+export const MAX_QUARTER_HOUR_DAYS = 1;
 
 /**
  * `anchor` is the edge the user just set, which must not move. Switching *to*
@@ -142,18 +148,19 @@ export function snapRange(
   granularity: Granularity,
   anchor: "from" | "to" = "to",
 ) {
-  if (granularity === "hourly") {
+  if (granularity === "hourly" || granularity === "quarter_hourly") {
+    const max = granularity === "hourly" ? MAX_HOURLY_DAYS : MAX_QUARTER_HOUR_DAYS;
     const span = (a: string, b: string) =>
       (new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 86400000 + 1;
-    if (span(range.from, range.to) <= MAX_HOURLY_DAYS) return range;
+    if (span(range.from, range.to) <= max) return range;
     const shift = (d: string, days: number) => {
       const t = new Date(`${d}T00:00:00Z`);
       t.setUTCDate(t.getUTCDate() + days);
       return t.toISOString().slice(0, 10);
     };
     return anchor === "from"
-      ? { from: range.from, to: shift(range.from, MAX_HOURLY_DAYS - 1) }
-      : { from: shift(range.to, -(MAX_HOURLY_DAYS - 1)), to: range.to };
+      ? { from: range.from, to: shift(range.from, max - 1) }
+      : { from: shift(range.to, -(max - 1)), to: range.to };
   }
   if (granularity === "monthly") {
     return { from: startOfMonth(range.from), to: endOfMonth(range.to) };
@@ -265,6 +272,14 @@ export function periodKeys(from: string, to: string, granularity: Granularity): 
     }
     return keys;
   }
+  if (granularity === "quarter_hourly") {
+    // 00:00..23:45 per local day, keyed like the API: "YYYY-MM-DDTHH:MM".
+    for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+      const day = d.toISOString().slice(0, 10);
+      for (let q = 0; q < 96; q++) keys.push(`${day}T${pad2(Math.floor(q / 4))}:${pad2((q % 4) * 15)}`);
+    }
+    return keys;
+  }
   if (granularity === "hourly") {
     // 00..23 per local day. On the two DST days this is imperfect and
     // deliberately so: the spring-forward 02h key simply has no data and
@@ -294,6 +309,11 @@ export function periodLabel(
 ): string {
   if (granularity === "overall") return totalLabel;
   if (granularity === "quarterly") return `${key.slice(5)} ${key.slice(0, 4)}`;
+  if (granularity === "quarter_hourly") {
+    // "YYYY-MM-DDTHH:MM" -> "08:15", with the date in front past one day.
+    if (singleDay) return key.slice(11, 16);
+    return `${key.slice(8, 10)}.${key.slice(5, 7)} ${key.slice(11, 16)}`;
+  }
   if (granularity === "hourly") {
     // "YYYY-MM-DDTHH" -> "08:00" for a single day, "14.09 08h" otherwise.
     if (singleDay) return `${key.slice(11, 13)}:00`;
@@ -322,7 +342,8 @@ export const PERIOD_MODES: PeriodMode[] = ["day", "week", "month", "quarter", "y
  * and their tooltip without the hours around them.
  */
 export const VIEWS_FOR: Record<PeriodMode, Granularity[]> = {
-  day: ["hourly", "overall"],
+  // Finest first, as everywhere; a day still opens hourly (DEFAULT_VIEW).
+  day: ["quarter_hourly", "hourly", "overall"],
   week: ["hourly", "daily", "overall"],
   month: ["daily", "overall"],
   quarter: ["daily", "monthly", "overall"],

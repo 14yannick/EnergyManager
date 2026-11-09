@@ -501,7 +501,12 @@ function ConsumptionChart({
       const own = ownUse?.get(key);
       return {
         ...p,
-        label: periodLabel(key, granularity, t("common.total"), granularity === "hourly" && from === to),
+        label: periodLabel(
+          key,
+          granularity,
+          t("common.total"),
+          (granularity === "hourly" || granularity === "quarter_hourly") && from === to,
+        ),
         gridEnergyChf: p.rcpCostChf - p.localEnergyChf - p.rcpFixedChf,
         directEnergyChf: p.directCostChf - p.directFixedChf,
         ownKwh: own?.kwh ?? 0,
@@ -532,7 +537,9 @@ function ConsumptionChart({
   // on a phone; beyond that the maximum takes over again.
   const sizing = barsPerPeriod > 1 && rows.length <= 12 ? { barSize } : { maxBarSize: barSize };
   const tickInterval =
-    granularity === "hourly"
+    granularity === "quarter_hourly"
+      ? 7
+      : granularity === "hourly"
       ? 2
       : granularity === "daily"
         ? Math.max(Math.ceil(rows.length / 12) - 1, 0)

@@ -38,6 +38,8 @@ import {
   aggregateDailyToYearly,
   aggregateIntervalsToDaily,
   aggregateIntervalsToHourly,
+  aggregateIntervalsToQuarterHourly,
+  summarizeQuarterHourlySavings,
   chargeAcEquivalentKwh,
   computeDirectUseKwh,
   computeSavingsFromInputs,
@@ -229,6 +231,27 @@ function toDailySavings({ ts: _ts, batteryChargeAcKwh: _ac, ...row }: SavingsSlo
   return row;
 }
 
+/**
+ * An instant's local quarter-hour, "YYYY-MM-DDTHH:MM" in Europe/Zurich, the
+ * minutes floored to 00, 15, 30 or 45 — the key the quarter-hour view groups
+ * by, in the same shape as the hour key with the minutes added.
+ */
+export function localQuarterKey(instant: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Zurich",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(instant);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  const minute = String(Math.floor(Number(get("minute")) / 15) * 15).padStart(2, "0");
+  return `${get("year")}-${get("month")}-${get("day")}T${hour}:${minute}`;
+}
+
 export async function getDailySavings(
   siteId: string,
   from: string,
@@ -244,6 +267,11 @@ export async function getDailySavings(
   const withOwner = (rows: DailySavings[]) => (ownerCosts ? addOwnerFixedAdvantage(rows, ownerCosts) : rows);
 
   if (granularity === "hourly") return withOwner(aggregateIntervalsToHourly(intervalRows));
+  if (granularity === "quarter_hourly") {
+    // Keyed by the reading's own local quarter-hour rather than its hour.
+    const rows = slots.map((slot) => ({ ...toDailySavings(slot), date: localQuarterKey(new Date(slot.ts)) }));
+    return withOwner(aggregateIntervalsToQuarterHourly(rows));
+  }
 
   const daily = withOwner(aggregateIntervalsToDaily(intervalRows));
   if (granularity === "monthly") return aggregateDailyToMonthly(daily);
@@ -360,12 +388,16 @@ export async function getSavingsSummary(
   granularity: SavingsQuery["granularity"] = "daily",
 ): Promise<{ summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] }> {
   // Hourly summarises its own rows; every other granularity rolls up from daily.
+  const fine = granularity === "hourly" || granularity === "quarter_hourly";
   const [dailyRows, costs] = await Promise.all([
-    getDailySavings(siteId, from, to, granularity === "hourly" ? "hourly" : "daily"),
+    getDailySavings(siteId, from, to, fine ? granularity : "daily"),
     getCostItemsSummary(siteId),
   ]);
   if (granularity === "hourly") {
     return summarizeHourlySavings(dailyRows, costs, from, to);
+  }
+  if (granularity === "quarter_hourly") {
+    return summarizeQuarterHourlySavings(dailyRows, costs, from, to);
   }
   if (granularity === "monthly") {
     return summarizeMonthlySavings(aggregateDailyToMonthly(dailyRows), costs, from, to);

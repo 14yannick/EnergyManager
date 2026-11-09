@@ -411,6 +411,15 @@ export function aggregateIntervalsToHourly(rows: DailySavings[]): DailySavings[]
 }
 
 /**
+ * Interval rows keyed by their quarter-hour ("YYYY-MM-DDTHH:MM", see
+ * getDailySavings) summed per key: one row per quarter-hour, or per hour's
+ * :00 where the readings came hourly.
+ */
+export function aggregateIntervalsToQuarterHourly(rows: DailySavings[]): DailySavings[] {
+  return aggregateByPeriod(rows, (date) => date.slice(0, 16));
+}
+
+/**
  * Rolls already-daily rows up to monthly — for data that's only ever
  * available at monthly granularity (e.g. an inverter's monthly report),
  * where treating each day as its own "period" would badly distort
@@ -585,6 +594,16 @@ export function summarizeSavings(
 }
 
 /** Same as `summarizeSavings`, but for `aggregateIntervalsToHourly` rows. */
+/** Same again for quarter-hour rows: 96 periods a day, 35 040 a year. */
+export function summarizeQuarterHourlySavings(
+  rows: DailySavings[],
+  costs: CostItemsSummary,
+  from: string,
+  to: string,
+): { summary: SavingsSummary; cumulative: CumulativeSavingsPoint[] } {
+  return summarizePeriodSavings(rows, costs, from, to, 35040);
+}
+
 export function summarizeHourlySavings(
   hourlyRows: DailySavings[],
   costs: CostItemsSummary,
@@ -663,9 +682,10 @@ export function addOwnerFixedAdvantage(
   costsFor: (day: string, days: number) => { aloneChf: number; rcpChf: number },
 ): DailySavings[] {
   return rows.map((row) => {
-    // "YYYY-MM-DD" for a day, "YYYY-MM-DDTHH" for one of its hours.
-    const hourly = row.date.length > 10;
-    const { aloneChf, rcpChf } = costsFor(row.date.slice(0, 10), hourly ? 1 / 24 : 1);
+    // "YYYY-MM-DD" for a day, "YYYY-MM-DDTHH" for one of its hours,
+    // "YYYY-MM-DDTHH:MM" for one of its quarter-hours.
+    const share = row.date.length > 13 ? 1 / 96 : row.date.length > 10 ? 1 / 24 : 1;
+    const { aloneChf, rcpChf } = costsFor(row.date.slice(0, 10), share);
     const advantage = aloneChf - rcpChf;
     return {
       ...row,
