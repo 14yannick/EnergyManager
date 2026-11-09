@@ -576,7 +576,10 @@ function DayCurveChart({
   );
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    // As tall as the row it sits in: beside the flow picture, which is often
+    // the taller of the two, the chart takes the height that is there rather
+    // than leaving it empty under a fixed one.
+    <div className="flex h-full flex-col rounded-lg border bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm font-medium text-slate-900">
@@ -589,7 +592,8 @@ function DayCurveChart({
           <DayStat label={t("party.live.forecastTotal")} value={`${formatKwh(forecastKwh)} kWh`} />
         </div>
       </div>
-      <div className="mt-3 h-56 sm:h-64">
+      {/* Grows into the card's spare height; never shorter than it was on its own. */}
+      <div className="mt-3 h-56 min-h-56 flex-1 sm:h-64 sm:min-h-64 xl:h-auto">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={points} barCategoryGap="25%">
             <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.gridline} vertical={false} />
