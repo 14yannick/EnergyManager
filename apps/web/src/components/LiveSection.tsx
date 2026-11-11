@@ -21,6 +21,7 @@ import { InfoTip } from "./InfoTip";
 import { LiveCards, hasLiveCards, ownDrawOf, useLiveView, type DayMoney } from "./LiveCards";
 import { LiveFlow, hasLiveFlow } from "./LiveFlow";
 import { VzevFlow, useVzevLive } from "./VzevFlow";
+import { rateAxisTicks } from "../lib/rateAxis";
 
 /**
  * What the site is doing right now, and what the day still holds — the
@@ -276,24 +277,6 @@ const RATE_COLORS: Record<RateBand, string> = {
   good: PALETTE.rateGood,
   best: PALETTE.rateBest,
 };
-/** The fixed window of the rate axis — it only stretches for a rate outside it, a step at a time. */
-const RATE_AXIS_MAX = 0.25;
-const RATE_AXIS_STEP = 0.05;
-
-/**
- * The rate axis's ticks: every 5 ct. from 0 to 25, and beyond either end
- * only as far as the day's rates reach, rounded out to the next step so the
- * axis still ends on a tick.
- */
-function rateAxisTicks(rates: number[]): number[] {
-  const low = Math.min(0, ...rates);
-  const high = Math.max(RATE_AXIS_MAX, ...rates);
-  const first = Math.floor(low / RATE_AXIS_STEP + 1e-9) * RATE_AXIS_STEP;
-  const last = Math.ceil(high / RATE_AXIS_STEP - 1e-9) * RATE_AXIS_STEP;
-  const ticks: number[] = [];
-  for (let v = first; v <= last + 1e-9; v += RATE_AXIS_STEP) ticks.push(Number(v.toFixed(2)));
-  return ticks;
-}
 
 interface CurvePoint {
   hour: number;

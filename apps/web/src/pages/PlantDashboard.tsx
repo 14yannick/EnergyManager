@@ -21,6 +21,7 @@ import { PALETTE, type Tone } from "../lib/palette";
 import { useT, type Translate } from "../i18n/context";
 import { useSelectedPeriod } from "../lib/usePeriod";
 import { PeriodControls, useComparison } from "../components/PeriodControls";
+import { rateAxisTicks } from "../lib/rateAxis";
 import { PeriodHeader } from "../components/PeriodHeader";
 import { InfoTip } from "../components/InfoTip";
 import { StatCard } from "../components/StatCard";
@@ -982,15 +983,33 @@ function RevenueBreakdownChart({
     // a window around the data — 1200 to 2400 kWh — and a curve that merely
     // slopes reads as one that plunges. Revenue and energy both start at
     // nothing, so their axes do too.
-    if (want <= 0) return { left: undefined, right: undefined };
+    if (want <= 0) return { left: undefined, right: undefined, below: 0 };
 
     // min such that -min/(max-min) === want  =>  min = -want*max/(1-want)
     const extend = (max: number) => (want >= 1 ? -max : -(want * max) / (1 - want));
     return {
       left: [Math.min(minLeft, extend(maxLeft)), maxLeft] as [number, number],
       right: [extend(maxRight), maxRight] as [number, number],
+      // The share of the height below zero, for the rate axis to match.
+      below: want,
     };
   }, [chartData, unit, showProduction, showForgone]);
+
+  /**
+   * The feed-in rate's axis: the fixed window every rate chart shares (see
+   * lib/rateAxis.ts) — 0 to 25 ct. in 5-ct. steps, stretched only as far as
+   * the rates reach — so a rate reads at the same height here as on the
+   * day's own chart. When the bars hang below zero, the window reaches below
+   * zero by the same share, so the two zero lines stay one.
+   */
+  const rateAxis = useMemo(() => {
+    const ticks = rateAxisTicks(chartData.map((d) => d.feedInRate).filter((r): r is number => r != null));
+    const low = ticks[0]!;
+    const high = ticks[ticks.length - 1]!;
+    const below = axisDomains.below ?? 0;
+    const aligned = below > 0 && below < 1 && low >= 0 ? -(below * high) / (1 - below) : low;
+    return { domain: [Math.min(low, aligned), high] as [number, number], ticks };
+  }, [chartData, axisDomains.below]);
 
   /**
    * Hatched means energy, solid means money — in every mode, not just when the
@@ -1141,7 +1160,9 @@ function RevenueBreakdownChart({
                 orientation="right"
                 tick={{ fontSize: 11, fill: PALETTE.axis }}
                 tickFormatter={(v: number) => formatNumber(v, 2)}
-                domain={["auto", "auto"]}
+                domain={rateAxis.domain}
+                ticks={rateAxis.ticks}
+                allowDataOverflow
                 width={44}
               />
             )}
