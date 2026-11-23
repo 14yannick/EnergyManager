@@ -172,11 +172,27 @@ export interface VzevPowerReading {
    * where they map a load sensor; null otherwise.
    */
   ownLoadW?: number | null;
+  /**
+   * What the viewer's house is taking from their own plant and battery right
+   * now — the load their meter does not draw. Only for a producer with both
+   * a load and a meter reading; null otherwise.
+   */
+  ownSolarW?: number | null;
 }
 
 export interface VzevPowerFlows {
-  /** Production the producers did not feed in: their own use and their batteries. */
+  /**
+   * Production the producers did not feed in — their own use and their
+   * batteries — less the viewer's own share of it, which is `sunToYou`.
+   */
   sunToOwners: number;
+  /**
+   * The viewer's own plant straight into their house: a producer's direct
+   * self-consumption. At most what the plants keep at this instant, so a
+   * battery covering the house at night, with nothing being made, is not
+   * drawn as sunshine.
+   */
+  sunToYou: number;
   /** The feed-in itself: production that reached the vZEV. */
   sunToVzev: number;
   vzevToYou: number;
@@ -201,9 +217,13 @@ export function allocateVzevPower(r: VzevPowerReading): VzevPowerFlows {
   ]);
   const [you, rest] = shares as [VzevShare, VzevShare];
 
+  // Unknown production says nothing about what was kept — not that it was nil.
+  const kept = r.productionW == null ? 0 : Math.max(r.productionW - feedIn, 0);
+  const sunToYou = Math.min(Math.max(r.ownSolarW ?? 0, 0), kept);
+
   return {
-    // Unknown production says nothing about what was kept — not that it was nil.
-    sunToOwners: r.productionW == null ? 0 : Math.max(r.productionW - feedIn, 0),
+    sunToOwners: kept - sunToYou,
+    sunToYou,
     sunToVzev: feedIn,
     vzevToYou: you.local,
     vzevToOthers: rest.local,
@@ -238,7 +258,10 @@ export interface VzevLiveView {
     producedKwh: number;
     /** What they fed into the vZEV. */
     feedInKwh: number;
-    /** producedKwh − feedInKwh, floored at zero: what the producers kept. */
+    /**
+     * producedKwh − feedInKwh, floored at zero: what the producers kept —
+     * the viewer's own `ownSolarKwh` included.
+     */
     keptKwh: number;
     /** The viewer's own consumption; null when there is no reading of it yet. */
     ownKwh: number | null;
@@ -248,6 +271,12 @@ export interface VzevLiveView {
      * they map none, or nothing is stored for today yet.
      */
     ownLoadKwh?: number | null;
+    /**
+     * Of that, what the viewer's own plant and battery covered: their whole
+     * house less what their meter drew. Only for a producer whose house
+     * counter has readings; null otherwise.
+     */
+    ownSolarKwh?: number | null;
     othersKwh: number | null;
     /**
      * How that consumption was covered, settled interval by interval (see

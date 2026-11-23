@@ -29,7 +29,7 @@ import { usePrefersReducedMotion } from "./RadialFlow";
  */
 
 type RingId = "sun" | "owners" | "vzev" | "you" | "grid" | "others";
-type LinkId = "sunToOwners" | "sunToVzev" | "vzevToYou" | "vzevToOthers" | "vzevToGrid" | "gridToYou" | "gridToOthers";
+type LinkId = "sunToOwners" | "sunToYou" | "sunToVzev" | "vzevToYou" | "vzevToOthers" | "vzevToGrid" | "gridToYou" | "gridToOthers";
 
 const RING_COLOR: Record<RingId, string> = {
   sun: PALETTE.sun,
@@ -42,6 +42,7 @@ const RING_COLOR: Record<RingId, string> = {
 /** Each flow in the colour of the energy it carries: the sun's, the vZEV's own, the grid's. */
 const LINKS: Array<{ id: LinkId; source: RingId; target: RingId; color: string }> = [
   { id: "sunToOwners", source: "sun", target: "owners", color: PALETTE.sun },
+  { id: "sunToYou", source: "sun", target: "you", color: PALETTE.sun },
   { id: "sunToVzev", source: "sun", target: "vzev", color: PALETTE.local },
   { id: "vzevToYou", source: "vzev", target: "you", color: PALETTE.local },
   { id: "vzevToOthers", source: "vzev", target: "others", color: PALETTE.local },
@@ -52,6 +53,14 @@ const LINKS: Array<{ id: LinkId; source: RingId; target: RingId; color: string }
 
 /** Below this a connector is meter noise: a few watts drift across zero all night. */
 const MIN_W = 5;
+/** Below this a day's figure rounds to nothing at one decimal: a ring or a line with it is hidden. */
+const MIN_KWH = 0.05;
+/**
+ * The two runs down from the sun sit either side of its centre line: the
+ * producer's own use straight down to "you" on the outside, the feed-in on
+ * the inside, bending off to the vZEV.
+ */
+const SUN_RUN = 12;
 const REFRESH_MS = 60 * 1000;
 const STROKE_MIN = 2;
 const STROKE_MAX = 7;
@@ -115,12 +124,25 @@ function connector(f: Frame, id: LinkId): Connector {
   switch (id) {
     case "sunToOwners":
       return { d: `M${f.left + R},${f.top} H${f.right - R}`, label: { x: f.cx, y: f.top - 8, anchor: "middle" } };
-    case "sunToVzev":
+    case "sunToVzev": {
       // Down from the sun, round the bend, into the vZEV from its left.
+      const x = f.left + SUN_RUN;
+      const y0 = f.top + Math.sqrt(R * R - SUN_RUN * SUN_RUN);
       return {
-        d: `M${f.left},${f.top + R} V${f.cy - BEND} Q${f.left},${f.cy} ${f.left + BEND},${f.cy} H${f.cx - R}`,
+        d: `M${x},${y0} V${f.cy - BEND} Q${x},${f.cy} ${x + BEND},${f.cy} H${f.cx - R}`,
         label: { x: f.cx - R - 10, y: f.cy - 7, anchor: "end" },
       };
+    }
+    case "sunToYou": {
+      // Straight down the outside, from the sun to the producer's own house.
+      const x = f.left - SUN_RUN;
+      const dy = Math.sqrt(R * R - SUN_RUN * SUN_RUN);
+      return {
+        d: `M${x},${f.top + dy} V${f.bottom - dy}`,
+        // Beside the line's lower half, where the feed-in has already bent away.
+        label: { x: x + 9, y: (f.cy + f.bottom - R) / 2 + 8, anchor: "start" },
+      };
+    }
     case "vzevToYou":
       return straight("vzev", "you", -1);
     case "vzevToOthers":
@@ -135,8 +157,7 @@ function connector(f: Frame, id: LinkId): Connector {
 }
 
 /** Feather's outline icons (MIT), on a 24-unit box. */
-function RingIcon({ ring, x, y }: { ring: RingId; x: number; y: number }) {
-  const size = 22;
+function RingIcon({ ring, x, y, size = 22 }: { ring: RingId; x: number; y: number; size?: number }) {
   return (
     <g
       transform={`translate(${x - size / 2},${y - size / 2}) scale(${size / 24})`}
@@ -247,7 +268,23 @@ export function VzevFlow({
   // from another plant or from the grid like everyone else. Only an admin
   // who named nobody, or somebody who is no member, has no such ring.
   const hasYou = view.viewer?.consumes === true;
-  const rings: RingId[] = ["sun", "owners", "vzev", ...(hasYou ? (["you"] as const) : []), "grid", "others"];
+  const flows = allocateVzevPower(view.power);
+  // What the owners kept today, less the viewer's own use of their plant —
+  // which is drawn in their own ring instead, so it is not counted twice.
+  const ownersKwh = Math.max(view.today.keptKwh - (view.today.ownSolarKwh ?? 0), 0);
+  // A ring with nothing in it today and nothing flowing into it now says
+  // nothing: the owners once the viewer is the only one using the plant, the
+  // others while none of them draws anything.
+  const hasOwners = ownersKwh >= MIN_KWH || flows.sunToOwners >= MIN_W;
+  const hasOthers = (view.today.othersKwh ?? 0) >= MIN_KWH || (view.power.othersW ?? 0) >= MIN_W;
+  const rings: RingId[] = [
+    "sun",
+    ...(hasOwners ? (["owners"] as const) : []),
+    "vzev",
+    ...(hasYou ? (["you"] as const) : []),
+    "grid",
+    ...(hasOthers ? (["others"] as const) : []),
+  ];
   const names: Record<RingId, string> = {
     sun: t("vzevFlow.production"),
     owners: t(view.producerCount > 1 ? "vzevFlow.owners" : "vzevFlow.owner"),
@@ -260,26 +297,37 @@ export function VzevFlow({
   const kwh = (v: number | null) => (v == null ? "—" : `${formatKwhAuto(v)} kWh`);
   const figure: Record<RingId, string | null> = {
     sun: kwh(view.today.producedKwh),
-    owners: kwh(view.today.keptKwh),
+    owners: kwh(ownersKwh),
     vzev: kwh(view.today.feedInKwh),
     you: kwh(view.today.ownKwh),
     grid: null,
     others: kwh(view.today.othersKwh),
   };
   /**
-   * How a consumer's day was covered — from the vZEV's own feed-in, and
-   * from the grid — settled quarter-hour by quarter-hour on the server.
-   * Drawn under the total as two figures, each beside a dot in the colour
-   * its energy has on the connectors.
+   * How a consumer's day was covered — from their own plant (a producer's
+   * direct use, in the sun's yellow), from the vZEV's own feed-in, and from
+   * the grid — settled quarter-hour by quarter-hour on the server. Drawn
+   * under the total, each beside a dot in the colour its energy has on the
+   * connectors, and only those with something in them.
    */
-  const split: Partial<Record<RingId, { local: number; grid: number }>> = {
-    ...(view.today.ownLocalKwh != null && view.today.ownGridKwh != null
-      ? { you: { local: view.today.ownLocalKwh, grid: view.today.ownGridKwh } }
-      : {}),
-    ...(view.today.othersLocalKwh != null && view.today.othersGridKwh != null
-      ? { others: { local: view.today.othersLocalKwh, grid: view.today.othersGridKwh } }
-      : {}),
-  };
+  const parts: Partial<Record<RingId, Array<{ color: string; kwh: number }>>> = {};
+  const partsOf = (list: Array<{ color: string; kwh: number | null | undefined }>) =>
+    list.filter((p): p is { color: string; kwh: number } => p.kwh != null && p.kwh >= MIN_KWH);
+  if (view.today.ownLocalKwh != null && view.today.ownGridKwh != null) {
+    parts.you = partsOf([
+      { color: PALETTE.sun, kwh: view.today.ownSolarKwh },
+      { color: PALETTE.local, kwh: view.today.ownLocalKwh },
+      { color: PALETTE.grid, kwh: view.today.ownGridKwh },
+    ]);
+    // The ring's total is the house's whole day: its own plant's share too.
+    figure.you = kwh(view.today.ownLocalKwh + view.today.ownGridKwh + (view.today.ownSolarKwh ?? 0));
+  }
+  if (view.today.othersLocalKwh != null && view.today.othersGridKwh != null) {
+    parts.others = partsOf([
+      { color: PALETTE.local, kwh: view.today.othersLocalKwh },
+      { color: PALETTE.grid, kwh: view.today.othersGridKwh },
+    ]);
+  }
   // The grid's two directions today: what the vZEV sent on to it, and what
   // its members drew from it. The second is only known as far as their
   // consumption is.
@@ -289,7 +337,6 @@ export function VzevFlow({
       : (view.today.ownGridKwh ?? 0) + (view.today.othersGridKwh ?? 0);
   const gridLines = [`↓ ${formatKwhAuto(view.today.surplusKwh)}`, `↑ ${drawnFromGrid == null ? "—" : formatKwhAuto(drawnFromGrid)}`];
 
-  const flows = allocateVzevPower(view.power);
   // Where the feed-in goes can only be drawn once somebody's draw is known.
   // With no participant's consumption reported, the sums would send every
   // watt to the grid — a claim the sensors do not make. So the feed-in is
@@ -419,27 +466,35 @@ export function VzevFlow({
                         </tspan>
                       </text>
                     </>
-                  ) : split[ring] ? (
-                    <>
-                      <RingIcon ring={ring} x={x} y={y - 24} />
-                      <text x={x} y={y + 1} textAnchor="middle" fontSize={12} fontWeight={600} fill={PALETTE.ink} className="tabular-nums">
-                        {value}
-                      </text>
-                      {/* The dot carries which energy it is; the figure stays in ink. */}
-                      {(
-                        [
-                          [PALETTE.local, split[ring]!.local, y + 15],
-                          [PALETTE.grid, split[ring]!.grid, y + 28],
-                        ] as const
-                      ).map(([color, kwhValue, lineY]) => (
-                        <g key={color}>
-                          <circle cx={x - 14} cy={lineY - 3.5} r={3} fill={color} />
-                          <text x={x - 7} y={lineY} textAnchor="start" fontSize={10.5} fill={PALETTE.ink} className="tabular-nums">
-                            {formatKwhAuto(kwhValue)}
+                  ) : parts[ring] && parts[ring]!.length > 0 ? (
+                    (() => {
+                      // Two lines as before; a third pulls the block up and
+                      // shrinks the icon, so it all stays inside the ring.
+                      const lines = parts[ring]!;
+                      const three = lines.length >= 3;
+                      const totalY = three ? y - 4 : y + 1;
+                      const gap = three ? 12 : 13;
+                      return (
+                        <>
+                          <RingIcon ring={ring} x={x} y={three ? y - 24 : y - 24} size={three ? 18 : 22} />
+                          <text x={x} y={totalY} textAnchor="middle" fontSize={12} fontWeight={600} fill={PALETTE.ink} className="tabular-nums">
+                            {value}
                           </text>
-                        </g>
-                      ))}
-                    </>
+                          {/* The dot carries which energy it is; the figure stays in ink. */}
+                          {lines.map(({ color, kwh: kwhValue }, i) => {
+                            const lineY = totalY + 14 + i * gap;
+                            return (
+                              <g key={color}>
+                                <circle cx={x - 14} cy={lineY - 3.5} r={3} fill={color} />
+                                <text x={x - 7} y={lineY} textAnchor="start" fontSize={10.5} fill={PALETTE.ink} className="tabular-nums">
+                                  {formatKwhAuto(kwhValue)}
+                                </text>
+                              </g>
+                            );
+                          })}
+                        </>
+                      );
+                    })()
                   ) : (
                     <>
                       <RingIcon ring={ring} x={x} y={value == null ? y : y - 13} />

@@ -70,6 +70,23 @@ describe("allocateVzevPower", () => {
     expect(allocateVzevPower(reading({ productionW: null })).sunToOwners).toBe(0);
   });
 
+  it("takes a producer's own use out of what the owners keep", () => {
+    const f = allocateVzevPower(reading({ ownSolarW: 800 }));
+    expect(f.sunToYou).toBe(800);
+    expect(f.sunToOwners).toBe(1200);
+    expect(f.sunToYou + f.sunToOwners + f.sunToVzev).toBe(6000);
+  });
+
+  it("never draws more own sunshine than the plants are keeping", () => {
+    // Night: the battery runs the house, nothing is being made.
+    const night = allocateVzevPower(reading({ productionW: 0, feedInW: 0, ownSolarW: 700 }));
+    expect(night.sunToYou).toBe(0);
+    expect(night.sunToOwners).toBe(0);
+    const f = allocateVzevPower(reading({ ownSolarW: 5000 }));
+    expect(f.sunToYou).toBe(2000);
+    expect(f.sunToOwners).toBe(0);
+  });
+
   it("never lets a battery discharging to the grid read as negative own use", () => {
     // Feed-in above production: the producers' battery is exporting.
     expect(allocateVzevPower(reading({ productionW: 300, feedInW: 6000 })).sunToOwners).toBe(0);

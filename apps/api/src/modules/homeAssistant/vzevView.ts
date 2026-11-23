@@ -5,6 +5,7 @@ import { intervalMetrics, parties } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
 import { activeSensors } from "../partySensors/service.js";
 import { loadVzevSettlement } from "../vzev/settlement.js";
+import { getDailySavings } from "../savings/service.js";
 import { fetchHaNumericStates } from "./haClient.js";
 import { SITE_TZ, localDayHour } from "./forecastCurve.js";
 
@@ -43,7 +44,7 @@ export async function getVzevLiveView(
 
   const [power, today] = await Promise.all([
     readPower(siteId, producers, viewerConsumes ? viewerRow!.id : null, otherIds),
-    readToday(siteId, now, viewerConsumes ? viewerRow!.id : null, otherIds),
+    readToday(siteId, now, viewerConsumes ? viewerRow!.id : null, otherIds, producers),
   ]);
 
   return {
@@ -91,6 +92,8 @@ async function readPower(
     return sum(values("live_export_power", (id) => id === partyId).map((v) => Math.max(-v, 0)));
   };
   const known = [...otherIds].map(drawOf).filter((v): v is number => v != null);
+  const ownW = viewerId ? drawOf(viewerId) : null;
+  const ownLoadW = viewerId ? sum(values("live_load_power", (id) => id === viewerId)) : null;
 
   return {
     productionW: sum(values("live_pv_power", isProducer)),
@@ -98,12 +101,41 @@ async function readPower(
     // plant importing at this moment takes nothing off what its neighbour
     // is feeding in.
     feedInW: sum(values("live_export_power", isProducer).map((v) => Math.max(v, 0))),
-    ownW: viewerId ? drawOf(viewerId) : null,
+    ownW,
     othersW: known.length > 0 ? known.reduce((a, b) => a + b, 0) : null,
     // The viewer's whole house, where they map its load: what it runs on,
     // the grid's share and their own plant's together.
-    ownLoadW: viewerId ? sum(values("live_load_power", (id) => id === viewerId)) : null,
+    ownLoadW,
+    // A producer's house runs on their own plant for whatever its meter does
+    // not draw. A participant without a plant has no such share: any gap
+    // between their load and their meter is sensor disagreement.
+    ownSolarW:
+      viewerId && producers.has(viewerId) && ownLoadW != null && ownW != null ? Math.max(ownLoadW - ownW, 0) : null,
   };
+}
+
+/**
+ * The plant's own use today as the revenue chart counts it: direct use plus
+ * what the battery gave back to the house — so the vZEV picture, the
+ * revenue and the consumption page say the same of it. Kept two minutes per
+ * site and day: the picture asks every minute, the readings move with the
+ * sync. Null when it cannot be worked out; the caller then falls back.
+ */
+const OWN_USE_TTL_MS = 2 * 60 * 1000;
+const ownUseCache = new Map<string, { at: number; kwh: number | null }>();
+
+async function plantOwnUseKwh(siteId: string, day: string): Promise<number | null> {
+  const key = `${siteId}:${day}`;
+  const cached = ownUseCache.get(key);
+  if (cached && Date.now() - cached.at < OWN_USE_TTL_MS) return cached.kwh;
+  try {
+    const [row] = await getDailySavings(siteId, day, day, "daily");
+    const kwh = row ? Math.max(row.directUseKwh, 0) + Math.max(row.batteryDischargeConsumedKwh, 0) : null;
+    ownUseCache.set(key, { at: Date.now(), kwh });
+    return kwh;
+  } catch {
+    return cached?.kwh ?? null;
+  }
 }
 
 /**
@@ -120,13 +152,15 @@ async function readToday(
   now: Date,
   viewerId: string | null,
   otherIds: Set<string>,
+  producers: Set<string>,
 ): Promise<VzevLiveView["today"]> {
   const { day } = localDayHour(now);
   // The zone as a literal — a constant of ours — as in liveView.ts.
   const zone = sql.raw(`'${SITE_TZ}'`);
   const fromBound = sql`(${day}::date at time zone ${zone})`;
   const toBoundExclusive = sql`((${day}::date + interval '1 day') at time zone ${zone})`;
-  const [made, settlement, house] = await Promise.all([
+  const viewerProduces = viewerId != null && producers.has(viewerId);
+  const [made, settlement, house, plantOwnUse] = await Promise.all([
     db
       .select({
         productionKwh: sql<string>`coalesce(sum(${intervalMetrics.valueKwh}) filter (where ${intervalMetrics.metricKind} = 'production'), 0)`,
@@ -165,6 +199,7 @@ async function readToday(
             ),
           )
       : Promise.resolve([]),
+    viewerProduces ? plantOwnUseKwh(siteId, day) : Promise.resolve(null),
   ]);
 
   // What the plants made is their AC production plus what went into their
@@ -180,6 +215,9 @@ async function readToday(
     feedInKwh += interval.exportKwh;
     surplusKwh += interval.gridKwh;
     for (const share of interval.shares) {
+      // A producer whose meter both fed in and drew within one quarter-hour
+      // keeps the share of that feed-in the vZEV's rule gives them: the
+      // grid provider most likely counts it as vZEV consumption too.
       if (!members.has(share.partyId)) continue;
       const sum = covered.get(share.partyId) ?? { local: 0, grid: 0 };
       sum.local += share.local;
@@ -189,6 +227,15 @@ async function readToday(
   }
 
   const own = viewerId ? covered.get(viewerId) : undefined;
+  const ownLoadKwh = house[0] && house[0].rows > 0 ? toNumber(house[0].kwh) : null;
+  // A producer's own use of their plant: the revenue engine's figure (see
+  // plantOwnUseKwh). Failing that, what their house counter consumed that
+  // their meter did not draw — a separate sensor, which can differ from
+  // production less export by a few hundred Wh a day.
+  const ownSolarKwh = !viewerProduces
+    ? null
+    : (plantOwnUse ??
+      (ownLoadKwh != null ? Math.max(ownLoadKwh - (own ? own.local + own.grid : 0), 0) : null));
   const others = [...otherIds].map((id) => covered.get(id)).filter((c): c is { local: number; grid: number } => c != null);
   const othersLocalKwh = others.length > 0 ? others.reduce((sum, c) => sum + c.local, 0) : null;
   const othersGridKwh = others.length > 0 ? others.reduce((sum, c) => sum + c.grid, 0) : null;
@@ -200,7 +247,8 @@ async function readToday(
     // made; that is not negative own use.
     keptKwh: Math.max(producedKwh - feedInKwh, 0),
     ownKwh: own ? own.local + own.grid : null,
-    ownLoadKwh: house[0] && house[0].rows > 0 ? toNumber(house[0].kwh) : null,
+    ownLoadKwh,
+    ownSolarKwh,
     othersKwh: othersLocalKwh != null && othersGridKwh != null ? othersLocalKwh + othersGridKwh : null,
     ownLocalKwh: own?.local ?? null,
     ownGridKwh: own?.grid ?? null,
