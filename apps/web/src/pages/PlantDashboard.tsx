@@ -396,12 +396,18 @@ function flowTotals(row: DailySavings | undefined): { chf: number; kwh: number }
   return {
     chf:
       row.directConsumptionRevenueChf +
+      row.ownVzevRevenueChf +
       row.directExportRevenueChf +
       row.batteryDischargeConsumedValueChf +
       row.batteryDischargeExportedValueChf +
       row.neighborSellRevenueChf +
       row.rcpFixedAdvantageChf,
-    kwh: row.directUseKwh + row.exportedKwh + row.batteryDischargeConsumedKwh + row.neighborConsumptionKwh,
+    kwh:
+      row.directUseKwh +
+      row.ownVzevKwh +
+      row.exportedKwh +
+      row.batteryDischargeConsumedKwh +
+      row.neighborConsumptionKwh,
   };
 }
 
@@ -838,7 +844,11 @@ function RevenueBreakdownChart({
         // still the gross discharge value.
         battery: row?.batteryDischargeConsumedValueChf ?? 0,
         batteryExport: row?.batteryDischargeExportedValueChf ?? 0,
-        neighbor: row?.neighborSellRevenueChf ?? 0,
+        // Everything the vZEV took: the participants' purchases, and what the
+        // producers drew back from their own feed-in — worth the purchase
+        // price less the vZEV rate their bill charges for it, nothing while
+        // there is no vZEV rate.
+        neighbor: (row?.neighborSellRevenueChf ?? 0) + (row?.ownVzevRevenueChf ?? 0),
         rcp: row?.rcpFixedAdvantageChf ?? 0,
       };
       const kwh: RevenueFlows = {
@@ -846,7 +856,7 @@ function RevenueBreakdownChart({
         direct: (row?.exportedKwh ?? 0) - batteryExportedKwh,
         battery: row?.batteryDischargeConsumedKwh ?? 0,
         batteryExport: batteryExportedKwh,
-        neighbor: row?.neighborConsumptionKwh ?? 0,
+        neighbor: (row?.neighborConsumptionKwh ?? 0) + (row?.ownVzevKwh ?? 0),
         rcp: 0,
       };
       const bars = barUnit(unit) === "chf" ? chf : kwh;

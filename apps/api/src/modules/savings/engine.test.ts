@@ -1141,3 +1141,40 @@ describe("what selling to participants gave up", () => {
     expect(row.neighborNetChf).toBeGreaterThan(row.neighborSellRevenueChf);
   });
 });
+
+describe("own vZEV consumption", () => {
+  const base = {
+    date: "2027-03-01",
+    producedKwh: 10,
+    directUseKwh: 4,
+    batteryChargeKwh: 0,
+    batteryDischargeKwh: 0,
+    exportedKwh: 5,
+    exportLocalKwh: 6,
+    neighborConsumptionKwh: 0,
+    ownVzevKwh: 1,
+    purchaseRateChfPerKwh: 0.25,
+    sellRateChfPerKwh: 0.06,
+  };
+
+  it("earns the plant the purchase price less the vZEV rate the bill charges", () => {
+    const r = computeSavingsFromInputs({ ...base, neighborSellRateChfPerKwh: 0.14 });
+    expect(r.ownVzevRevenueChf).toBeCloseTo(0.11, 12);
+    // Plant and bill together come to the purchase price, as for direct use.
+    expect(r.ownVzevRevenueChf + 1 * 0.14).toBeCloseTo(0.25, 12);
+    expect(r.savingsWithBatteryChf).toBeCloseTo(4 * 0.25 + 5 * 0.06 + 0.11, 12);
+  });
+
+  it("earns nothing while there is no vZEV rate: the bill charges the purchase price", () => {
+    const r = computeSavingsFromInputs({ ...base, neighborSellRateChfPerKwh: null });
+    expect(r.ownVzevRevenueChf).toBe(0);
+    expect(r.ownVzevKwh).toBe(1);
+    expect(r.savingsWithBatteryChf).toBeCloseTo(4 * 0.25 + 5 * 0.06, 12);
+  });
+
+  it("is neither a sale nor export", () => {
+    const r = computeSavingsFromInputs({ ...base, neighborSellRateChfPerKwh: 0.14 });
+    expect(r.neighborSellRevenueChf).toBe(0);
+    expect(r.exportRevenueChf).toBeCloseTo(5 * 0.06, 12);
+  });
+});

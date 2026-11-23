@@ -184,6 +184,27 @@ function DayBlocks({ day }: { day: SavingsDayDetail }) {
           rateChfPerKwh: s.purchaseRateChfPerKwh,
         }),
       },
+      // Only on a day that has any: a producer drawing back from the vZEV's
+      // feed-in in the quarter-hour they fed in.
+      ...(totals.ownVzevKwh >= 0.005
+        ? [
+            {
+              key: "own-vzev",
+              label: "calc.ownVzev" as const,
+              note: "calc.ownVzevNote" as const,
+              kwh: totals.ownVzevKwh,
+              chf: totals.ownVzevRevenueChf,
+              slot: (s) => ({
+                kwh: s.ownVzevKwh,
+                chf: s.ownVzevRevenueChf,
+                rateChfPerKwh:
+                  s.purchaseRateChfPerKwh != null && s.neighborSellRateChfPerKwh != null
+                    ? s.purchaseRateChfPerKwh - s.neighborSellRateChfPerKwh
+                    : null,
+              }),
+            } satisfies Line,
+          ]
+        : []),
       {
         key: "parties",
         label: "calc.partyDraw",

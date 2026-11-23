@@ -45,8 +45,10 @@ export interface SettledInterval {
   gridKwh: number;
   gridOfficial: boolean;
   shares: SettledShare[];
-  /** What was sold to participants, per party. */
+  /** What was sold to participants, per party — producers excluded (see `ownVzevKwh`). */
   sales: Array<{ partyId: string; kwh: number }>;
+  /** What the producers themselves took of the feed-in: their own vZEV consumption, not a sale. */
+  ownVzevKwh: number;
   /** Their sum. */
   salesKwh: number;
   /** The export that was not sold to a participant, and so is paid at the feed-in rate. */
@@ -61,13 +63,14 @@ export interface SettledInterval {
  * member arrives with what their own meter drew (`import_grid`), still to
  * be shared.
  *
- * For money, a sale is what a participant took from the export. The
- * provider's split is a sale whoever it names — that is its settlement. A
- * share worked out here is one only for a party who does not feed in: a
- * producer drawing in the same quarter-hour they fed in has bought nothing
- * from themselves, so until the provider says otherwise that energy stays
- * with the export paid at the feed-in rate. Where the provider has stated
- * the grid export, that is the unsold part, as given.
+ * For money, a sale is what a participant took from the export. A
+ * producer drawing in the same quarter-hour they fed in takes their part of
+ * the feed-in like anyone — the grid provider most likely settles it as
+ * vZEV consumption — but sells nothing to themselves: that is `ownVzevKwh`,
+ * the plant's own consumption, priced on its own. Neither is left with the
+ * export. The provider's own split, where it is in, is the settlement as
+ * given. Where the provider has stated the grid export, that is the unsold
+ * part, as given.
  */
 export function settleReadings(readings: ReadonlyArray<SettlementReading>, siteParties: ReadonlyArray<SettlementParty>): SettledInterval[] {
   const partyById = new Map(siteParties.map((p) => [p.id, p]));
@@ -108,10 +111,12 @@ export function settleReadings(readings: ReadonlyArray<SettlementReading>, siteP
             d.local != null || d.grid != null ? { id, official: { local: d.local ?? 0, grid: d.grid ?? 0 } } : { id, demand: d.metered },
         ),
       });
+      const isProducer = (id: string) => partyById.get(id)?.producer === true;
       const sales = settled.shares
-        .filter((s) => s.local > 0 && (s.official || !partyById.get(s.id)?.producer))
+        .filter((s) => s.local > 0 && !isProducer(s.id))
         .map((s) => ({ partyId: s.id, kwh: s.local }));
       const salesKwh = sales.reduce((sum, s) => sum + s.kwh, 0);
+      const ownVzevKwh = settled.shares.filter((s) => isProducer(s.id)).reduce((sum, s) => sum + Math.max(s.local, 0), 0);
       return {
         ts: interval.ts,
         exportKwh: settled.exportKwh,
@@ -120,7 +125,8 @@ export function settleReadings(readings: ReadonlyArray<SettlementReading>, siteP
         shares: settled.shares.map((s) => ({ partyId: s.id, local: s.local, grid: s.grid, official: s.official })),
         sales,
         salesKwh,
-        unsoldKwh: settled.gridOfficial ? settled.gridKwh : Math.max(settled.exportKwh - salesKwh, 0),
+        ownVzevKwh,
+        unsoldKwh: settled.gridOfficial ? settled.gridKwh : Math.max(settled.exportKwh - salesKwh - ownVzevKwh, 0),
       };
     });
 }

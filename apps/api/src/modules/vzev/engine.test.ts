@@ -37,13 +37,15 @@ describe("settleReadings — from sensors alone", () => {
     expect(s.sales).toEqual([]);
   });
 
-  it("does not sell a producer their own feed-in", () => {
+  it("keeps a producer's share of the feed-in as their own vZEV consumption, not a sale", () => {
     // The producer drew in the same quarter-hour they fed in. The vZEV covers
-    // that draw, but nothing was sold: it stays with the export.
+    // that draw — vZEV consumption — but nothing was sold to anyone, and it
+    // is not left with the export either.
     const s = one([reading("export", 1), reading("import_grid", 0.2, "producer"), reading("import_grid", 0.3, "anna")]);
     expect(s.shares.find((x) => x.partyId === "producer")!.local).toBeCloseTo(0.2, 12);
     expect(s.sales).toEqual([{ partyId: "anna", kwh: expect.closeTo(0.3, 12) }]);
-    expect(s.unsoldKwh).toBeCloseTo(0.7, 12);
+    expect(s.ownVzevKwh).toBeCloseTo(0.2, 12);
+    expect(s.unsoldKwh).toBeCloseTo(0.5, 12);
   });
 
   it("ignores the import sensor of somebody with no meter in the vZEV", () => {
@@ -81,9 +83,11 @@ describe("settleReadings — with the grid provider's figures", () => {
     expect(s.sales).toEqual([{ partyId: "anna", kwh: 0.4 }]);
   });
 
-  it("counts the provider's split as a sale whoever it names", () => {
+  it("takes the provider's split naming a producer as their own vZEV consumption", () => {
     const s = one([reading("export", 1), reading("export_grid", 0.8), reading("consumption", 0.2, "producer")]);
-    expect(s.sales).toEqual([{ partyId: "producer", kwh: 0.2 }]);
+    expect(s.sales).toEqual([]);
+    expect(s.ownVzevKwh).toBe(0.2);
+    expect(s.unsoldKwh).toBe(0.8);
   });
 
   it("works without any export reading, from the provider's two figures", () => {

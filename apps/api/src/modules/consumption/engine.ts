@@ -130,27 +130,61 @@ export function priceConsumption(
       },
     });
     const member = unit.member ?? true;
-    const priced = member
-      ? {
-          localKwh: unit.localKwh,
-          gridKwh: unit.gridKwh,
-          rcpCostChf: costs.rcpChf,
-          localEnergyChf: costs.localEnergyChf,
-          rcpFixedChf: costs.rcpFixedChf,
-          directCostChf: costs.directChf,
-          directFixedChf: costs.directFixedChf,
-          savedChf: costs.directChf - costs.rcpChf,
-        }
-      : {
-          localKwh: unit.localKwh,
-          gridKwh: unit.gridKwh,
-          rcpCostChf: costs.directChf,
-          localEnergyChf: 0,
-          rcpFixedChf: costs.directFixedChf,
-          directCostChf: costs.directChf,
-          directFixedChf: costs.directFixedChf,
-          savedChf: 0,
-        };
+    // Without a vZEV rate — no vZEV yet, or not yet in it — vZEV energy costs
+    // what the grid would have charged for it: the grid's all-in price per
+    // kWh (energy, network, levies), from the same positions the direct
+    // supply is priced on. Shown beside the vZEV kWh rather than as nothing,
+    // and, for a member, billed as grid kWh rather than left off the bill.
+    const totalKwh = unit.localKwh + unit.gridKwh;
+    const gridPerKwh = totalKwh > 0 ? (costs.directChf - costs.directFixedChf) / totalKwh : 0;
+    const localAtGridChf = unit.localKwh * gridPerKwh;
+    const priced =
+      member && localRateChf != null
+        ? {
+            localKwh: unit.localKwh,
+            gridKwh: unit.gridKwh,
+            rcpCostChf: costs.rcpChf,
+            localEnergyChf: costs.localEnergyChf,
+            rcpFixedChf: costs.rcpFixedChf,
+            directCostChf: costs.directChf,
+            directFixedChf: costs.directFixedChf,
+            savedChf: costs.directChf - costs.rcpChf,
+          }
+        : member
+          ? (() => {
+              // The member's bill as if those kWh had come off the grid: the
+              // vZEV's lines with the vZEV kWh moved to the grid's, so any
+              // per-kWh charge already on them is not counted twice.
+              const asGrid = consumptionCosts({
+                from: unit.day,
+                to: unit.day,
+                days: unit.days,
+                participantCount: ctx.participantCountOn(unit.day),
+                positions,
+                localRateChf: null,
+                usage: { partyId: null, partyReference: null, partyName: "", gridKwh: totalKwh, localKwh: 0 },
+              });
+              return {
+                localKwh: unit.localKwh,
+                gridKwh: unit.gridKwh,
+                rcpCostChf: asGrid.rcpChf,
+                localEnergyChf: localAtGridChf,
+                rcpFixedChf: asGrid.rcpFixedChf,
+                directCostChf: costs.directChf,
+                directFixedChf: costs.directFixedChf,
+                savedChf: costs.directChf - asGrid.rcpChf,
+              };
+            })()
+          : {
+              localKwh: unit.localKwh,
+              gridKwh: unit.gridKwh,
+              rcpCostChf: costs.directChf,
+              localEnergyChf: localAtGridChf,
+              rcpFixedChf: costs.directFixedChf,
+              directCostChf: costs.directChf,
+              directFixedChf: costs.directFixedChf,
+              savedChf: 0,
+            };
 
     const period = byKey.get(unit.key) ?? { date: unit.key, ...emptyTotals() };
     addInto(period, priced);

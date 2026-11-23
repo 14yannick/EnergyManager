@@ -116,6 +116,12 @@ export interface SavingsInputs {
   /** Energy consumed by neighbours (summed across parties) — this is what's sold at the neighbour rate. */
   neighborConsumptionKwh: number;
   /**
+   * What the producers drew back from the vZEV's feed-in (see
+   * DailySavings.ownVzevKwh). Neither export nor a sale. Optional: a caller
+   * without a settlement has none.
+   */
+  ownVzevKwh?: number;
+  /**
    * Grid import. Optional because nothing priced depends on it: it rides
    * along unchanged (see `DailySavings.importedKwh`), and a caller with no
    * import reading is describing a house that drew nothing, not a gap.
@@ -235,9 +241,16 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
   // priced at what the grid would have paid for it. Selling locally is worth
   // the difference, not the whole sale.
   const neighborExportForgoneChf = sellRate != null ? neighborConsumptionKwh * sellRate : 0;
+  // The producers' own vZEV consumption: their bill charges the vZEV rate for
+  // it, so the plant earns what that spares against the purchase price. With
+  // no vZEV rate the bill charges the purchase price itself, and nothing is
+  // earned. Plant and bill together: the purchase price, as for direct use.
+  const ownVzevKwh = inputs.ownVzevKwh ?? 0;
+  const ownVzevRevenueChf =
+    purchaseRate != null && neighborSellRate != null ? ownVzevKwh * (purchaseRate - neighborSellRate) : 0;
   // Every kWh the site produced ends up in exactly one of these: used at home
   // (directly or through the battery), sold to a participant, or exported.
-  const savingsWithBatteryChf = selfConsumptionValueChf + exportRevenueChf + neighborSellRevenueChf;
+  const savingsWithBatteryChf = selfConsumptionValueChf + exportRevenueChf + neighborSellRevenueChf + ownVzevRevenueChf;
 
   /*
    * Counterfactual: the same site without a battery.
@@ -293,6 +306,8 @@ export function computeSavingsFromInputs(inputs: SavingsInputs): DailySavings {
   return {
     ...inputs,
     importedKwh: inputs.importedKwh ?? 0,
+    ownVzevKwh,
+    ownVzevRevenueChf,
     selfConsumptionValueChf,
     exportRevenueChf,
     savingsWithBatteryChf,
@@ -351,6 +366,8 @@ const SUMMABLE_FIELDS = [
   "ownerFixedRcpChf",
   "rcpFixedAdvantageChf",
   "noBatteryDirectExportRevenueChf",
+  "ownVzevKwh",
+  "ownVzevRevenueChf",
 ] as const satisfies readonly (keyof DailySavings)[];
 
 /**

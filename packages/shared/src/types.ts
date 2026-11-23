@@ -595,6 +595,20 @@ export interface DailySavings {
    * those fields serve both scenarios.
    */
   noBatteryDirectExportRevenueChf: number;
+  /**
+   * What the producers drew from the vZEV's own feed-in — in a quarter-hour
+   * where their meter both fed in and drew. Not a sale to a participant: it
+   * is their own consumption, which their bill prices at the vZEV rate (the
+   * grid's while there is none).
+   */
+  ownVzevKwh: number;
+  /**
+   * Its worth to the plant: the purchase price it spared less the vZEV rate
+   * the bill charges for it — together with the bill, the grid price, as for
+   * direct use. Zero while no vZEV rate is in force: the bill then charges
+   * the grid's price, and nothing was spared.
+   */
+  ownVzevRevenueChf: number;
 }
 
 /**
@@ -804,20 +818,6 @@ export interface LiveDayCurve {
   batteryCharge: HourKwh[];
   /** What left the house each hour — to the grid or to a neighbour. */
   exportedLocal: HourKwh[];
-}
-
-export interface CfAccessStatus {
-  /** True once CF_API_TOKEN and CF_ACCOUNT_ID are both set. */
-  configured: boolean;
-}
-
-/**
- * What a sync (automatic or the manual button) did to the Cloudflare Access
- * policy's include list. Addresses only — never what a party is, since this
- * is shown after any party save, including a participant's own.
- */
-export interface CfAccessSyncResult {
-  configured: boolean;
   /**
    * The day at a finer grain than the hours above: the producers' live PV
    * and export power sensors, as Home Assistant's 5-minute means since
@@ -836,6 +836,20 @@ export interface PowerSample {
   pvW: number | null;
   /** Leaving the house, floored at zero; null when no export sensor reported. */
   exportW: number | null;
+}
+
+export interface CfAccessStatus {
+  /** True once CF_API_TOKEN and CF_ACCOUNT_ID are both set. */
+  configured: boolean;
+}
+
+/**
+ * What a sync (automatic or the manual button) did to the Cloudflare Access
+ * policy's include list. Addresses only — never what a party is, since this
+ * is shown after any party save, including a participant's own.
+ */
+export interface CfAccessSyncResult {
+  configured: boolean;
   added: string[];
   removed: string[];
   /** Already matched what Cloudflare had; nothing was sent. */

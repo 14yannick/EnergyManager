@@ -188,10 +188,16 @@ async function loadPricedSlots(
     const batteryDischargeKwh = toNumber(row.batteryDischargeKwh);
     const settled = settledAt.get(row.ts.getTime());
     // What reached the grid and is paid at the feed-in rate, everything that
-    // left the house, and what the participants took of it.
-    const exportedKwh = settled?.unsoldKwh ?? 0;
+    // left the house, and what the participants took of it. A sale needs a
+    // vZEV rate to be one: before the vZEV's own rate starts there is no vZEV
+    // to sell to, and what the participants took is paid like the rest of
+    // the export — as the consumption side prices their draw like the grid's.
+    const neighborSellRateChfPerKwh = resolveRate("neighbor_sell", instantIso);
+    const salesKwh = settled?.salesKwh ?? 0;
+    const neighborConsumptionKwh = neighborSellRateChfPerKwh != null ? salesKwh : 0;
+    const exportedKwh = (settled?.unsoldKwh ?? 0) + (salesKwh - neighborConsumptionKwh);
     const exportLocalKwh = settled?.exportKwh ?? 0;
-    const neighborConsumptionKwh = settled?.salesKwh ?? 0;
+    const ownVzevKwh = settled?.ownVzevKwh ?? 0;
 
     const priced = computeSavingsFromInputs({
       date: row.date,
@@ -206,10 +212,11 @@ async function loadPricedSlots(
       exportedKwh,
       exportLocalKwh,
       neighborConsumptionKwh,
+      ownVzevKwh,
       importedKwh: toNumber(row.importedKwh),
       purchaseRateChfPerKwh: resolveRate("purchase", instantIso),
       sellRateChfPerKwh: resolveRate("feed_in", instantIso),
-      neighborSellRateChfPerKwh: resolveRate("neighbor_sell", instantIso),
+      neighborSellRateChfPerKwh,
     });
     return {
       ...priced,

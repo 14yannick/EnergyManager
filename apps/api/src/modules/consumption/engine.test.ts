@@ -196,8 +196,27 @@ describe("a day outside the party's membership", () => {
     const units = dailyUnits("2026-12-01", "2026-12-31").map((u) => ({ ...u, member: false }));
     const { totals } = priceConsumption(units, ctx());
     expect(totals.rcpCostChf).toBeCloseTo(totals.directCostChf, 9);
-    expect(totals.localEnergyChf).toBe(0);
     expect(totals.savedChf).toBeCloseTo(0, 9);
     expect(totals.directCostChf).toBeGreaterThan(0);
+    // Its vZEV kWh cost what the grid charges per kWh, shown as such.
+    const gridPerKwh = (totals.directCostChf - totals.directFixedChf) / (totals.localKwh + totals.gridKwh);
+    expect(totals.localEnergyChf).toBeCloseTo(totals.localKwh * gridPerKwh, 9);
+    expect(totals.localEnergyChf).toBeGreaterThan(0);
+  });
+});
+
+describe("vZEV energy with no vZEV rate", () => {
+  it("bills a member as if those kWh came off the grid, and shows them at the grid's price", () => {
+    const units = dailyUnits("2026-01-01", "2026-01-31");
+    const noRate = priceConsumption(units, ctx({ localRateOn: () => null })).totals;
+    // The same bill as if those kWh had all come off the grid.
+    const allGrid = priceConsumption(
+      units.map((u) => ({ ...u, localKwh: 0, gridKwh: u.gridKwh + u.localKwh })),
+      ctx({ localRateOn: () => null }),
+    ).totals;
+    const gridPerKwh = (noRate.directCostChf - noRate.directFixedChf) / (noRate.localKwh + noRate.gridKwh);
+    expect(noRate.localEnergyChf).toBeCloseTo(noRate.localKwh * gridPerKwh, 9);
+    expect(noRate.rcpCostChf).toBeCloseTo(allGrid.rcpCostChf, 9);
+    expect(noRate.savedChf).toBeCloseTo(noRate.directCostChf - noRate.rcpCostChf, 9);
   });
 });

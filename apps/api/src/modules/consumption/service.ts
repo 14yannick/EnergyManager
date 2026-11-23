@@ -1,6 +1,6 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { PartyConsumption, SavingsQuery } from "@energy-manager/shared";
-import { effectiveSensorProfile, findRateForInstant } from "@energy-manager/shared";
+import { findRateForInstant } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, parties, tariffPeriods } from "../../db/schema/index.js";
 import { toNumber } from "../../lib/numeric.js";
@@ -81,31 +81,25 @@ interface HourDraw {
  * provider's split where it is in, else the party's own import sensor,
  * shared by the vZEV's rule (see vzev/settlement.ts).
  *
- * A producer's share worked out from their sensor is all grid here: in the
- * same quarter-hour they fed in, their draw bought nothing from the vZEV —
- * the revenue side counts that energy as exported, and this side, to agree
- * with it, counts the draw as imported. The provider's own split, when it
- * comes, is taken as given for them like for anyone.
+ * A producer's share is theirs like anyone's: drawing in the same
+ * quarter-hour they fed in, they take their part of the feed-in as vZEV
+ * consumption — which the revenue side sells them at the vZEV's rate — and
+ * only the rest from the grid.
  */
 async function loadPartyDraws(
   siteId: string,
   fromBound: SQL,
   toBoundExclusive: SQL,
 ): Promise<Map<string, Map<string, HourDraw>>> {
-  const [settlement, siteParties] = await Promise.all([
-    loadVzevSettlement(siteId, fromBound, toBoundExclusive),
-    db.select().from(parties).where(eq(parties.siteId, siteId)),
-  ]);
-  const producers = new Set(siteParties.filter((p) => effectiveSensorProfile(p).feedIn).map((p) => p.id));
+  const settlement = await loadVzevSettlement(siteId, fromBound, toBoundExclusive);
   const draws = new Map<string, Map<string, HourDraw>>();
   for (const interval of settlement) {
     const key = localQuarterKey(interval.ts);
     for (const share of interval.shares) {
-      const ownFeedIn = !share.official && producers.has(share.partyId);
       const hours = draws.get(share.partyId) ?? new Map<string, HourDraw>();
       const sum = hours.get(key) ?? { localKwh: 0, gridKwh: 0 };
-      sum.localKwh += ownFeedIn ? 0 : share.local;
-      sum.gridKwh += ownFeedIn ? share.local + share.grid : share.grid;
+      sum.localKwh += share.local;
+      sum.gridKwh += share.grid;
       hours.set(key, sum);
       draws.set(share.partyId, hours);
     }
