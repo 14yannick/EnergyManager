@@ -818,6 +818,24 @@ export interface CfAccessStatus {
  */
 export interface CfAccessSyncResult {
   configured: boolean;
+  /**
+   * The day at a finer grain than the hours above: the producers' live PV
+   * and export power sensors, as Home Assistant's 5-minute means since
+   * local midnight, closed by the reading of this instant. Empty without
+   * those sensors, or when Home Assistant has no short-term statistics for
+   * them — the chart then falls back to the hours.
+   */
+  power: PowerSample[];
+}
+
+/** One instant of the day's power curve, in watts. */
+export interface PowerSample {
+  /** The 5-minute bucket's start, or the live reading's instant for the last one. */
+  ts: string;
+  /** What the panels deliver; null when no PV sensor reported for this bucket. */
+  pvW: number | null;
+  /** Leaving the house, floored at zero; null when no export sensor reported. */
+  exportW: number | null;
   added: string[];
   removed: string[];
   /** Already matched what Cloudflare had; nothing was sent. */

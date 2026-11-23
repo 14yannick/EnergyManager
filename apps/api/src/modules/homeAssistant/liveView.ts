@@ -1,11 +1,11 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import type { HourKwh, LiveDayCurve, LiveEnergyView, PartySensorKind, TomorrowForecast } from "@energy-manager/shared";
+import type { HourKwh, LiveDayCurve, LiveEnergyView, PartySensorKind, PowerSample, TomorrowForecast } from "@energy-manager/shared";
 import { db } from "../../db/client.js";
 import { intervalMetrics, sites } from "../../db/schema/index.js";
 import { activeSensors } from "../partySensors/service.js";
 import { fetchHaNumericStates, fetchHaSunPosition, fetchSolarForecast, fetchStatisticMeans } from "./haClient.js";
 import { SITE_TZ, forecastForDay, localDayHour, mergeForecastSources } from "./forecastCurve.js";
-import { bestByHour, referenceAt } from "./skyReference.js";
+import { bestByHour, localHourMinute, referenceAt } from "./skyReference.js";
 
 /**
  * The forecast, remembered for a few minutes.
@@ -114,7 +114,74 @@ async function todaysCurve(siteId: string, now: Date): Promise<LiveDayCurve | nu
   const exportedLocal: HourKwh[] = nonZero.map((r) => ({ hour: r.hour, kwh: round(r.exportLocalKwh) }));
   const forecast = forecastForDay(mergeForecastSources(sources), day);
   if (actual.length === 0 && forecast.length === 0) return null;
-  return { day, currentHour, actual, forecast, batteryCharge, exportedLocal };
+  return { day, currentHour, actual, forecast, batteryCharge, exportedLocal, power: [] };
+}
+
+/**
+ * The 5-minute statistics move every five minutes while the page asks every
+ * minute, and each ask opens a websocket session: kept for two minutes per
+ * set of sensors.
+ */
+const POWER_TTL_MS = 2 * 60 * 1000;
+const powerCache = new Map<string, { at: number; samples: PowerSample[] }>();
+
+interface PowerSensor {
+  entityId: string;
+  kind: PartySensorKind;
+  inverted: boolean;
+}
+
+/**
+ * Today's power curve since local midnight, from Home Assistant's 5-minute
+ * means of the producers' PV and export sensors — each turned the way its
+ * `inverted` flag says, summed across producers per bucket, export floored
+ * at zero afterwards (a house drawing is no negative export). Best-effort:
+ * an empty list when Home Assistant cannot be read, and the chart falls
+ * back to the hours.
+ */
+async function todaysPower(sensors: PowerSensor[], now: Date): Promise<PowerSample[]> {
+  const relevant = sensors.filter((s) => s.kind === "live_pv_power" || s.kind === "live_export_power");
+  if (relevant.length === 0) return [];
+  const key = relevant
+    .map((s) => `${s.kind}:${s.entityId}:${s.inverted ? 1 : 0}`)
+    .sort()
+    .join(",");
+  const cached = powerCache.get(key);
+  if (cached && now.getTime() - cached.at < POWER_TTL_MS) return cached.samples;
+  try {
+    const start = localMidnight(now);
+    const means = await fetchStatisticMeans([...new Set(relevant.map((s) => s.entityId))], start, now, "5minute");
+    const buckets = new Map<number, { pv: number | null; exp: number | null }>();
+    for (const s of relevant) {
+      for (const b of means.get(s.entityId) ?? []) {
+        const t = b.start.getTime();
+        const acc = buckets.get(t) ?? { pv: null, exp: null };
+        const value = s.inverted ? -b.mean : b.mean;
+        if (s.kind === "live_pv_power") acc.pv = (acc.pv ?? 0) + value;
+        else acc.exp = (acc.exp ?? 0) + value;
+        buckets.set(t, acc);
+      }
+    }
+    const samples = [...buckets.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([t, { pv, exp }]) => ({
+        ts: new Date(t).toISOString(),
+        pvW: pv == null ? null : Math.max(Math.round(pv), 0),
+        exportW: exp == null ? null : Math.max(Math.round(exp), 0),
+      }));
+    powerCache.set(key, { at: now.getTime(), samples });
+    return samples;
+  } catch {
+    return cached?.samples ?? [];
+  }
+}
+
+/** The instant the site's current local day began. */
+function localMidnight(now: Date): Date {
+  const { hour, minute } = localHourMinute(now);
+  const back = new Date(now.getTime() - (hour * 60 + minute) * 60 * 1000);
+  back.setUTCSeconds(0, 0);
+  return back;
 }
 
 /** The next local calendar day. Noon UTC as the anchor keeps this safe
@@ -194,9 +261,10 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
 
   // The producers' PV sensors, each turned the way its flag says.
   const pvSensors = sensors.filter((s) => s.feedIn && s.kind === "live_pv_power");
-  const [states, profiles] = await Promise.all([
+  const [states, profiles, power] = await Promise.all([
     fetchHaNumericStates(ids),
     pvSensors.length > 0 ? pvReferenceProfiles(pvSensors.map((s) => s.entityId), now) : Promise.resolve([]),
+    today ? todaysPower(sensors.filter((s) => s.feedIn), now) : Promise.resolve([]),
   ]);
   // Several plants add up, as their output does. Null without a profile —
   // no sensor, or none of its history readable.
@@ -245,6 +313,16 @@ export async function getLiveEnergyView(siteId: string): Promise<LiveEnergyView 
   // Likewise for the battery: positive means charging once the sign is
   // normalised, and whichever way it is flowing, the other figure is zero.
   const charging = total("live_battery_power");
+
+  // The curve closes on this instant's own reading, so the line reaches
+  // "now" rather than stopping at the last finished 5-minute bucket.
+  if (today && power.length > 0) {
+    const pvNow = total("live_pv_power");
+    today.power = [
+      ...power,
+      { ts: at, pvW: pvNow == null ? null : Math.max(pvNow, 0), exportW: gridOut == null ? null : Math.max(gridOut, 0) },
+    ];
+  }
 
   return {
     today,

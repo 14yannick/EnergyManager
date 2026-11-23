@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { rateBand, rateGradientStops, type FeedInRatePoint, type LiveDayCurve, type RateBand, type TomorrowForecast } from "@energy-manager/shared";
+import { rateBand, rateGradientStops, type FeedInRatePoint, type HourKwh, type LiveDayCurve, type PowerSample, type RateBand, type TomorrowForecast } from "@energy-manager/shared";
 import { formatKwh, formatNumber } from "../lib/format";
 import { api } from "../api/client";
 import { PALETTE } from "../lib/palette";
@@ -185,10 +185,6 @@ export function LiveSection({
   if (!live) return null;
   const feedInRateByHour = showFeedInRate ? hourlyRate(dayRateQuery.data, "rateChfPerKwh") : undefined;
   const purchaseRateByHour = showFeedInRate ? hourlyRate(dayRateQuery.data, "purchaseRateChfPerKwh") : undefined;
-  const tomorrowFeedInRateByHour = showFeedInRate ? hourlyRate(tomorrowRateQuery.data, "rateChfPerKwh") : undefined;
-  const tomorrowPurchaseRateByHour = showFeedInRate
-    ? hourlyRate(tomorrowRateQuery.data, "purchaseRateChfPerKwh")
-    : undefined;
 
   // The cards need a live entity each; the day's curve needs none — it
   // reads production from the store and the forecast from Home Assistant's
@@ -235,8 +231,8 @@ export function LiveSection({
             tomorrow={live.tomorrow}
             feedInRateByHour={feedInRateByHour}
             purchaseRateByHour={purchaseRateByHour}
-            tomorrowFeedInRateByHour={tomorrowFeedInRateByHour}
-            tomorrowPurchaseRateByHour={tomorrowPurchaseRateByHour}
+            ratePoints={showFeedInRate ? dayRateQuery.data : undefined}
+            tomorrowRatePoints={showFeedInRate ? tomorrowRateQuery.data : undefined}
             showTomorrow={showTomorrow}
             dayView={dayView}
             onDayViewChange={setDayView}
@@ -439,19 +435,21 @@ function DayCurveChart({
   tomorrow,
   feedInRateByHour,
   purchaseRateByHour,
-  tomorrowFeedInRateByHour,
-  tomorrowPurchaseRateByHour,
+  ratePoints,
+  tomorrowRatePoints,
   showTomorrow,
   dayView,
   onDayViewChange,
 }: {
   today: LiveDayCurve;
+  /** Today's feed-in rate at its own grain, for the 5-minute view. Undefined for a participant. */
+  ratePoints?: FeedInRatePoint[];
+  /** Tomorrow's, likewise. */
+  tomorrowRatePoints?: FeedInRatePoint[];
   tomorrow: TomorrowForecast | null;
   /** Undefined for a participant: see LiveSection's `showFeedInRate`. */
   feedInRateByHour?: Map<number, number>;
   purchaseRateByHour?: Map<number, number>;
-  tomorrowFeedInRateByHour?: Map<number, number>;
-  tomorrowPurchaseRateByHour?: Map<number, number>;
   showTomorrow: boolean;
   dayView: "today" | "tomorrow";
   onDayViewChange: (view: "today" | "tomorrow") => void;
@@ -462,36 +460,14 @@ function DayCurveChart({
   // "tomorrow" while `showTomorrow` holds, so this never fights the user,
   // only a state that outlived the data behind it.
   const view = showTomorrow ? dayView : "today";
-  const rateByHour = view === "today" ? feedInRateByHour : tomorrowFeedInRateByHour;
-  const hasRate = (rateByHour?.size ?? 0) > 0;
+  // The finer picture whenever Home Assistant has it: today's needs the live
+  // sensors' readings, and the hours stay as its fallback without them.
+  // Tomorrow's needs none — a forecast and the rate, both already known.
+  const fine =
+    view === "tomorrow" ? !!tomorrow : today.power.some((s) => (s.pvW ?? 0) > 0 || (s.exportW ?? 0) > 0);
+  // The hours below are today's fallback only: tomorrow is always drawn finer.
+  const hasRate = (feedInRateByHour?.size ?? 0) > 0;
   const points = useMemo<CurvePoint[]>(() => {
-    if (view === "tomorrow") {
-      if (!tomorrow) return [];
-      const forecast = new Map(tomorrow.hourly.map((h) => [h.hour, h.kwh]));
-      const hours = [...forecast.entries()].filter(([, kwh]) => kwh > 0).map(([hour]) => hour);
-      if (hours.length === 0) return [];
-      const first = Math.min(...hours);
-      const last = Math.max(...hours);
-      const out: CurvePoint[] = [];
-      for (let hour = first; hour <= last; hour++) {
-        const f = forecast.get(hour) ?? null;
-        out.push({
-          hour,
-          label: `${String(hour).padStart(2, "0")}:00`,
-          made: null,
-          exported: null,
-          kept: null,
-          forecast: f,
-          // The whole day is still ahead — unlike today, there is no "so
-          // far" to subtract it from.
-          remaining: f,
-          feedInRate: tomorrowFeedInRateByHour?.get(hour) ?? null,
-          purchaseRate: tomorrowPurchaseRateByHour?.get(hour) ?? null,
-          partial: false,
-        });
-      }
-      return out;
-    }
     const production = new Map(today.actual.map((h) => [h.hour, h.kwh]));
     const charge = new Map(today.batteryCharge.map((h) => [h.hour, h.kwh]));
     const exportedLocal = new Map(today.exportedLocal.map((h) => [h.hour, h.kwh]));
@@ -535,7 +511,7 @@ function DayCurveChart({
       });
     }
     return out;
-  }, [view, today, tomorrow, feedInRateByHour, purchaseRateByHour, tomorrowFeedInRateByHour, tomorrowPurchaseRateByHour]);
+  }, [today, feedInRateByHour, purchaseRateByHour]);
 
   // The gradient that paints the rate line by band. Against the day's
   // purchase price (constant within a day: periods change at midnight),
@@ -566,8 +542,12 @@ function DayCurveChart({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm font-medium text-slate-900">
-            {t(view === "tomorrow" ? "party.live.tomorrowChart" : "party.live.chart")}
-            <InfoTip text={t(view === "tomorrow" ? "party.live.tomorrowChartNote" : "party.live.chartNote")} />
+            {t(view === "tomorrow" ? "party.live.tomorrowChart" : fine ? "party.live.chartFine" : "party.live.chart")}
+            <InfoTip
+              text={t(
+                view === "tomorrow" ? "party.live.tomorrowChartNote" : fine ? "party.live.chartFineNote" : "party.live.chartNote",
+              )}
+            />
           </p>
           {showTomorrow && <DayViewToggle view={view} onChange={onDayViewChange} />}
         </div>
@@ -577,167 +557,558 @@ function DayCurveChart({
       </div>
       {/* Grows into the card's spare height; never shorter than it was on its own. */}
       <div className="mt-3 h-56 min-h-56 flex-1 sm:h-64 sm:min-h-64 xl:h-auto">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={points} barCategoryGap="25%">
-            <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.gridline} vertical={false} />
-            {/* "preserveStartEnd" thins by the space actually rendered, rather
-                than a fixed count: a summer day's 14 hours fit at desktop
-                width and ran together at 390px, where a fixed "show every
-                one under 14" interval showed all of them regardless. */}
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
-            <YAxis tick={{ fontSize: 11 }} width={40} domain={[0, "auto"]} tickFormatter={(v: number) => formatKwh(v)} />
-            {/* Both domains start at exactly 0, so the zero line lands on the
-                same pixel row for both axes without any further alignment —
-                unlike the revenue chart's, neither can go negative. */}
-            {hasRate && (
-              <YAxis
-                yAxisId="rate"
-                orientation="right"
-                tick={{ fontSize: 11, fill: PALETTE.axis }}
-                width={48}
-                // A fixed window in 5 ct. steps, so the same rate reads at the
-                // same height day after day; only a rate outside it moves an
-                // end, to the next step.
-                domain={[rateTicks[0]!, rateTicks[rateTicks.length - 1]!]}
-                ticks={rateTicks}
-                tickFormatter={(v: number) => formatNumber(v, 2)}
-              />
-            )}
-            <Tooltip
-              content={({ active, payload }) => {
-                const p = payload?.[0]?.payload as CurvePoint | undefined;
-                if (!active || !p) return null;
-                return (
-                  <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
-                    <p className="mb-1 font-medium text-slate-900">
-                      {p.label}
-                      {p.partial ? ` · ${t("party.live.partial")}` : ""}
-                    </p>
-                    {view === "today" && (
-                      <>
-                        <p className="text-slate-600">
-                          {t("party.live.madeToday")}:{" "}
-                          <span className="font-semibold text-slate-900">
-                            {p.made == null ? "—" : `${formatKwh(p.made, 2)} kWh`}
-                          </span>
-                        </p>
-                        <p className="pl-2 text-slate-500">
-                          {t("party.live.leftHouse")}: {p.exported == null ? "—" : `${formatKwh(p.exported, 2)} kWh`}
-                        </p>
-                        <p className="pl-2 text-slate-500">
-                          {t("party.live.keptAtHome")}: {p.kept == null ? "—" : `${formatKwh(p.kept, 2)} kWh`}
-                        </p>
-                      </>
-                    )}
-                    <p className="mt-1 text-slate-600">
-                      {t("party.live.forecast")}:{" "}
-                      <span className="font-semibold text-slate-900">
-                        {p.forecast == null ? "—" : `${formatKwh(p.forecast, 2)} kWh`}
-                      </span>
-                    </p>
-                    {hasRate && (
+        {fine ? (
+          view === "tomorrow" ? (
+            <PowerDayChart day={tomorrow!.day} forecast={tomorrow!.hourly} power={[]} ratePoints={tomorrowRatePoints} />
+          ) : (
+            <PowerDayChart day={today.day} forecast={today.forecast} power={today.power} ratePoints={ratePoints} />
+          )
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={points} barCategoryGap="25%">
+              <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.gridline} vertical={false} />
+              {/* "preserveStartEnd" thins by the space actually rendered, rather
+                  than a fixed count: a summer day's 14 hours fit at desktop
+                  width and ran together at 390px, where a fixed "show every
+                  one under 14" interval showed all of them regardless. */}
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
+              <YAxis tick={{ fontSize: 11 }} width={40} domain={[0, "auto"]} tickFormatter={(v: number) => formatKwh(v)} />
+              {/* Both domains start at exactly 0, so the zero line lands on the
+                  same pixel row for both axes without any further alignment —
+                  unlike the revenue chart's, neither can go negative. */}
+              {hasRate && (
+                <YAxis
+                  yAxisId="rate"
+                  orientation="right"
+                  tick={{ fontSize: 11, fill: PALETTE.axis }}
+                  width={48}
+                  // A fixed window in 5 ct. steps, so the same rate reads at the
+                  // same height day after day; only a rate outside it moves an
+                  // end, to the next step.
+                  domain={[rateTicks[0]!, rateTicks[rateTicks.length - 1]!]}
+                  ticks={rateTicks}
+                  tickFormatter={(v: number) => formatNumber(v, 2)}
+                />
+              )}
+              <Tooltip
+                content={({ active, payload }) => {
+                  const p = payload?.[0]?.payload as CurvePoint | undefined;
+                  if (!active || !p) return null;
+                  return (
+                    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+                      <p className="mb-1 font-medium text-slate-900">
+                        {p.label}
+                        {p.partial ? ` · ${t("party.live.partial")}` : ""}
+                      </p>
+                      {view === "today" && (
+                        <>
+                          <p className="text-slate-600">
+                            {t("party.live.madeToday")}:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {p.made == null ? "—" : `${formatKwh(p.made, 2)} kWh`}
+                            </span>
+                          </p>
+                          <p className="pl-2 text-slate-500">
+                            {t("party.live.leftHouse")}: {p.exported == null ? "—" : `${formatKwh(p.exported, 2)} kWh`}
+                          </p>
+                          <p className="pl-2 text-slate-500">
+                            {t("party.live.keptAtHome")}: {p.kept == null ? "—" : `${formatKwh(p.kept, 2)} kWh`}
+                          </p>
+                        </>
+                      )}
                       <p className="mt-1 text-slate-600">
-                        {t("calc.col.feedInRate")}:{" "}
-                        <span className="font-semibold text-slate-900" style={{ color: rateColorOf(p.feedInRate) }}>
-                          {p.feedInRate == null ? "—" : `${formatNumber(p.feedInRate, 3)} CHF/kWh`}
+                        {t("party.live.forecast")}:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {p.forecast == null ? "—" : `${formatKwh(p.forecast, 2)} kWh`}
                         </span>
                       </p>
-                    )}
-                  </div>
-                );
-              }}
-            />
-            {/* Labels in ink, not in the series colour recharts defaults to:
-                the faint "still expected" tint is unreadable as text, and
-                identity is the swatch's job. */}
-            <Legend content={<DayLegend />} />
-            <Area
-              type="monotone"
-              dataKey="remaining"
-              name={t("party.live.stillExpected")}
-              stroke="none"
-              fill={REMAINING_FILL}
-              // A square, not the line-and-dot recharts gives an area, which
-              // would be the forecast's own icon twice over.
-              legendType="rect"
-              isAnimationActive={false}
-              connectNulls={false}
-            />
-            {/* Stacked to the height of "Made": what left the house at the
-                foot, the same colour and position the single bar used to
-                have, and what stayed — self-consumed plus whatever charged
-                the battery — on top of it. Only the top segment is rounded,
-                as one bar rather than two independently-cornered blocks.
-                Tomorrow has no bars at all: nothing has happened yet. */}
-            {view === "today" && (
-              <>
-                <Bar
-                  dataKey="exported"
-                  name={t("party.live.leftHouse")}
-                  stackId="made"
-                  fill={EXPORTED_COLOR}
-                  maxBarSize={28}
-                  isAnimationActive={false}
-                />
-                <Bar
-                  dataKey="kept"
-                  name={t("party.live.keptAtHome")}
-                  stackId="made"
-                  fill={KEPT_COLOR}
-                  maxBarSize={28}
-                  radius={[3, 3, 0, 0]}
-                  isAnimationActive={false}
-                />
-              </>
-            )}
-            <Line
-              type="monotone"
-              dataKey="forecast"
-              name={t("party.live.forecast")}
-              stroke={FORECAST_COLOR}
-              strokeWidth={2}
-              strokeDasharray="5 4"
-              dot={false}
-              isAnimationActive={false}
-              connectNulls={false}
-            />
-            {hasRate && (
-              <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  {rateStops.map((s, i) => (
-                    <stop key={i} offset={`${(s.offset * 100).toFixed(3)}%`} stopColor={RATE_COLORS[s.band]} />
-                  ))}
-                </linearGradient>
-              </defs>
-            )}
-            {hasRate && (
-              <Line
-                yAxisId="rate"
+                      {hasRate && (
+                        <p className="mt-1 text-slate-600">
+                          {t("calc.col.feedInRate")}:{" "}
+                          <span className="font-semibold text-slate-900" style={{ color: rateColorOf(p.feedInRate) }}>
+                            {p.feedInRate == null ? "—" : `${formatNumber(p.feedInRate, 3)} CHF/kWh`}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
+              />
+              {/* Labels in ink, not in the series colour recharts defaults to:
+                  the faint "still expected" tint is unreadable as text, and
+                  identity is the swatch's job. */}
+              <Legend content={<DayLegend />} />
+              <Area
                 type="monotone"
-                dataKey="feedInRate"
-                name={t("calc.col.feedInRate")}
-                stroke={rateStroke}
-                strokeWidth={2}
-                // Often covers only part of the window — early in the day, or
-                // early in the evening for tomorrow — which can be a single
-                // point, which a bare line (no dot) would draw as nothing at
-                // all. Each dot wears its own hour's band: a gradient over a
-                // dot's own tiny box would not.
-                dot={(props: unknown) => {
-                  const p = props as RateDotProps;
-                  return <circle key={p.key} cx={p.cx} cy={p.cy} r={2.5} fill={rateColorOf(p.value ?? null)} />;
-                }}
-                activeDot={(props: unknown) => {
-                  const p = props as RateDotProps;
-                  return <circle key={p.key} cx={p.cx} cy={p.cy} r={4} fill={rateColorOf(p.value ?? null)} />;
-                }}
+                dataKey="remaining"
+                name={t("party.live.stillExpected")}
+                stroke="none"
+                fill={REMAINING_FILL}
+                // A square, not the line-and-dot recharts gives an area, which
+                // would be the forecast's own icon twice over.
+                legendType="rect"
                 isAnimationActive={false}
                 connectNulls={false}
               />
-            )}
-          </ComposedChart>
-        </ResponsiveContainer>
+              {/* Stacked to the height of "Made": what left the house at the
+                  foot, the same colour and position the single bar used to
+                  have, and what stayed — self-consumed plus whatever charged
+                  the battery — on top of it. Only the top segment is rounded,
+                  as one bar rather than two independently-cornered blocks.
+                  Tomorrow has no bars at all: nothing has happened yet. */}
+              {view === "today" && (
+                <>
+                  <Bar
+                    dataKey="exported"
+                    name={t("party.live.leftHouse")}
+                    stackId="made"
+                    fill={EXPORTED_COLOR}
+                    maxBarSize={28}
+                    isAnimationActive={false}
+                  />
+                  <Bar
+                    dataKey="kept"
+                    name={t("party.live.keptAtHome")}
+                    stackId="made"
+                    fill={KEPT_COLOR}
+                    maxBarSize={28}
+                    radius={[3, 3, 0, 0]}
+                    isAnimationActive={false}
+                  />
+                </>
+              )}
+              <Line
+                type="monotone"
+                dataKey="forecast"
+                name={t("party.live.forecast")}
+                stroke={FORECAST_COLOR}
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                dot={false}
+                isAnimationActive={false}
+                connectNulls={false}
+              />
+              {hasRate && (
+                <defs>
+                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                    {rateStops.map((s, i) => (
+                      <stop key={i} offset={`${(s.offset * 100).toFixed(3)}%`} stopColor={RATE_COLORS[s.band]} />
+                    ))}
+                  </linearGradient>
+                </defs>
+              )}
+              {hasRate && (
+                <Line
+                  yAxisId="rate"
+                  type="monotone"
+                  dataKey="feedInRate"
+                  name={t("calc.col.feedInRate")}
+                  stroke={rateStroke}
+                  strokeWidth={2}
+                  // Often covers only part of the window — early in the day, or
+                  // early in the evening for tomorrow — which can be a single
+                  // point, which a bare line (no dot) would draw as nothing at
+                  // all. Each dot wears its own hour's band: a gradient over a
+                  // dot's own tiny box would not.
+                  dot={(props: unknown) => {
+                    const p = props as RateDotProps;
+                    return <circle key={p.key} cx={p.cx} cy={p.cy} r={2.5} fill={rateColorOf(p.value ?? null)} />;
+                  }}
+                  activeDot={(props: unknown) => {
+                    const p = props as RateDotProps;
+                    return <circle key={p.key} cx={p.cx} cy={p.cy} r={4} fill={rateColorOf(p.value ?? null)} />;
+                  }}
+                  isAnimationActive={false}
+                  connectNulls={false}
+                />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
+  );
+}
+
+/** An instant in the site's zone to "HH:MM". */
+function zurichClock(t: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Zurich",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(t));
+}
+
+/**
+ * The instant a local wall-clock time on `day` falls on, in the site's zone.
+ * Read as UTC first, then moved by the zone's offset at that instant — twice,
+ * so an hour beside a DST switch still lands on the right side of it.
+ */
+function zurichInstant(day: string, hour: number, minute = 0): number {
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const wall = Date.UTC(y, m - 1, d, hour, minute);
+  let t = wall;
+  for (let i = 0; i < 2; i++) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Zurich",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date(t));
+    const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+    const seen = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour") % 24, get("minute"));
+    t += wall - seen;
+  }
+  return t;
+}
+
+interface PowerRow {
+  t: number;
+  /** kW: the panels' output — a 5-minute mean, or the live reading for the last row. */
+  pv: number | null;
+  /** kW: leaving the house, floored at zero. */
+  exp: number | null;
+  /** kW: pv − exp, floored at zero — stacked on `exp`, so the stack's top is production. */
+  kept: number | null;
+  /** True for a reading's own row; pv/exp elsewhere are interpolated, so the stack has no holes. */
+  sampled: boolean;
+  /** kW: the hour's forecast as its mean power, at the hour's middle only. */
+  forecast: number | null;
+  /** The forecast again, from the hour in progress on. */
+  remaining: number | null;
+  /** CHF/kWh, at each rate point's own instant only; the line steps between them. */
+  feedInRate: number | null;
+}
+
+/** Below this the panels are taken as dark: a sensor's idle noise is not a sunrise. */
+const PV_ON_KW = 0.02;
+
+/**
+ * Today at the grain Home Assistant keeps — 5-minute means of the panels'
+ * power and of what leaves the house — in place of the hourly bars, when
+ * the live sensors are there. The forecast is hourly energy, which over an
+ * hour is that hour's mean power: the same number, drawn at the hour's
+ * middle on the same kW axis. The feed-in rate steps at each of its own
+ * points (a quarter-hour with the dynamic feed), not averaged into hours.
+ */
+function PowerDayChart({
+  day,
+  forecast,
+  power,
+  ratePoints,
+}: {
+  /** YYYY-MM-DD, the site's local day drawn. */
+  day: string;
+  forecast: HourKwh[];
+  /** The readings so far — none for tomorrow, which is all still ahead. */
+  power: PowerSample[];
+  /** Undefined for a participant: see LiveSection's `showFeedInRate`. */
+  ratePoints?: FeedInRatePoint[];
+}) {
+  const t = useT();
+  const gradientId = useId().replace(/:/g, "");
+
+  const model = useMemo(() => {
+    const forecastByHour = new Map(forecast.map((h) => [h.hour, h.kwh]));
+    const samples = power.map((s) => ({
+      t: Date.parse(s.ts),
+      pv: s.pvW == null ? null : s.pvW / 1000,
+      exp: s.exportW == null ? null : s.exportW / 1000,
+    }));
+    // The window: from the first instant with anything in it — sun, or a
+    // forecast hour — to the last, on whole hours, so a night of zeros does
+    // not squeeze the day into a corner (as the hourly chart does).
+    const lit = samples.filter((s) => (s.pv ?? 0) > PV_ON_KW || (s.exp ?? 0) > PV_ON_KW).map((s) => s.t);
+    const forecastHours = [...forecastByHour.entries()].filter(([, kwh]) => kwh > 0).map(([h]) => h);
+    const starts = [...lit, ...forecastHours.map((h) => zurichInstant(day, h))];
+    const ends = [...lit, ...forecastHours.map((h) => zurichInstant(day, h + 1))];
+    if (starts.length === 0) return null;
+    const hourMs = 60 * 60 * 1000;
+    const start = Math.floor(Math.min(...starts) / hourMs) * hourMs;
+    const end = Math.ceil(Math.max(...ends) / hourMs) * hourMs;
+
+    const rows = new Map<number, PowerRow>();
+    const row = (at: number): PowerRow => {
+      let r = rows.get(at);
+      if (!r) {
+        r = { t: at, pv: null, exp: null, kept: null, sampled: false, forecast: null, remaining: null, feedInRate: null };
+        rows.set(at, r);
+      }
+      return r;
+    };
+    for (const s of samples) {
+      if (s.t < start || s.t > end) continue;
+      const r = row(s.t);
+      r.pv = s.pv;
+      r.exp = s.exp;
+      r.sampled = true;
+    }
+    // What is still to come starts at the last reading — "now" — not at the
+    // next hour's middle: the forecast's straight line between the two
+    // middles around it gives its height there.
+    const lastRead = samples.length > 0 ? samples[samples.length - 1]!.t : null;
+    const middles = [...forecastByHour.entries()]
+      .map(([hour, kwh]) => ({ at: zurichInstant(day, hour, 30), kwh }))
+      .sort((x, y) => x.at - y.at);
+    for (const { at, kwh } of middles) {
+      if (at < start || at > end) continue;
+      const r = row(at);
+      r.forecast = kwh;
+      r.remaining = lastRead == null || at >= lastRead ? kwh : null;
+    }
+    const after = middles.findIndex((m) => lastRead != null && m.at > lastRead);
+    if (lastRead != null && after > 0) {
+      const x = middles[after - 1]!;
+      const y = middles[after]!;
+      row(lastRead).remaining = x.kwh + ((y.kwh - x.kwh) * (lastRead - x.at)) / (y.at - x.at);
+    }
+    const rates = (ratePoints ?? [])
+      .map((p) => ({ t: Date.parse(p.ts), rate: p.rateChfPerKwh, purchase: p.purchaseRateChfPerKwh }))
+      .filter((p): p is { t: number; rate: number; purchase: number | null } => p.rate != null && p.t >= start && p.t < end)
+      .sort((a, b) => a.t - b.t);
+    for (const p of rates) row(p.t).feedInRate = p.rate;
+    // The last rate holds to the window's end, so its step is drawn too.
+    if (rates.length > 0) row(end).feedInRate = rates[rates.length - 1]!.rate;
+
+    // A stacked area takes a missing value for zero, so a forecast or rate
+    // row between two readings would cut a notch to the axis: give it the
+    // readings' straight line instead. After the last reading there is none.
+    const sorted = [...rows.values()].sort((a, b) => a.t - b.t);
+    const read = sorted.filter((r) => r.sampled);
+    for (let i = 0, j = 0; i < sorted.length; i++) {
+      const r = sorted[i]!;
+      while (j < read.length && read[j]!.t < r.t) j++;
+      if (!r.sampled && j > 0 && j < read.length) {
+        const a = read[j - 1]!;
+        const b = read[j]!;
+        const w = (r.t - a.t) / (b.t - a.t);
+        const lerp = (x: number | null, y: number | null) => (x == null || y == null ? null : x + (y - x) * w);
+        r.pv = lerp(a.pv, b.pv);
+        r.exp = lerp(a.exp, b.exp);
+      }
+      r.kept = r.pv == null ? null : Math.max(r.pv - (r.exp ?? 0), 0);
+    }
+
+    const span = (end - start) / hourMs;
+    const step = span > 10 ? 2 : 1;
+    const ticks: number[] = [];
+    for (let at = start; at <= end; at += step * hourMs) ticks.push(at);
+    return {
+      rows: sorted,
+      start,
+      end,
+      ticks,
+      forecastByHour,
+      rates,
+      purchase: rates.find((p) => p.purchase != null)?.purchase ?? null,
+      lastT: samples.length > 0 ? samples[samples.length - 1]!.t : null,
+      hasSamples: samples.length > 0,
+    };
+  }, [day, forecast, power, ratePoints]);
+
+  if (!model) return null;
+  const { rows, start, end, ticks, forecastByHour, rates, purchase, lastT, hasSamples } = model;
+  const rateValues = rates.map((p) => p.rate);
+  const hasRate = rateValues.length > 0;
+  const rateStops = hasRate ? rateGradientStops(Math.min(...rateValues), Math.max(...rateValues), purchase) : [];
+  const flat = hasRate && Math.max(...rateValues) - Math.min(...rateValues) <= 0;
+  const rateStroke = flat ? RATE_COLORS[rateStops[0]!.band] : `url(#${gradientId})`;
+  const rateColorOf = (rate: number | null) => (rate == null ? undefined : RATE_COLORS[rateBand(rate, purchase)]);
+  const rateTicks = rateAxisTicks(rateValues);
+  /** The hour's forecast and the rate in force at an instant, wherever the pointer is. */
+  const forecastAt = (at: number) => forecastByHour.get(zurichHour(new Date(at).toISOString())) ?? null;
+  const rateAt = (at: number) => {
+    let found: number | null = null;
+    for (const p of rates) {
+      if (p.t > at) break;
+      found = p.rate;
+    }
+    return found;
+  };
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={rows}>
+        <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.gridline} vertical={false} />
+        <XAxis
+          dataKey="t"
+          type="number"
+          scale="time"
+          domain={[start, end]}
+          ticks={ticks}
+          tickFormatter={zurichClock}
+          tick={{ fontSize: 11 }}
+          allowDataOverflow
+        />
+        <YAxis
+          tick={{ fontSize: 11 }}
+          width={40}
+          domain={[0, "auto"]}
+          // One decimal unless the tick needs two: recharts' steps can land on
+          // 0.45, which one decimal would round into uneven-looking labels.
+          tickFormatter={(v: number) => formatNumber(v, Math.abs(v * 10 - Math.round(v * 10)) < 1e-9 ? 1 : 2)}
+        />
+        {hasRate && (
+          <YAxis
+            yAxisId="rate"
+            orientation="right"
+            tick={{ fontSize: 11, fill: PALETTE.axis }}
+            width={48}
+            domain={[rateTicks[0]!, rateTicks[rateTicks.length - 1]!]}
+            ticks={rateTicks}
+            tickFormatter={(v: number) => formatNumber(v, 2)}
+          />
+        )}
+        <Tooltip
+          content={({ active, payload }) => {
+            const r = payload?.[0]?.payload as PowerRow | undefined;
+            if (!active || !r) return null;
+            // A forecast or rate row has no reading of its own: show the
+            // nearest sample's, so the tooltip never reads "—" mid-day.
+            let sample: PowerRow | undefined;
+            if (!r.sampled) {
+              let best = Infinity;
+              for (const c of rows) {
+                if (!c.sampled) continue;
+                const d = Math.abs(c.t - r.t);
+                if (d < best) {
+                  best = d;
+                  sample = c;
+                }
+              }
+              if (best > 10 * 60 * 1000) sample = undefined;
+            } else sample = r;
+            const at = sample?.t ?? r.t;
+            const forecast = forecastAt(at);
+            const rate = rateAt(at);
+            return (
+              <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+                <p className="mb-1 font-medium text-slate-900">
+                  {zurichClock(at)}
+                  {sample && sample.t === lastT ? ` · ${t("party.live.now")}` : ""}
+                </p>
+                {hasSamples && (
+                  <>
+                    <p className="text-slate-600">
+                      {t("party.live.pvPower")}:{" "}
+                      <span className="font-semibold text-slate-900">
+                        {sample?.pv == null ? "—" : `${formatNumber(sample.pv, 2)} kW`}
+                      </span>
+                    </p>
+                    <p className="pl-2 text-slate-500">
+                      {t("party.live.leftHouse")}: {sample?.exp == null ? "—" : `${formatNumber(sample.exp, 2)} kW`}
+                    </p>
+                    <p className="pl-2 text-slate-500">
+                      {t("party.live.keptAtHome")}: {sample?.kept == null ? "—" : `${formatNumber(sample.kept, 2)} kW`}
+                    </p>
+                  </>
+                )}
+                <p className="mt-1 text-slate-600">
+                  {t("party.live.forecast")}:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {forecast == null ? "—" : `${formatNumber(forecast, 2)} kW`}
+                  </span>
+                </p>
+                {hasRate && (
+                  <p className="mt-1 text-slate-600">
+                    {t("calc.col.feedInRate")}:{" "}
+                    <span className="font-semibold text-slate-900" style={{ color: rateColorOf(rate) }}>
+                      {rate == null ? "—" : `${formatNumber(rate, 3)} CHF/kWh`}
+                    </span>
+                  </p>
+                )}
+              </div>
+            );
+          }}
+        />
+        <Legend content={<DayLegend />} />
+        <Area
+          type="monotone"
+          dataKey="remaining"
+          name={t("party.live.stillExpected")}
+          stroke="none"
+          fill={REMAINING_FILL}
+          legendType="rect"
+          isAnimationActive={false}
+          connectNulls
+        />
+        {/* Stacked as the hourly bars are: what left the house at the foot,
+            in grid blue, and what stayed — used at home or put in the
+            battery — on top of it in the sun's yellow, so the stack's top
+            edge is what the panels deliver. Where the battery sends out
+            more than the panels make, the blue alone sets the height. */}
+        {hasSamples && (
+          <>
+            <Area
+              type="linear"
+              dataKey="exp"
+              name={t("party.live.leftHouse")}
+              stackId="power"
+              stroke={EXPORTED_COLOR}
+              strokeWidth={1.5}
+              fill={EXPORTED_COLOR}
+              fillOpacity={0.35}
+              legendType="rect"
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+            />
+            <Area
+              type="linear"
+              dataKey="kept"
+              name={t("party.live.keptAtHome")}
+              stackId="power"
+              stroke={KEPT_COLOR}
+              strokeWidth={2}
+              fill={KEPT_COLOR}
+              fillOpacity={0.3}
+              legendType="rect"
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+            />
+          </>
+        )}
+        <Line
+          type="monotone"
+          dataKey="forecast"
+          name={t("party.live.forecast")}
+          stroke={FORECAST_COLOR}
+          strokeWidth={2}
+          strokeDasharray="5 4"
+          dot={false}
+          activeDot={false}
+          isAnimationActive={false}
+          connectNulls
+        />
+        {hasRate && (
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              {rateStops.map((s, i) => (
+                <stop key={i} offset={`${(s.offset * 100).toFixed(3)}%`} stopColor={RATE_COLORS[s.band]} />
+              ))}
+            </linearGradient>
+          </defs>
+        )}
+        {hasRate && (
+          <Line
+            yAxisId="rate"
+            type="stepAfter"
+            dataKey="feedInRate"
+            name={t("calc.col.feedInRate")}
+            stroke={rateStroke}
+            strokeWidth={2}
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+            connectNulls
+          />
+        )}
+      </ComposedChart>
+    </ResponsiveContainer>
   );
 }
